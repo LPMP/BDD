@@ -1,0 +1,15 @@
+[submodule "external/LBDD"]
+	path = external/LBDD
+	url = https://github.com/pawelswoboda/LBDD.git
+[submodule "external/PEGTL"]
+	path = external/PEGTL
+	url = https://github.com/taocpp/PEGTL.git
+[submodule "external/CLI11"]
+	path = external/CLI11
+	url = https://github.com/CLIUtils/CLI11.git
+[submodule "external/Eigen"]
+	path = external/Eigen
+	url = https://github.com/eigenteam/eigen-git-mirror.git
+[submodule "external/tsl-robin-map"]
+	path = external/tsl-robin-map
+	url = https://github.com/Tessil/robin-map.git
