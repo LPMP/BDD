@@ -124,8 +124,21 @@ namespace LPMP {
     void decomposition_bdd_base::backward_run()
     {
         // TODO: parallelize
+ 
         for(size_t t=0; t<intervals.nr_intervals(); ++t)
+        {
+            // flush out Lagrange multipliers
+            bdd_bases[t].read_in_Lagrange_multipliers_from_queue(
+                    bdd_bases[t].Lagrange_multipliers_mutex_left,
+                    bdd_bases[t].Lagrange_multipliers_queue_left);
+
+            bdd_bases[t].read_in_Lagrange_multipliers_from_queue(
+                bdd_bases[t].Lagrange_multipliers_mutex_right,
+                bdd_bases[t].Lagrange_multipliers_queue_right); 
+
             bdd_bases[t].base.backward_run();
+            bdd_bases[t].base.compute_lower_bound();
+        }
     }
 
     void decomposition_bdd_base::iteration()

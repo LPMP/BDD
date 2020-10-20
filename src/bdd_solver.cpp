@@ -116,6 +116,8 @@ namespace LPMP {
                 solver.iteration();
                 std::cout << "iteration " << iter << ", lower bound = " << solver.lower_bound() << "\n";
             }
+            solver.backward_run(); // To flush out the Lagrange multiplier queues and recompute final lower bound
+            std::cout << "final lower bound = " << solver.lower_bound() << "\n";
         }
         else
         {
