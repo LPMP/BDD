@@ -1,6 +1,5 @@
 #pragma once
 
-#include "bdd_solver_interface.h"
 #include "bdd_storage.h"
 #include <memory>
 

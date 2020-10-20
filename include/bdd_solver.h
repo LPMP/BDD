@@ -4,7 +4,6 @@
 #include "ILP_parser.h"
 #include "bdd_preprocessor.h"
 #include "bdd_storage.h"
-#include "bdd_solver_interface.h"
 
 #include <CLI/CLI.hpp>
 
@@ -33,7 +32,6 @@ namespace LPMP {
             //ILP_input ilp_input_;
             //bdd_preprocessor bdd_preprocessor_;
             //bdd_storage bdd_storage_;
-            bdd_solver_interface* bdd_solver_;
 
     };
 
