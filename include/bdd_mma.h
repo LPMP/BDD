@@ -12,6 +12,8 @@ namespace LPMP {
             bdd_mma(bdd_storage& stor);
             template<typename ITERATOR>
             bdd_mma(bdd_storage& stor, ITERATOR cost_begin, ITERATOR cost_end);
+            bdd_mma(bdd_mma&&);
+            bdd_mma& operator=(bdd_mma&&);
             ~bdd_mma();
             void set_cost(const double c, const size_t var);
             double lower_bound();

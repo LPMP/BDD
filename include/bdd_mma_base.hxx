@@ -559,10 +559,10 @@ namespace LPMP {
     template<typename BDD_VARIABLE, typename BDD_BRANCH_NODE, typename DERIVED>
         void bdd_mma_base<BDD_VARIABLE, BDD_BRANCH_NODE, DERIVED>::set_cost(const double c, const size_t var)
         {
-            assert(this->bdd_variables_[var].size() > 0);
+            assert(var < this->nr_variables());
             assert(this->nr_bdds(var) > 0);
-            for(std::size_t bdd_index=0; bdd_index<this->nr_bdds(var); ++bdd_index) {
-                static_cast<DERIVED*>(this)->update_cost(var, bdd_index, c/this->nr_bdds(var));
+            for(size_t bdd_index=0; bdd_index<this->nr_bdds(var); ++bdd_index) {
+                static_cast<DERIVED*>(this)->update_cost(var, bdd_index, c/double(this->nr_bdds(var)));
             }
         } 
 
@@ -632,10 +632,10 @@ namespace LPMP {
         assert(var < this->nr_variables());
         assert(bdd_index < this->nr_bdds(var));
 
-        const auto & bdd_var = this->bdd_variables_(var, bdd_index);
-        const std::size_t first_node_index = bdd_var.first_node_index;
-        const std::size_t last_node_index = bdd_var.last_node_index;
-        for (std::size_t i = first_node_index; i < last_node_index; ++i)
+        const auto& bdd_var = this->bdd_variables_(var, bdd_index);
+        const size_t first_node_index = bdd_var.first_node_index;
+        const size_t last_node_index = bdd_var.last_node_index;
+        for(size_t i=first_node_index; i<last_node_index; ++i)
         {
             auto& node = this->bdd_branch_nodes_[i];
             node.high_cost += delta;
@@ -690,10 +690,10 @@ namespace LPMP {
             assert(std::distance(cost_begin, cost_end) == this->nr_feasible_outgoing_arcs(var, bdd_index));
             
             const auto & bdd_var = this->bdd_variables_(var, bdd_index);
-            const std::size_t first_node_index = bdd_var.first_node_index;
-            const std::size_t last_node_index = bdd_var.last_node_index;
+            const size_t first_node_index = bdd_var.first_node_index;
+            const size_t last_node_index = bdd_var.last_node_index;
             auto cost_it = cost_begin;
-            for (std::size_t i = first_node_index; i < last_node_index; ++i)
+            for(size_t i=first_node_index; i<last_node_index; ++i)
             {
                 auto& node = this->bdd_branch_nodes_[i];
                 if(node.low_outgoing != node.terminal_0())

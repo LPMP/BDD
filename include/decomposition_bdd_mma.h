@@ -17,6 +17,10 @@ namespace LPMP {
             decomposition_bdd_mma(bdd_storage& bdd_storage_, options opt);
             template<typename ITERATOR>
                 decomposition_bdd_mma(bdd_storage& stor, ITERATOR cost_begin, ITERATOR cost_end, options opt);
+            decomposition_bdd_mma(decomposition_bdd_mma&&);
+
+            decomposition_bdd_mma& operator=(decomposition_bdd_mma&&);
+
             ~decomposition_bdd_mma();
             void set_cost(const double c, const size_t var);
             void backward_run();

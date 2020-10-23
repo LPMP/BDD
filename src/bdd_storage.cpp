@@ -245,7 +245,6 @@ namespace LPMP {
             bdd_storages[i].bdd_nodes_.reserve(nr_bdd_nodes_per_interval[i]);
             bdd_storages[i].bdd_delimiters_.reserve(nr_bdds_per_interval[i]);
             bdd_storages[i].nr_variables_ = this->nr_variables_;
-            bdd_storages[i].bdd_delimiters_;
             assert(bdd_storages[i].bdd_delimiters_.size() == 1 && bdd_storages[i].bdd_delimiters_[0] == 0);
         }
 

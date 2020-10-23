@@ -21,5 +21,11 @@ target_link_libraries(bdd_mma LPMP-BDD LBDD)
 add_library(decomposition_bdd_mma decomposition_bdd_mma.cpp)
 target_link_libraries(decomposition_bdd_mma LPMP-BDD LBDD)
 
-add_executable(bdd_solver bdd_solver.cpp)
+add_library(bdd_solver bdd_solver.cpp)
 target_link_libraries(bdd_solver bdd_mma decomposition_bdd_mma bdd_preprocessor ILP_parser bdd_storage ILP_input LPMP-BDD LBDD pthread)
+
+target_link_libraries(LPMP-BDD INTERFACE bdd_solver)
+
+add_executable(bdd_solver_cl bdd_solver_cl.cpp)
+target_link_libraries(bdd_solver_cl LPMP-BDD)
+

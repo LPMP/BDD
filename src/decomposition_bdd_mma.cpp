@@ -12,6 +12,16 @@ namespace LPMP {
         : pimpl(new impl(bdd_storage_, opt))
     {}
 
+    decomposition_bdd_mma::decomposition_bdd_mma(decomposition_bdd_mma&& o)
+        : pimpl(std::move(o.pimpl))
+    {}
+
+    decomposition_bdd_mma& decomposition_bdd_mma::operator=(decomposition_bdd_mma&& o)
+    {
+        pimpl = std::move(o.pimpl);
+        return *this;
+    }
+
     decomposition_bdd_mma::~decomposition_bdd_mma() {}
 
     void decomposition_bdd_mma::set_cost(const double c, const size_t var)

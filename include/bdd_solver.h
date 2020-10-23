@@ -4,7 +4,10 @@
 #include "ILP_parser.h"
 #include "bdd_preprocessor.h"
 #include "bdd_storage.h"
-
+#include "bdd_mma.h"
+#include "decomposition_bdd_mma.h"
+#include <variant> 
+#include <optional>
 #include <CLI/CLI.hpp>
 
 namespace LPMP {
@@ -20,19 +23,22 @@ namespace LPMP {
     class bdd_solver {
         public:
             bdd_solver(int argc, char** argv);
+            bdd_solver(const std::vector<std::string>& args);
+
+            void solve();
+            //void round();
+            double lower_bound();
 
         private:
             ILP_input get_ILP(const std::string& input, ILP_input::variable_order variable_order_);
             //bdd_preprocessor preprocess(ILP_input& ilp);
             bdd_storage transfer_to_bdd_storage(bdd_preprocessor& bp);
             void construct_solver(bdd_storage& bs);
-            void solve();
-            void round();
 
-            //ILP_input ilp_input_;
-            //bdd_preprocessor bdd_preprocessor_;
-            //bdd_storage bdd_storage_;
 
+            using solver_type = std::variant<bdd_mma, decomposition_bdd_mma>;
+            std::optional<solver_type> solver;
+           size_t max_iter = 1000;
     };
 
 }

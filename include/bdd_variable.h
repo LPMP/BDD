@@ -73,15 +73,15 @@ namespace LPMP {
         public:
             // denotes where other end of split variable is, for decomposition_bdd_base
             struct split_ {
-                size_t interval = std::numeric_limits<size_t>::max();
+                size_t interval = std::numeric_limits<size_t>::max(); // default value means variable is not split
                 size_t bdd_index : 63;
-                size_t split_begin : 1;
+                size_t is_left_side_of_split : 1;
 
             } split;
 
             bool is_split_variable() const;
-            bool is_split_begin() const;
-            bool is_split_end() const;
+            bool is_left_side_of_split() const;
+            bool is_right_side_of_split() const;
     };
 
     class bdd_variable_split : public bdd_variable_split_base<bdd_variable_split> {};
@@ -89,22 +89,22 @@ namespace LPMP {
     template<typename DERIVED>
         bool bdd_variable_split_base<DERIVED>::is_split_variable() const
         {
-            return is_split_begin() || is_split_end();
+            return is_left_side_of_split() || is_right_side_of_split();
         }
 
     template<typename DERIVED>
-        bool bdd_variable_split_base<DERIVED>::is_split_begin() const
+        bool bdd_variable_split_base<DERIVED>::is_left_side_of_split() const
         {
             if(split.interval != std::numeric_limits<size_t>::max())
-                return split.split_begin;
+                return split.is_left_side_of_split;
             return false;
         }
 
     template<typename DERIVED>
-        bool bdd_variable_split_base<DERIVED>::is_split_end() const
+        bool bdd_variable_split_base<DERIVED>::is_right_side_of_split() const
         {
             if(split.interval != std::numeric_limits<size_t>::max())
-                return !split.split_begin;
+                return !split.is_left_side_of_split;
             return false;
         }
 

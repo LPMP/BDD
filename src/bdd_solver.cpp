@@ -1,12 +1,22 @@
 #include "bdd_solver.h"
 #include "ILP_parser.h"
-#include "bdd_mma.h"
-#include "decomposition_bdd_mma.h"
 #include <variant>
 #include <iomanip>
+#include <memory>
 #include <CLI/CLI.hpp>
 
 namespace LPMP {
+
+    std::unique_ptr<char*[]> convert_string_to_argv(const std::vector<std::string>& args)
+    {
+        std::unique_ptr<char*[]> argv = std::make_unique<char*[]>(args.size()+1);
+
+        static constexpr const char* prog_name = "bdd_solver";
+        argv[0] = const_cast<char*>(prog_name);
+        for(size_t i=0; i<args.size(); ++i)
+            argv[i+1] = const_cast<char*>(args[i].c_str());
+        return argv; 
+    }
 
     bdd_solver::bdd_solver(int argc, char** argv)
     {
@@ -14,10 +24,15 @@ namespace LPMP {
         CLI::App app("LPMP BDD solver");
         app.allow_extras();
  
+        auto input_group = app.add_option_group("input", "input either from file or as string");
         std::string input_file;
-        app.add_option("-i, --input_file", input_file, "ILP input file name")
-            ->required()
+        auto input_file_arg = input_group->add_option("-i, --input_file", input_file, "ILP input file name")
             ->check(CLI::ExistingPath);
+
+        std::string input_string;
+        auto input_string_arg = input_group->add_option("--input_string", input_string, "ILP input in string");
+
+        input_group->require_option(1); // either as string or as filename
 
         std::unordered_map<std::string, ILP_input::variable_order> variable_order_map{
             {"input", ILP_input::variable_order::input},
@@ -31,7 +46,6 @@ namespace LPMP {
             ->transform(CLI::CheckedTransformer(variable_order_map, CLI::ignore_case));
 
 
-        size_t max_iter = 1000;
         app.add_option("--max_iter", max_iter, "maximal number of iterations, default value = 1000")
             ->check(CLI::PositiveNumber);
 
@@ -64,12 +78,12 @@ namespace LPMP {
                 if(bdd_solver_impl_ == bdd_solver_impl::mma)
                 {
                 solver_app.parse(app.remaining_for_passthrough()); 
-                std::cout << "chose mma solver\n";
+                std::cout << "use mma solver\n";
                 solver_options_ = avg_type;
                 }
                 else if(bdd_solver_impl_ == bdd_solver_impl::decomposition_mma)
                 {
-                    std::cout << "chose decomposition mma solver\n";
+                    std::cout << "use decomposition mma solver\n";
                     size_t nr_threads = 0;
                     solver_app.add_option("--nr_threads", nr_threads, "number of threads for simultaneous optimization of the Lagrange decomposition")
                         ->required()
@@ -87,11 +101,21 @@ namespace LPMP {
                     throw std::runtime_error("solver type not supported\n");
         });
 
-        //CLI11_PARSE(app, argc, argv);
-
         app.parse(argc, argv);
 
-        ILP_input ilp = get_ILP(input_file, variable_order_);
+        ILP_input ilp = [&]() {
+            if(!input_file.empty())
+                return ILP_parser::parse_file(input_file);
+            else if(!input_string.empty())
+                return ILP_parser::parse_string(input_string);
+            else
+                throw std::runtime_error("could not detect ILP input");
+        }();
+
+        std::cout << "ILP has " << ilp.nr_variables() << " variables and " << ilp.nr_constraints() << " constraints\n";
+
+        ilp.reorder(variable_order_);
+
         bdd_preprocessor bdd_pre(ilp);
         bdd_pre.construct_bdd_collection();
         bdd_storage stor(bdd_pre);
@@ -99,31 +123,23 @@ namespace LPMP {
         std::cout << std::setprecision(10);
         if(bdd_solver_impl_ == bdd_solver_impl::mma)
         {
-            bdd_mma solver(stor, ilp.objective().begin(), ilp.objective().end());
+            solver = std::move(bdd_mma(stor, ilp.objective().begin(), ilp.objective().end()));
             std::cout << "constructed mma solver\n";
-            for(size_t iter=0; iter<max_iter; ++iter)
-            {
-                solver.iteration();
-                std::cout << "iteration " << iter << ", lower bound = " << solver.lower_bound() << "\n";
-            }
         }
         else if(bdd_solver_impl_ == bdd_solver_impl::decomposition_mma)
         {
-            decomposition_bdd_mma solver(stor, ilp.objective().begin(), ilp.objective().end(), std::get<decomposition_bdd_mma::options>(solver_options_)); 
+            solver = std::move(decomposition_bdd_mma(stor, ilp.objective().begin(), ilp.objective().end(), std::get<decomposition_bdd_mma::options>(solver_options_)));
             std::cout << "constructed decomposition mma solver\n";
-            for(size_t iter=0; iter<max_iter; ++iter)
-            {
-                solver.iteration();
-                std::cout << "iteration " << iter << ", lower bound = " << solver.lower_bound() << "\n";
-            }
-            solver.backward_run(); // To flush out the Lagrange multiplier queues and recompute final lower bound
-            std::cout << "final lower bound = " << solver.lower_bound() << "\n";
         }
         else
         {
             assert(false);
         }
     }
+
+    bdd_solver::bdd_solver(const std::vector<std::string>& args)
+        : bdd_solver(args.size()+1, convert_string_to_argv(args).get())
+    {}
 
     ILP_input bdd_solver::get_ILP(const std::string& input_file, ILP_input::variable_order variable_order_)
     { 
@@ -143,9 +159,27 @@ namespace LPMP {
 
     }
 
+    void bdd_solver::solve()
+    {
+        return std::visit([&](auto&& s) {
+            std::cout << "initial lower bound = " << s.lower_bound() << "\n";
+            for(size_t iter=0; iter<this->max_iter; ++iter)
+            {
+                s.iteration();
+                std::cout << "iteration " << iter << ", lower bound = " << s.lower_bound() << "\n";
+            }
+            s.backward_run(); // To flush out the Lagrange multiplier queues and recompute final lower bound
+            std::cout << "final lower bound = " << s.lower_bound() << "\n";
+            }, *solver);
+    } 
+
+    double bdd_solver::lower_bound()
+    {
+        return std::visit([](auto&& s) {
+                return s.lower_bound(); 
+                }, *solver);
+
+    }
+
 }
 
-int main(int argc, char** argv)
-{
-    LPMP::bdd_solver(argc, argv);
-}

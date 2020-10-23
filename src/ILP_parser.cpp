@@ -167,23 +167,20 @@ namespace LPMP {
             ILP_input ilp;
             tmp_storage tmp;
             tao::pegtl::file_input input(filename);
-            tao::pegtl::parse<grammar, action>(input, ilp, tmp);
-            //const bool success = problem.parse< grammar, action >(input, tmp); 
-            //if(!success)
-            //    throw std::runtime_error("could not read input file " + filename);
+            if(!tao::pegtl::parse<grammar, action>(input, ilp, tmp))
+                throw std::runtime_error("could not read input file " + filename);
             return ilp;
         }
 
         ILP_input parse_string(const std::string& input_string)
         {
-            ILP_input input;
+            ILP_input ilp;
             tmp_storage tmp;
+            tao::pegtl::string_input input(input_string, "ILP input");
 
-            assert(false);
-            //const bool success = tao::pegtl::parse<grammar, action>(input_string,"", input, tmp);
-            //if(!success)
-            //    throw std::runtime_error("could not read input");
-            //return input;
+            if(!tao::pegtl::parse<grammar, action>(input, ilp, tmp))
+                throw std::runtime_error("could not read input:\n" + input_string);
+            return ilp;
         }
 
     } 

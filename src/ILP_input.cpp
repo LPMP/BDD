@@ -196,6 +196,7 @@ namespace LPMP {
     return adjacency;
     }
     */ 
+
     permutation ILP_input::reorder(ILP_input::variable_order var_ord)
     {
         if(var_ord == variable_order::input)
@@ -212,7 +213,7 @@ namespace LPMP {
         } 
     }
 
-    inline void ILP_input::reorder(const permutation& order)
+    void ILP_input::reorder(const permutation& order)
     {
         assert(order.size() == this->nr_variables());
         std::vector<double> new_objective(this->nr_variables());

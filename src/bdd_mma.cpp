@@ -20,6 +20,16 @@ namespace LPMP {
         : pimpl(new impl(stor))
     {}
 
+    bdd_mma::bdd_mma(bdd_mma&& o)
+        : pimpl(std::move(o.pimpl))
+    {}
+
+    bdd_mma& bdd_mma::operator=(bdd_mma&& o)
+    {
+        pimpl = std::move(o.pimpl);
+        return *this;
+    }
+
     bdd_mma::~bdd_mma()
     {}
 
@@ -31,6 +41,7 @@ namespace LPMP {
     void bdd_mma::backward_run()
     {
         pimpl->mma.backward_run();
+        pimpl->mma.compute_lower_bound();
     }
 
     void bdd_mma::iteration()

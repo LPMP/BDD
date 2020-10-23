@@ -64,6 +64,7 @@ namespace LPMP {
         permutation reorder_bfs();
         permutation reorder_Cuthill_McKee(); 
         permutation reorder_minimum_degree_averaging();
+        void reorder(const permutation& new_order);
 
         private:
             std::vector<linear_constraint> linear_constraints_;
@@ -74,7 +75,6 @@ namespace LPMP {
 
         private:
             two_dim_variable_array<std::size_t> variable_adjacency_matrix() const;
-            void reorder(const permutation& new_order);
     };
 
     template<typename ITERATOR>
