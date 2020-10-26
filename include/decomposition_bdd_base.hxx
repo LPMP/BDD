@@ -39,6 +39,7 @@ namespace LPMP {
                 // Entries are (i) variable, (ii) bdd_index, (iii) # multipliers, (iv) multipliers
                 struct Lagrange_multiplier {
                     union {
+                        size_t interval;
                         size_t variable;
                         size_t bdd_index;
                         size_t nr_deltas;
@@ -52,11 +53,24 @@ namespace LPMP {
                 std::mutex Lagrange_multipliers_mutex_right;
                 std::queue<Lagrange_multiplier> Lagrange_multipliers_queue_right;
 
+                // we first write Lagrange multipliers that need to be synchronized via the queue in this cache in order to save synchronization calls
+                std::vector<Lagrange_multiplier> queue_cache_forward;
+                std::vector<size_t> queue_cache_offset_forward;
+                size_t queue_cache_offset_counter_forward;
+
+                std::vector<Lagrange_multiplier> queue_cache_backward;
+                std::vector<size_t> queue_cache_offset_backward;
+                size_t queue_cache_offset_counter_backward;
+
                 void read_in_Lagrange_multipliers_from_queue(std::mutex& queue_mutex, std::queue<typename bdd_sub_base::Lagrange_multiplier>& queue);
                 void write_Lagrange_multiplers_to_queue(
                         const size_t var, const size_t bdd_index, 
                         const std::vector<double>& multipliers,
                         std::mutex& queue_mutex, std::queue<Lagrange_multiplier>& queue); 
+
+                void init_queue_cache();
+                void init_queue_cache_forward();
+                void init_queue_cache_backward();
 
             };
 
@@ -118,6 +132,9 @@ namespace LPMP {
 
         costs.clear();
         costs.resize(bdd_storage_.nr_variables(), 0.0);
+
+        for(size_t i=0; i<nr_intervals; ++i)
+            bdd_bases[i].init_queue_cache();
     }
 
     void decomposition_bdd_base::set_cost(const double c, const size_t var)
@@ -267,6 +284,90 @@ namespace LPMP {
         }
     }
 
+    void decomposition_bdd_base::bdd_sub_base::init_queue_cache_forward()
+    {
+        std::vector<size_t> queue_size; // per interval
+        for(size_t i=0; i<base.nr_variables(); ++i)
+        {
+            for(size_t bdd_index=0; bdd_index<base.nr_bdds(i); ++bdd_index)
+            {
+                const auto& bdd_var = base.get_bdd_variable(i, bdd_index);
+                if(base.last_variable_of_bdd(i, bdd_index) && bdd_var.is_left_side_of_split())
+                {
+                    const size_t next_interval_nr = bdd_var.split.interval;
+                    if(queue_size.size() <= next_interval_nr)
+                        queue_size.resize(next_interval_nr+1);
+                    queue_size[next_interval_nr] += 4 + base.nr_feasible_outgoing_arcs(i, bdd_index);
+                }
+            }
+        }
+        if(queue_size.size() == 0)
+            return;
+        queue_cache_forward.resize(std::accumulate(queue_size.begin(), queue_size.end(), 0));
+
+        // compute offsets
+        std::vector<size_t> interval_offsets = {0}; // calculate cumulative sum
+        std::partial_sum(queue_size.begin(), queue_size.end()-1, std::back_inserter(interval_offsets));
+        for(size_t i=0; i<base.nr_variables(); ++i)
+        {
+            for(size_t bdd_index=0; bdd_index<base.nr_bdds(i); ++bdd_index)
+            {
+                const auto& bdd_var = base.get_bdd_variable(i, bdd_index);
+                if(base.last_variable_of_bdd(i, bdd_index) && bdd_var.is_left_side_of_split())
+                {
+                    const size_t next_interval_nr = bdd_var.split.interval;
+                    queue_cache_offset_forward.push_back(interval_offsets[next_interval_nr]);
+                    interval_offsets[next_interval_nr] += 4 + base.nr_feasible_outgoing_arcs(i, bdd_index);
+                }
+            }
+        }
+    }
+
+    void decomposition_bdd_base::bdd_sub_base::init_queue_cache_backward()
+    {
+        std::vector<size_t> queue_size; // per interval
+        for(std::ptrdiff_t i=base.nr_variables()-1; i>=0; --i)
+        {
+            for(size_t bdd_index=0; bdd_index<base.nr_bdds(i); ++bdd_index)
+            {
+                const auto& bdd_var = base.get_bdd_variable(i, bdd_index);
+                if(base.first_variable_of_bdd(i, bdd_index) && bdd_var.is_right_side_of_split())
+                {
+                    const size_t prev_interval_nr = bdd_var.split.interval;
+                    if(queue_size.size() <= prev_interval_nr)
+                        queue_size.resize(prev_interval_nr+1);
+                    queue_size[prev_interval_nr] += 4 + base.nr_feasible_outgoing_arcs(i, bdd_index);
+                }
+            }
+        }
+        if(queue_size.size() == 0)
+            return;
+        queue_cache_backward.resize(std::accumulate(queue_size.begin(), queue_size.end(), 0));
+
+        // compute offsets
+        std::vector<size_t> interval_offsets = {0}; // calculate cumulative sum
+        std::partial_sum(queue_size.begin(), queue_size.end()-1, std::back_inserter(interval_offsets));
+        for(std::ptrdiff_t i=base.nr_variables()-1; i>=0; --i)
+        {
+            for(size_t bdd_index=0; bdd_index<base.nr_bdds(i); ++bdd_index)
+            {
+                const auto& bdd_var = base.get_bdd_variable(i, bdd_index);
+                if(base.last_variable_of_bdd(i, bdd_index) && bdd_var.is_right_side_of_split())
+                {
+                    const size_t prev_interval_nr = bdd_var.split.interval;
+                    queue_cache_offset_backward.push_back(interval_offsets[prev_interval_nr]);
+                        interval_offsets[prev_interval_nr] += 4 + base.nr_feasible_outgoing_arcs(i, bdd_index);
+                    }
+                }
+            }
+    }
+
+    void decomposition_bdd_base::bdd_sub_base::init_queue_cache()
+    {
+        init_queue_cache_forward();
+        init_queue_cache_backward();
+    }
+
     void decomposition_bdd_base::bdd_sub_base::write_Lagrange_multiplers_to_queue(
             const size_t var, const size_t bdd_index, 
             const std::vector<double>& multipliers,
@@ -298,6 +399,11 @@ namespace LPMP {
         bdd_bases[interval_nr].read_in_Lagrange_multipliers_from_queue(
                 bdd_bases[interval_nr].Lagrange_multipliers_mutex_left,
                 bdd_bases[interval_nr].Lagrange_multipliers_queue_left);
+
+        auto& queue_counter = bdd_bases[interval_nr].queue_cache_offset_counter_forward;
+        queue_counter = 0;
+        auto& queue = bdd_bases[interval_nr].queue_cache_forward;
+        const auto& queue_offsets = bdd_bases[interval_nr].queue_cache_offset_forward;
 
         std::vector<std::array<double,2>> min_marginals;
         std::vector<double> arc_marginals;
@@ -332,15 +438,65 @@ namespace LPMP {
                             x *= -1.0;
 
                         //std::cout << "write Lagrange multipliers into queue ->: variable " << i << ", (" << interval_nr << "," << bdd_index << ") -> (" << next_interval_nr << "," << next_bdd_index << ")\n";
-                        bdd_bases[next_interval_nr].write_Lagrange_multiplers_to_queue(
-                                i, next_bdd_index, arc_marginals, 
-                                bdd_bases[next_interval_nr].Lagrange_multipliers_mutex_left,
-                                bdd_bases[next_interval_nr].Lagrange_multipliers_queue_left
-                                );
+                        //bdd_bases[next_interval_nr].base.update_arc_costs(i, next_bdd_index, arc_marginals.begin(), arc_marginals.end());
+                        //bdd_bases[next_interval_nr].write_Lagrange_multiplers_to_queue(
+                        //        i, next_bdd_index, arc_marginals, 
+                        //        bdd_bases[next_interval_nr].Lagrange_multipliers_mutex_left,
+                        //        bdd_bases[next_interval_nr].Lagrange_multipliers_queue_left
+                        //        );
+                        
+                        // put Lagrange multipliers into queue
+                        bdd_sub_base::Lagrange_multiplier L;
+                        assert(queue_counter <= queue.size());
+                        size_t queue_offset = queue_offsets[queue_counter++];
+                        L.interval = next_interval_nr;
+                        queue[queue_offset++] = L;
+                        L.variable = i;
+                        queue[queue_offset++] = L;
+                        L.bdd_index = next_bdd_index;
+                        queue[queue_offset++] = L;
+                        L.nr_deltas = arc_marginals.size();
+                        queue[queue_offset++] = L;
+                        for(const auto x : arc_marginals)
+                        {
+                            assert(x >= 0.0);
+                            L.delta = x;
+                            queue[queue_offset++] = L;
+                        }
                     }
                 }
             }
         }
+
+        // read out queue cache
+        size_t last_interval_nr = std::numeric_limits<size_t>::max();    
+        for(size_t l=0; l<queue.size(); )
+        {
+            const size_t next_interval_nr = queue[l++].interval;
+            assert(next_interval_nr < intervals.nr_intervals());
+            assert(next_interval_nr != interval_nr);
+            if(last_interval_nr != next_interval_nr)
+            {
+                if(last_interval_nr != std::numeric_limits<size_t>::max())
+                    bdd_bases[last_interval_nr].Lagrange_multipliers_mutex_left.unlock();
+                bdd_bases[next_interval_nr].Lagrange_multipliers_mutex_left.lock();
+                last_interval_nr = next_interval_nr;
+            }
+            auto& queue_to_push = bdd_bases[next_interval_nr].Lagrange_multipliers_queue_left;
+            const size_t var = queue[l].variable;
+            assert(var < bdd_bases[interval_nr].base.nr_variables());
+            queue_to_push.push(queue[l++]); // variable
+            const size_t bdd_index = queue[l].bdd_index;
+            assert(bdd_index < bdd_bases[next_interval_nr].base.nr_bdds(var));
+            queue_to_push.push(queue[l++]); // bdd index
+            const size_t nr_deltas = queue[l].nr_deltas;
+            assert(nr_deltas == bdd_bases[next_interval_nr].base.nr_feasible_outgoing_arcs(var, bdd_index));
+            queue_to_push.push(queue[l++]);
+            for(size_t c=0; c<nr_deltas; ++c)
+                queue_to_push.push(queue[l++]);
+        }
+        if(last_interval_nr != std::numeric_limits<size_t>::max())
+            bdd_bases[last_interval_nr].Lagrange_multipliers_mutex_left.unlock();
     }
 
     void decomposition_bdd_base::min_marginal_averaging_backward(const size_t interval_nr)
@@ -351,6 +507,11 @@ namespace LPMP {
         bdd_bases[interval_nr].read_in_Lagrange_multipliers_from_queue(
                 bdd_bases[interval_nr].Lagrange_multipliers_mutex_right,
                 bdd_bases[interval_nr].Lagrange_multipliers_queue_right);
+
+        auto& queue_counter = bdd_bases[interval_nr].queue_cache_offset_counter_backward;
+        queue_counter = 0;
+        auto& queue = bdd_bases[interval_nr].queue_cache_backward;
+        const auto& queue_offsets = bdd_bases[interval_nr].queue_cache_offset_backward;
 
         std::vector<std::array<double,2>> min_marginals;
         std::vector<double> arc_marginals;
@@ -384,16 +545,67 @@ namespace LPMP {
                             x *= -1.0;
 
                         //std::cout << "write Lagrange multipliers into queue <-: variable " << i << ", (" << interval_nr << "," << bdd_index << ") -> (" << prev_interval_nr << "," << prev_bdd_index << ")\n";
-                        bdd_bases[prev_interval_nr].write_Lagrange_multiplers_to_queue(
-                                i, prev_bdd_index, arc_marginals, 
-                                bdd_bases[prev_interval_nr].Lagrange_multipliers_mutex_right,
-                                bdd_bases[prev_interval_nr].Lagrange_multipliers_queue_right
-                                );
+                        //bdd_bases[prev_interval_nr].base.update_arc_costs(i, prev_bdd_index, arc_marginals.begin(), arc_marginals.end());
+                        //bdd_bases[prev_interval_nr].write_Lagrange_multiplers_to_queue(
+                        //        i, prev_bdd_index, arc_marginals, 
+                        //        bdd_bases[prev_interval_nr].Lagrange_multipliers_mutex_right,
+                        //        bdd_bases[prev_interval_nr].Lagrange_multipliers_queue_right
+                        //        );
+
+                        // put Lagrange multipliers into queue
+                        bdd_sub_base::Lagrange_multiplier L;
+                        assert(queue_counter <= queue.size());
+                        size_t queue_offset = queue_offsets[queue_counter++];
+                        L.interval = prev_interval_nr;
+                        queue[queue_offset++] = L;
+                        L.variable = i;
+                        queue[queue_offset++] = L;
+                        L.bdd_index = prev_bdd_index;
+                        queue[queue_offset++] = L;
+                        L.nr_deltas = arc_marginals.size();
+                        queue[queue_offset++] = L;
+                        for(const auto x : arc_marginals)
+                        {
+                            assert(x >= 0.0);
+                            L.delta = x;
+                            queue[queue_offset++] = L;
+                        }
+
                     }
                 }
             }
             bdd_bases[interval_nr].base.min_marginal_averaging_step_backward(i, min_marginals);
         }
+
+        // read out queue cache
+        size_t last_interval_nr = std::numeric_limits<size_t>::max();    
+        for(size_t l=0; l<queue.size(); )
+        {
+            const size_t prev_interval_nr = queue[l++].interval;
+            assert(prev_interval_nr < intervals.nr_intervals());
+            assert(prev_interval_nr != interval_nr);
+            if(last_interval_nr != prev_interval_nr)
+            {
+                if(last_interval_nr != std::numeric_limits<size_t>::max())
+                    bdd_bases[last_interval_nr].Lagrange_multipliers_mutex_right.unlock();
+                bdd_bases[prev_interval_nr].Lagrange_multipliers_mutex_right.lock();
+                last_interval_nr = prev_interval_nr;
+            }
+            auto& queue_to_push = bdd_bases[prev_interval_nr].Lagrange_multipliers_queue_right;
+            const size_t var = queue[l].variable;
+            assert(var < bdd_bases[interval_nr].base.nr_variables());
+            queue_to_push.push(queue[l++]); // variable
+            const size_t bdd_index = queue[l].bdd_index;
+            assert(bdd_index < bdd_bases[prev_interval_nr].base.nr_bdds(var));
+            queue_to_push.push(queue[l++]); // bdd index
+            const size_t nr_deltas = queue[l].nr_deltas;
+            assert(nr_deltas == bdd_bases[prev_interval_nr].base.nr_feasible_outgoing_arcs(var, bdd_index));
+            queue_to_push.push(queue[l++]);
+            for(size_t c=0; c<nr_deltas; ++c)
+                queue_to_push.push(queue[l++]);
+        }
+        if(last_interval_nr != std::numeric_limits<size_t>::max())
+            bdd_bases[last_interval_nr].Lagrange_multipliers_mutex_right.unlock();
     }
 
     double decomposition_bdd_base::lower_bound()

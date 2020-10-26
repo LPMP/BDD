@@ -17,4 +17,5 @@ target_include_directories(LPMP-BDD INTERFACE external/CLI11/include)
 add_subdirectory(external/LBDD)
 
 add_subdirectory(src)
+enable_testing()
 add_subdirectory(test)
