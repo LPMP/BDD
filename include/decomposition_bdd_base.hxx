@@ -352,7 +352,7 @@ namespace LPMP {
             for(size_t bdd_index=0; bdd_index<base.nr_bdds(i); ++bdd_index)
             {
                 const auto& bdd_var = base.get_bdd_variable(i, bdd_index);
-                if(base.last_variable_of_bdd(i, bdd_index) && bdd_var.is_right_side_of_split())
+                if(base.first_variable_of_bdd(i, bdd_index) && bdd_var.is_right_side_of_split())
                 {
                     const size_t prev_interval_nr = bdd_var.split.interval;
                     queue_cache_offset_backward.push_back(interval_offsets[prev_interval_nr]);
