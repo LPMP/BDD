@@ -1,6 +1,8 @@
 #include "bdd_preprocessor.h"
 #include <iostream>
 #include <chrono>
+#include <tsl/robin_map.h>
+#include <tsl/robin_set.h>
 
 namespace LPMP {
 
@@ -149,7 +151,8 @@ namespace LPMP {
     {
         // find bdd pairs such that there exist a variable that is only covered by these two
         std::vector<coalesce_candidate> candidates;
-        std::unordered_set<std::array<size_t,2>> considered_candidates;
+        //std::unordered_set<std::array<size_t,2>> considered_candidates;
+        tsl::robin_set<std::array<size_t,2>> considered_candidates;
 
         for(size_t v=0; v<var_bdd_adjacency.size(); ++v)
         {
@@ -172,7 +175,8 @@ namespace LPMP {
     {
         assert(subsumption || contiguous_overlap || subsumption_except_one || partial_contiguous_overlap);
         std::vector<coalesce_candidate> candidates;
-        std::unordered_set<std::array<size_t,2>> considered_candidates;
+        //std::unordered_set<std::array<size_t,2>> considered_candidates;
+        tsl::robin_set<std::array<size_t,2>> considered_candidates;
         std::vector<size_t> overlap;
 
         for(size_t v=0; v<var_bdd_adjacency.size(); ++v)
@@ -336,8 +340,10 @@ namespace LPMP {
             std::vector<char> active_bdds(bdd_collection.nr_bdds(), true);
 
             // for each bdd, search for overlapping ones. Sort by greatest overlap and test if intersection grows moderately only. If so, keep intersection and remove individual bdds.
-            std::unordered_map<size_t,size_t> checked_bdd_pairs; // value is timestamp
-            std::unordered_map<size_t,size_t> adjacent_bdds;
+            //std::unordered_map<size_t,size_t> checked_bdd_pairs; // value is timestamp
+            tsl::robin_map<size_t,size_t> checked_bdd_pairs; // value is timestamp
+            //std::unordered_map<size_t,size_t> adjacent_bdds;
+            tsl::robin_map<size_t,size_t> adjacent_bdds;
             struct bdd_intersection { size_t bdd; size_t nr_common_vars; };
             std::vector<bdd_intersection> adjacent_bdds_sorted;
 
@@ -484,7 +490,8 @@ namespace LPMP {
     {
         construct_bdd_collection();
 
-        std::unordered_set<std::array<size_t,2>> intersected_bdds;
+        //std::unordered_set<std::array<size_t,2>> intersected_bdds;
+        tsl::robin_set<std::array<size_t,2>> intersected_bdds;
 
         if(coalesce_cliques_)
         {
@@ -620,7 +627,8 @@ return_candidates:
             for(size_t i=active_bdds.size(); i<bdd_collection.nr_bdds(); ++i)
                 old_bdd_to_new_bdd_nr.push_back(c++);
 
-            std::unordered_set<std::array<size_t,2>> new_intersected_bdds;
+            //std::unordered_set<std::array<size_t,2>> new_intersected_bdds;
+            tsl::robin_set<std::array<size_t,2>> new_intersected_bdds;
             for(const auto [bdd_1, bdd_2] : intersected_bdds)
             {
                 assert(bdd_1 < bdd_2);

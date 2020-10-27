@@ -4,8 +4,21 @@ namespace LPMP {
 
     bdd_storage::bdd_storage(bdd_preprocessor& bdd_pre)
     {
-        for(size_t bdd_nr=0; bdd_nr<bdd_pre.get_bdd_collection().nr_bdds(); ++bdd_nr)
-            add_bdd(bdd_pre.get_bdd_collection()[bdd_nr]);
+        // TODO: this is brittle and better way to notify which bdd source is used should be employed
+        assert(bdd_pre.get_bdd_collection().nr_bdds() > 0 || bdd_pre.get_bdds().size() > 0);
+        if(bdd_pre.get_bdd_collection().nr_bdds() > 0)
+            for(size_t bdd_nr=0; bdd_nr<bdd_pre.get_bdd_collection().nr_bdds(); ++bdd_nr)
+                add_bdd(bdd_pre.get_bdd_collection()[bdd_nr]);
+        else
+        {
+            const auto bdds = bdd_pre.get_bdds();
+            const auto bdd_variable_indices = bdd_pre.get_bdd_indices();
+            assert(bdds.size() == bdd_variable_indices.size());
+            for(size_t bdd_index=0; bdd_index<bdds.size(); ++bdd_index)
+            {
+add_bdd(bdd_pre.get_bdd_manager(), bdds[bdd_index], bdd_variable_indices[bdd_index].begin(), bdd_variable_indices[bdd_index].end());
+            } 
+        }
     }
 
     bdd_storage::bdd_storage()
@@ -14,7 +27,8 @@ namespace LPMP {
     void bdd_storage::add_bdd(BDD::bdd_collection_entry bdd)
     {
         const auto vars = bdd.variables();
-        std::unordered_map<size_t,size_t> rebase_to_iota;
+        //std::unordered_map<size_t,size_t> rebase_to_iota;
+        tsl::robin_map<size_t,size_t> rebase_to_iota;
         for(size_t i=0; i<vars.size(); ++i)
             rebase_to_iota.insert({vars[i], i});
         bdd.rebase(rebase_to_iota);
@@ -69,8 +83,10 @@ namespace LPMP {
 
     std::vector<std::array<size_t,2>> bdd_storage::dependency_graph() const
     {
-        std::unordered_set<std::array<size_t,2>> edges;
-        std::unordered_set<size_t> cur_vars;
+        //std::unordered_set<std::array<size_t,2>> edges;
+        tsl::robin_set<std::array<size_t,2>> edges;
+        //std::unordered_set<size_t> cur_vars;
+        tsl::robin_set<size_t> cur_vars;
         std::vector<size_t> cur_vars_sorted;
         for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
         {
@@ -134,7 +150,7 @@ namespace LPMP {
 
     // take bdd_nodes_ and return two_dim_variable_array<bdd_node> bdd_nodes_split_, two_dim_variable_array<size_t> bdd_delimiters_split_
     // TODO: do not use nr_bdd_nodes_per_interval in second part, i.e. filling in bdd nodes. bdd_nodes_.size() is enough
-    std::tuple<std::vector<bdd_storage>, std::unordered_set<bdd_storage::duplicate_variable, bdd_storage::duplicate_variable_hash>> bdd_storage::split_bdd_nodes(const size_t nr_intervals)
+    std::tuple<std::vector<bdd_storage>, tsl::robin_set<bdd_storage::duplicate_variable, bdd_storage::duplicate_variable_hash>> bdd_storage::split_bdd_nodes(const size_t nr_intervals)
     {
         assert(nr_intervals > 1);
         intervals intn = compute_intervals(nr_intervals);
@@ -142,7 +158,8 @@ namespace LPMP {
 
         std::vector<size_t> nr_bdd_nodes_per_interval(nr_intervals, 0);
         std::vector<size_t> nr_bdds_per_interval(nr_intervals, 1);
-        std::unordered_set<size_t> active_intervals;
+        //std::unordered_set<size_t> active_intervals;
+        tsl::robin_set<size_t> active_intervals;
 
         for(size_t bdd_counter=0; bdd_counter<bdd_delimiters_.size()-1; ++bdd_counter)
         {
@@ -260,8 +277,10 @@ namespace LPMP {
         // fill split bdd nodes, record duplicated bdd variables
 
         // TODO: replace by tsl-robin-set
-        std::unordered_set<duplicate_variable, duplicate_variable_hash> duplicated_variables;
-        std::unordered_map<std::array<size_t,2>,size_t> split_bdd_node_indices; // bdd index in bdd_nodes_, interval
+        //std::unordered_set<duplicate_variable, duplicate_variable_hash> duplicated_variables;
+        tsl::robin_set<duplicate_variable, duplicate_variable_hash> duplicated_variables;
+        //std::unordered_map<std::array<size_t,2>,size_t> split_bdd_node_indices; // bdd index in bdd_nodes_, interval
+        tsl::robin_map<std::array<size_t,2>,size_t> split_bdd_node_indices; // bdd index in bdd_nodes_, interval
         for(size_t bdd_counter=0; bdd_counter<bdd_delimiters_.size()-1; ++bdd_counter)
         {
             split_bdd_node_indices.clear();

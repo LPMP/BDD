@@ -3,7 +3,7 @@
 #include "bdd.h"
 #include "ILP_input.h"
 #include "hash_helper.hxx"
-#include <unordered_map>
+#include <tsl/robin_map.h>
 #include <numeric>
 #include <tuple>
 
@@ -28,7 +28,8 @@ namespace LPMP {
             BDD::node_ref convert_to_bdd_impl(std::vector<int>& nf, const ILP_input::inequality_type ineq);
 
             BDD::bdd_mgr& bdd_mgr_;
-            using constraint_cache_type = std::unordered_map<std::vector<int>,BDD::node_ref>;
+            //using constraint_cache_type = std::unordered_map<std::vector<int>,BDD::node_ref>;
+            using constraint_cache_type = tsl::robin_map<std::vector<int>,BDD::node_ref>;
             constraint_cache_type equality_cache;
             constraint_cache_type lower_equal_cache;
     };

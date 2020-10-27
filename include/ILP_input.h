@@ -1,8 +1,6 @@
 #pragma once
 
 #include <vector>
-#include <unordered_map>
-#include <unordered_set>
 #include <string>
 #include <cassert>
 #include <algorithm>
@@ -70,7 +68,6 @@ namespace LPMP {
             std::vector<linear_constraint> linear_constraints_;
             std::vector<double> objective_;
             std::vector<std::string> var_index_to_name_;
-            //std::unordered_map<std::string, std::size_t> var_name_to_index_;
             tsl::robin_map<std::string, std::size_t> var_name_to_index_;
 
         private:

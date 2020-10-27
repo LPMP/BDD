@@ -4,8 +4,8 @@
 #include <cassert>
 #include <vector>
 #include <tsl/robin_map.h>
-#include <unordered_map> // TODO: use tsl::robin-map
-#include <unordered_set> // TODO: use tsl::robin-map
+//#include <unordered_map> // TODO: use tsl::robin-map
+//#include <unordered_set> // TODO: use tsl::robin-map
 
 namespace LPMP {
 
@@ -270,7 +270,8 @@ namespace LPMP {
         endpoints.reserve(bdd_storage_.nr_bdds());
         std::vector<size_t> bdd_index_counter(bdd_storage_.nr_variables(), 0);
 
-        std::unordered_set<size_t> bdd_variables;
+        //std::unordered_set<size_t> bdd_variables;
+        tsl::robin_set<size_t> bdd_variables;
         for(size_t bdd_index=0; bdd_index<bdd_storage_.nr_bdds(); ++bdd_index)
         {
             size_t first_bdd_var = std::numeric_limits<size_t>::max();

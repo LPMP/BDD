@@ -117,7 +117,7 @@ namespace LPMP {
         ilp.reorder(variable_order_);
 
         bdd_preprocessor bdd_pre(ilp);
-        bdd_pre.construct_bdd_collection();
+        //bdd_pre.construct_bdd_collection(); // this is only needed if bdd collection is used in bdd preprocessor
         bdd_storage stor(bdd_pre);
 
         std::cout << std::setprecision(10);

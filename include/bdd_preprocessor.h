@@ -34,6 +34,8 @@ namespace LPMP {
             void construct_bdd_collection();
             void coalesce();
             void coalesce_bdd_collection();
+            const auto get_bdd_indices() { return indices; };
+            BDD::bdd_mgr& get_bdd_manager() { return bdd_mgr; }
             std::vector<BDD::node_ref> get_bdds() { return bdds; }
 
             // obvious candidates for coalescing
