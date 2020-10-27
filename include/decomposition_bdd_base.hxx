@@ -5,6 +5,7 @@
 #include <cassert>
 #include <thread>
 #include <mutex>
+#include <condition_variable>
 #include <queue>
 #include "decomposition_bdd_mma.h"
 #include "bdd_variable.h"
@@ -23,6 +24,7 @@ namespace LPMP {
             void set_cost(const double c, const size_t var);
             void backward_run();
             void iteration();
+            void solve(const size_t max_iter);
             double lower_bound();
 
         private:
@@ -71,10 +73,12 @@ namespace LPMP {
                 void init_queue_cache();
                 void init_queue_cache_forward();
                 void init_queue_cache_backward();
-
             };
 
             std::unique_ptr<bdd_sub_base[]> bdd_bases;
+            // for waking up when lower bound is changed
+            std::mutex lb_mutex;
+            std::condition_variable cv_lb;
 
             double intra_interval_message_passing_weight;
     };
@@ -230,8 +234,35 @@ namespace LPMP {
         }
     }
 
+    void decomposition_bdd_base::solve(const size_t max_iter)
+    {
+        std::cout << "initial lower bound = " << lower_bound() << "\n";
+        std::vector<std::thread> threads;
+        
+        auto mma = [&](const size_t thread_nr) {
+            for(size_t i=0; i<max_iter; ++i)
+            {
+                this->min_marginal_averaging_forward(thread_nr);
+                this->min_marginal_averaging_backward(thread_nr);
+                bdd_bases[thread_nr].base.compute_lower_bound();
+                if(thread_nr == 0)
+                    std::cout << "iteration " << i << ", lower bound = " << this->lower_bound() << "\n";
+            }
+        };
+
+        for(size_t t=0; t<intervals.nr_intervals(); ++t)
+            threads.push_back(std::thread(mma, t)); 
+
+        for(auto& t : threads)
+            t.join(); 
+
+        backward_run(); // To flush out the Lagrange multiplier queues and recompute final lower bound
+        std::cout << "final lower bound = " << lower_bound() << "\n"; 
+    }
+
     void decomposition_bdd_base::iteration()
     {
+        throw std::runtime_error("not supported\n");
         std::vector<std::thread> threads;
         threads.reserve(intervals.nr_intervals());
         for(size_t t=0; t<intervals.nr_intervals(); ++t)

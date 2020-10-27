@@ -49,6 +49,11 @@ namespace LPMP {
         pimpl->mma.iteration();
     }
 
+    void bdd_mma::solve(const size_t max_iter)
+    {
+        pimpl->mma.solve(max_iter);
+    }
+
     double bdd_mma::lower_bound()
     {
         return pimpl->mma.lower_bound();

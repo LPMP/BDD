@@ -4,6 +4,7 @@
 #include <vector>
 #include <array>
 #include <chrono>
+#include <iostream>
 
 namespace LPMP {
 
@@ -27,7 +28,7 @@ namespace LPMP {
             template <typename ITERATOR>
                 bool check_feasibility(ITERATOR var_begin, ITERATOR var_end) const;
 
-            double lower_bound() { return lower_bound_; }
+            double lower_bound() const { return lower_bound_; }
             double lower_bound_backward(const std::size_t var, const std::size_t bdd_index);
             double lower_bound_forward(const std::size_t var, const std::size_t bdd_index);
             double compute_lower_bound();
@@ -40,6 +41,7 @@ namespace LPMP {
             void min_marginal_averaging_backward_SRMP();
 
             void iteration();
+            void solve(const size_t max_iter);
 
             void min_marginal_averaging_step_forward(const size_t var, std::vector<std::array<double,2>>& min_marginals);
             void min_marginal_averaging_step_backward(const size_t var, std::vector<std::array<double,2>>& min_marginals); 
@@ -537,6 +539,19 @@ namespace LPMP {
             min_marginal_averaging_iteration_SRMP();
         else
             assert(false);
+    }
+
+    template<typename BDD_VARIABLE, typename BDD_BRANCH_NODE, typename DERIVED>
+    void bdd_mma_base<BDD_VARIABLE, BDD_BRANCH_NODE, DERIVED>::solve(const size_t max_iter)
+    {
+        std::cout << "initial lower bound = " << lower_bound() << "\n";
+        for(size_t iter=0; iter<max_iter; ++iter)
+        {
+            iteration();
+            std::cout << "iteration " << iter << ", lower bound = " << lower_bound() << "\n";
+        }
+        std::cout << "final lower bound = " << lower_bound() << "\n";
+
     }
 
     template<typename BDD_VARIABLE, typename BDD_BRANCH_NODE, typename DERIVED>

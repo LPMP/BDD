@@ -18,6 +18,7 @@ namespace LPMP {
             void set_cost(const double c, const size_t var);
             double lower_bound();
             void iteration(); 
+            void solve(const size_t max_iter);
             void backward_run(); 
         private:
 

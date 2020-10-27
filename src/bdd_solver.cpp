@@ -162,14 +162,7 @@ namespace LPMP {
     void bdd_solver::solve()
     {
         return std::visit([&](auto&& s) {
-            std::cout << "initial lower bound = " << s.lower_bound() << "\n";
-            for(size_t iter=0; iter<this->max_iter; ++iter)
-            {
-                s.iteration();
-                std::cout << "iteration " << iter << ", lower bound = " << s.lower_bound() << "\n";
-            }
-            s.backward_run(); // To flush out the Lagrange multiplier queues and recompute final lower bound
-            std::cout << "final lower bound = " << s.lower_bound() << "\n";
+                s.solve(max_iter);
             }, *solver);
     } 
 

@@ -34,6 +34,11 @@ namespace LPMP {
         return pimpl->backward_run();
     }
 
+    void decomposition_bdd_mma::solve(const size_t max_iter)
+    {
+        pimpl->solve(max_iter);
+    }
+
     void decomposition_bdd_mma::iteration()
     {
         pimpl->iteration();
