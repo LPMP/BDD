@@ -1,6 +1,7 @@
 #pragma once
 
 #include "bdd_base.hxx"
+#include "time_measure_util.h"
 #include <vector>
 #include <array>
 #include <chrono>

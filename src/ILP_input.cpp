@@ -1,9 +1,9 @@
 #include "ILP_input.h"
 #include <Eigen/Eigen>
-#include <chrono>
 #include "cuthill-mckee.h"
 #include "bfs_ordering.hxx"
 #include "minimum_degree_ordering.hxx"
+#include "time_measure_util.h"
 #include <iostream>
 
 namespace LPMP { 
@@ -113,6 +113,7 @@ namespace LPMP {
 
     inline two_dim_variable_array<std::size_t> ILP_input::variable_adjacency_matrix() const
     {
+        MEASURE_FUNCTION_EXECUTION_TIME
         std::vector<Eigen::Triplet<int>> var_constraint_adjacency_list;
 
         for(std::size_t i=0; i<this->linear_constraints_.size(); ++i) {
@@ -124,10 +125,7 @@ namespace LPMP {
 
         Eigen::SparseMatrix<int> A(this->nr_variables(), this->linear_constraints_.size());
         A.setFromTriplets(var_constraint_adjacency_list.begin(), var_constraint_adjacency_list.end());
-        const auto begin_time = std::chrono::steady_clock::now();
         const Eigen::SparseMatrix<int> adj_matrix = A*A.transpose();
-        const auto end_time = std::chrono::steady_clock::now();
-        std::cout << "matrix multiplication for adjacency matrix construction took " <<  std::chrono::duration_cast<std::chrono::milliseconds>(end_time - begin_time).count() << " milliseconds\n";
         assert(adj_matrix.cols() == nr_variables() && adj_matrix.rows() == nr_variables());
 
         std::vector<std::size_t> adjacency_size(nr_variables(), 0);
@@ -205,16 +203,16 @@ namespace LPMP {
             return this->reorder_bfs();
         else if(var_ord == variable_order::cuthill)
             return this->reorder_Cuthill_McKee();
-        else if(var_ord == variable_order::mindegree)
-            return this->reorder_minimum_degree_averaging();
         else
         {
-            assert(false);
-        } 
+            assert(var_ord == variable_order::mindegree);
+            return this->reorder_minimum_degree_averaging();
+        }
     }
 
     void ILP_input::reorder(const permutation& order)
     {
+        MEASURE_FUNCTION_EXECUTION_TIME;
         assert(order.size() == this->nr_variables());
         std::vector<double> new_objective(this->nr_variables());
         for(std::size_t i=0; i<this->nr_variables(); ++i)
@@ -247,16 +245,9 @@ namespace LPMP {
 
     inline permutation ILP_input::reorder_bfs()
     {
-        const auto begin_time = std::chrono::steady_clock::now();
         const auto adj = variable_adjacency_matrix();
-        const auto after_adjacency_matrix = std::chrono::steady_clock::now();
         const auto order = bfs_ordering(adj);
-        const auto after_bfs = std::chrono::steady_clock::now();
         reorder(order);
-        const auto end_time = std::chrono::steady_clock::now();
-        std::cout << "adjacency matrix construction took " <<  std::chrono::duration_cast<std::chrono::milliseconds>(after_adjacency_matrix - begin_time).count() << " milliseconds\n";
-        std::cout << "bfs ordering took " <<  std::chrono::duration_cast<std::chrono::milliseconds>(after_bfs - after_adjacency_matrix).count() << " milliseconds\n";
-        std::cout << "reordering variables took " <<  std::chrono::duration_cast<std::chrono::milliseconds>(end_time - after_bfs).count() << " milliseconds\n"; 
         return order;
     }
 

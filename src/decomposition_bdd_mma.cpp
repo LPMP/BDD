@@ -9,8 +9,10 @@ namespace LPMP {
     };
 
     decomposition_bdd_mma::decomposition_bdd_mma(bdd_storage& bdd_storage_, decomposition_bdd_mma::options opt)
-        : pimpl(new impl(bdd_storage_, opt))
-    {}
+   {
+       MEASURE_FUNCTION_EXECUTION_TIME;
+       pimpl = std::make_unique<impl>(bdd_storage_, opt);
+   }
 
     decomposition_bdd_mma::decomposition_bdd_mma(decomposition_bdd_mma&& o)
         : pimpl(std::move(o.pimpl))
@@ -36,6 +38,7 @@ namespace LPMP {
 
     void decomposition_bdd_mma::solve(const size_t max_iter)
     {
+        MEASURE_FUNCTION_EXECUTION_TIME;
         pimpl->solve(max_iter);
     }
 

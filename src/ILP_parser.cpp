@@ -2,7 +2,7 @@
 #include <tao/pegtl.hpp>
 #include "pegtl_parse_rules.h"
 #include "ILP_input.h"
-
+#include "time_measure_util.h" 
 
 namespace LPMP { 
 
@@ -164,6 +164,7 @@ namespace LPMP {
 
         ILP_input parse_file(const std::string& filename)
         {
+            MEASURE_FUNCTION_EXECUTION_TIME;
             ILP_input ilp;
             tmp_storage tmp;
             tao::pegtl::file_input input(filename);
@@ -174,6 +175,7 @@ namespace LPMP {
 
         ILP_input parse_string(const std::string& input_string)
         {
+            MEASURE_FUNCTION_EXECUTION_TIME;
             ILP_input ilp;
             tmp_storage tmp;
             tao::pegtl::string_input input(input_string, "ILP input");

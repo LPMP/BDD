@@ -2,6 +2,7 @@
 #include "bdd_mma_base.hxx"
 #include "bdd_branch_node.h"
 #include "bdd_variable.h"
+#include "time_measure_util.h"
 
 namespace LPMP {
 
@@ -17,15 +18,17 @@ namespace LPMP {
     };
 
     bdd_mma::bdd_mma(bdd_storage& stor)
-        : pimpl(new impl(stor))
-    {}
+    {
+        MEASURE_FUNCTION_EXECUTION_TIME; 
+        pimpl = std::make_unique<impl>(stor);
+    }
 
     bdd_mma::bdd_mma(bdd_mma&& o)
         : pimpl(std::move(o.pimpl))
     {}
 
     bdd_mma& bdd_mma::operator=(bdd_mma&& o)
-    {
+    { 
         pimpl = std::move(o.pimpl);
         return *this;
     }
@@ -51,6 +54,7 @@ namespace LPMP {
 
     void bdd_mma::solve(const size_t max_iter)
     {
+        MEASURE_FUNCTION_EXECUTION_TIME;
         pimpl->mma.solve(max_iter);
     }
 

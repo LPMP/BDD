@@ -3,6 +3,7 @@
 #include "two_dimensional_variable_array.hxx"
 #include "pseudo_peripheral_node.hxx"
 #include "permutation.hxx"
+#include "time_measure_util.h"
 #include <limits>
 #include <vector>
 #include <queue>
@@ -12,6 +13,7 @@ namespace LPMP {
     template<typename ADJACENCY_GRAPH>
     permutation bfs_ordering(const ADJACENCY_GRAPH& adj)
     {
+        MEASURE_FUNCTION_EXECUTION_TIME;
         struct node
         {
             node(std::size_t index, std::size_t dist, double avg_adj_dist) : 

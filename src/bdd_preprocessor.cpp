@@ -3,11 +3,13 @@
 #include <chrono>
 #include <tsl/robin_map.h>
 #include <tsl/robin_set.h>
+#include "time_measure_util.h"
 
 namespace LPMP {
 
     bdd_preprocessor::bdd_preprocessor(const ILP_input& input)
     {
+        MEASURE_FUNCTION_EXECUTION_TIME
         // first transform linear inequalities into BDDs
         std::vector<int> coefficients;
         std::vector<std::size_t> variables;

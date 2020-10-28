@@ -1,9 +1,11 @@
 #include "bdd_storage.h"
+#include "time_measure_util.h"
 
 namespace LPMP {
 
     bdd_storage::bdd_storage(bdd_preprocessor& bdd_pre)
     {
+        MEASURE_FUNCTION_EXECUTION_TIME;
         // TODO: this is brittle and better way to notify which bdd source is used should be employed
         assert(bdd_pre.get_bdd_collection().nr_bdds() > 0 || bdd_pre.get_bdds().size() > 0);
         if(bdd_pre.get_bdd_collection().nr_bdds() > 0)
@@ -110,17 +112,34 @@ add_bdd(bdd_pre.get_bdd_manager(), bdds[bdd_index], bdd_variable_indices[bdd_ind
 
     bdd_storage::intervals bdd_storage::compute_intervals(const size_t nr_intervals)
     {
-        // first approach: Just partition variables equidistantly.
-        // TODO: Take into account number of BDD nodes in each interval
-        
+        // partition into intervals with equal number of bdd nodes
         assert(nr_intervals > 1);
         std::vector<size_t> interval_boundaries;
         interval_boundaries.reserve(nr_intervals+1);
-        for(size_t interval=0; interval<nr_intervals; ++interval)
-            interval_boundaries.push_back(std::round(double(interval*this->nr_variables())/double(nr_intervals)));
+        interval_boundaries.push_back(0);
 
-        interval_boundaries.push_back(this->nr_variables()); 
+        std::vector<size_t> bdds_per_variable(nr_variables(), 0);
+        for(const auto& bdd_node : bdd_nodes_)
+        {
+            assert(bdd_node.variable < nr_variables());
+            bdds_per_variable[bdd_node.variable]++; 
+        }
+        size_t cumulative_sum = 0;
+        for(size_t i=0; i<nr_variables(); ++i)
+        {
+            cumulative_sum += bdds_per_variable[i];
+            if(cumulative_sum >= bdd_nodes_.size()*double(interval_boundaries.size())/double(nr_intervals))
+            {
+                interval_boundaries.push_back(i+1); 
+            }
+        }
+
         assert(interval_boundaries.size() == nr_intervals+1);
+        assert(interval_boundaries.back() == nr_variables());
+
+        //for(size_t interval=0; interval<nr_intervals; ++interval)
+        //    interval_boundaries.push_back(std::round(double(interval*this->nr_variables())/double(nr_intervals))); 
+        //interval_boundaries.push_back(this->nr_variables()); 
 
         std::vector<size_t> variable_interval;
         variable_interval.reserve(this->nr_variables());
@@ -152,6 +171,7 @@ add_bdd(bdd_pre.get_bdd_manager(), bdds[bdd_index], bdd_variable_indices[bdd_ind
     // TODO: do not use nr_bdd_nodes_per_interval in second part, i.e. filling in bdd nodes. bdd_nodes_.size() is enough
     std::tuple<std::vector<bdd_storage>, tsl::robin_set<bdd_storage::duplicate_variable, bdd_storage::duplicate_variable_hash>> bdd_storage::split_bdd_nodes(const size_t nr_intervals)
     {
+        MEASURE_FUNCTION_EXECUTION_TIME;
         assert(nr_intervals > 1);
         intervals intn = compute_intervals(nr_intervals);
         assert(nr_intervals == intn.nr_intervals());

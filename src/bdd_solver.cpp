@@ -4,6 +4,7 @@
 #include <iomanip>
 #include <memory>
 #include <CLI/CLI.hpp>
+#include "time_measure_util.h"
 
 namespace LPMP {
 
