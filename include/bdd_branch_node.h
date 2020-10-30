@@ -1,5 +1,8 @@
 #pragma once
+
 #include <array>
+#include <numeric>
+#include <cstddef>
 #include "bdd_variable.h"
 
 namespace LPMP {
@@ -18,9 +21,6 @@ namespace LPMP {
             DERIVED* next_low_incoming = nullptr;
             DERIVED* next_high_incoming = nullptr;
 
-            constexpr static DERIVED* terminal_0() { return static_cast<DERIVED*>(nullptr)+1; }
-            constexpr static DERIVED* terminal_1() { return static_cast<DERIVED*>(nullptr)+2; }
-
             // From C++20
             friend bool operator==(const bdd_branch_node<DERIVED>& x, const bdd_branch_node<DERIVED>& y);
 
@@ -28,7 +28,25 @@ namespace LPMP {
             bool is_first() const { return first_low_incoming == nullptr && first_high_incoming == nullptr; }
             bool is_dead_end() const { return low_outgoing == terminal_0() && high_outgoing == terminal_0(); }
             // bool is_initial_state() const { return *this == DERIVED{}; }
+            
+            constexpr static DERIVED* terminal_0();
+            static inline DERIVED tmp_terminal_0 = {terminal_0(), terminal_0(), terminal_0(), terminal_0(), terminal_0(), terminal_0()};
+
+            constexpr static DERIVED* terminal_1();
+            static inline DERIVED tmp_terminal_1 = {terminal_1(), terminal_1(), terminal_1(), terminal_1(), terminal_1(), terminal_1()};
     };
+
+    template<typename DERIVED>
+        constexpr DERIVED* bdd_branch_node<DERIVED>::terminal_0()
+        {
+            return &tmp_terminal_0; 
+        }
+
+    template<typename DERIVED>
+        constexpr DERIVED* bdd_branch_node<DERIVED>::terminal_1()
+        {
+            return &tmp_terminal_1; 
+        }
 
     template<typename DERIVED>
     bool operator==(const bdd_branch_node<DERIVED>& x, const bdd_branch_node<DERIVED>& y)
@@ -45,6 +63,7 @@ namespace LPMP {
     template<typename DERIVED>
     void check_bdd_branch_node(const bdd_branch_node<DERIVED>& bdd, const bool last_variable = false, const bool first_variable = false)
     {
+        return;
 #ifdef NDEBUG
         return;
 #endif
@@ -106,6 +125,9 @@ namespace LPMP {
             std::array<double,2> min_marginal_debug() const;
     };
 
+    //template<typename DERIVED>
+    //    DERIVED bdd_branch_node<bdd_branch_node_opt_base<DERIVED>>::tmp_terminal_0 = {};// {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0.0};
+
     template<typename DERIVED>
     bool operator==(const bdd_branch_node_opt_base<DERIVED>& x, const bdd_branch_node_opt_base<DERIVED>& y)
     {
@@ -165,39 +187,38 @@ namespace LPMP {
     {
         check_bdd_branch_node(*this);
 
+        const double low_cost = this->low_outgoing->m;
         // low edge
-        const double low_cost = [&]() {
+        /*
+        const double cost_tmp = [&]() {
             if(this->low_outgoing == bdd_branch_node_opt_base<DERIVED>::terminal_0()) {
                 return std::numeric_limits<double>::infinity();
             } else if(this->low_outgoing == bdd_branch_node_opt_base<DERIVED>::terminal_1()) {
-                //return *cumulative_sum;
                 return 0.0;
             } else {
-                //return low_outgoing->m + *cumulative_sum - *(low_outgoing->cumulative_sum) - std::min(*low_outgoing->variable_cost,0.0);
                 return this->low_outgoing->m;
             }
         }();
+        */
 
         // high edge
+        const double high_cost = this->high_outgoing->m + *variable_cost;
+        /*
         const double high_cost = [&]() {
             if(this->high_outgoing == bdd_branch_node_opt_base<DERIVED>::terminal_0()) {
-                return std::numeric_limits<double>::infinity(); 
+                return std::numeric_limits<double>::infinity();
             } else if(this->high_outgoing == bdd_branch_node_opt_base<DERIVED>::terminal_1()) {
-                //return *cumulative_sum + *variable_cost; 
-                return *variable_cost; 
+                return *variable_cost;
             } else {
-                //return high_outgoing->m + *variable_cost + *cumulative_sum - *(high_outgoing->cumulative_sum) - std::min(*high_outgoing->variable_cost,0.0);
                 return this->high_outgoing->m + *variable_cost;
             }
         }();
-
-        //std::cout << "variable cost = " << *variable_cost << ", low cost = " << low_cost << ", high cost = " << high_cost << ", cumulative sum = " << *cumulative_sum << "\n"; 
+        */
 
         assert(!std::isnan(low_cost));
         assert(!std::isnan(high_cost));
         assert(std::isfinite(std::min(low_cost,high_cost)));
         m = std::min(low_cost, high_cost);
-        //std::cout << "backward step m for " << this << ", low outgoing = " << low_outgoing << ", high outgoing = " << high_outgoing << " = " << m << "\n";
 
         check_bdd_branch_node(*this);
         // assert(std::abs(m - cost_from_terminal()) <= 1e-8);
@@ -266,7 +287,6 @@ namespace LPMP {
     {
         check_bdd_branch_node(*this);
 
-        //std::cout << "in min_marginal() for " << this << ", m = " << m << "\n";
         // assert(std::abs(m - cost_from_first()) <= 1e-8);
         if(!bdd_branch_node_opt_base<DERIVED>::is_terminal(this->low_outgoing)) {
             // assert(std::abs(low_outgoing->m - low_outgoing->cost_from_terminal()) <= 1e-8);
@@ -275,6 +295,8 @@ namespace LPMP {
             // assert(std::abs(high_outgoing->m - high_outgoing->cost_from_terminal()) <= 1e-8);
         }
 
+        const double m0 = this->m + this->low_outgoing->m;
+        /*
         const double m0 = [&]() {
             if(this->low_outgoing == bdd_branch_node_opt_base<DERIVED>::terminal_0())
                 return std::numeric_limits<double>::infinity();
@@ -282,7 +304,10 @@ namespace LPMP {
                 return this->m;
             return this->m + this->low_outgoing->m;
         }();
+        */
 
+        const double m1 = this->m + *this->variable_cost + this->high_outgoing->m;
+        /*
         const double m1 = [&]() {
             if(this->high_outgoing == bdd_branch_node_opt_base<DERIVED>::terminal_0())
                 return std::numeric_limits<double>::infinity();
@@ -290,6 +315,7 @@ namespace LPMP {
                 return this->m + *this->variable_cost;
             return this->m + *this->variable_cost + this->high_outgoing->m;
         }();
+        */
 
         assert(std::isfinite(std::min(m0,m1)));
 
@@ -324,7 +350,22 @@ namespace LPMP {
         return {m0,m1}; 
     }
 
-    class bdd_branch_node_opt : public bdd_branch_node_opt_base<bdd_branch_node_opt>{
+    // TODO: below static initializer should be in ...opt_base class. I have not figured out yet how to have it invoked there properly.
+    class bdd_branch_node_opt : public bdd_branch_node_opt_base<bdd_branch_node_opt> {
+        private:
+            static inline double terminal_0_cost = std::numeric_limits<double>::infinity();
+            static inline double terminal_1_cost = 0.0;
+        public:
+            struct static_constructor {
+                static_constructor() {
+                    bdd_branch_node_opt::terminal_0()->m = std::numeric_limits<double>::infinity();
+                    bdd_branch_node_opt::terminal_0()->variable_cost = &terminal_0_cost;
+
+                    bdd_branch_node_opt::terminal_1()->m = 0.0;
+                    bdd_branch_node_opt::terminal_1()->variable_cost = &terminal_1_cost;
+                }
+            };
+            static inline static_constructor static_constructor_; 
     };
 
     //////////////////////////////////////
@@ -845,6 +886,8 @@ bdd_branch_node_exp_sum_entry bdd_branch_node_opt_smoothed_base<DERIVED>::exp_su
 void bdd_branch_node_opt_arc_cost_base<DERIVED>::backward_step()
 {
         // low edge
+        const double low_path_cost = this->low_outgoing->m + low_cost;
+        /*
         const double low_path_cost = [&]() {
             if(this->low_outgoing == bdd_branch_node_opt_base<DERIVED>::terminal_0()) {
                 return std::numeric_limits<double>::infinity();
@@ -854,8 +897,11 @@ void bdd_branch_node_opt_arc_cost_base<DERIVED>::backward_step()
                 return this->low_outgoing->m + low_cost;
             }
         }();
+        */
 
         // high edge
+        const double high_path_cost = this->high_outgoing->m + high_cost;
+        /*
         const double high_path_cost = [&]() {
             if(this->high_outgoing == bdd_branch_node_opt_base<DERIVED>::terminal_0()) {
                 return std::numeric_limits<double>::infinity(); 
@@ -865,6 +911,7 @@ void bdd_branch_node_opt_arc_cost_base<DERIVED>::backward_step()
                 return this->high_outgoing->m + high_cost;
             }
         }();
+        */
 
         assert(!std::isnan(low_path_cost));
         assert(!std::isnan(high_path_cost));
@@ -909,6 +956,8 @@ void bdd_branch_node_opt_arc_cost_base<DERIVED>::backward_step()
     template<typename DERIVED>
     std::array<double,2> bdd_branch_node_opt_arc_cost_base<DERIVED>::min_marginal() const
     {
+        const double m0 = this->m + this->low_cost + this->low_outgoing->m;
+        /*
         const double m0 = [&]() {
             if(this->low_outgoing == bdd_branch_node_opt_base<DERIVED>::terminal_0())
                 return std::numeric_limits<double>::infinity();
@@ -916,7 +965,10 @@ void bdd_branch_node_opt_arc_cost_base<DERIVED>::backward_step()
                 return this->m + this->low_cost;
             return this->m + this->low_cost + this->low_outgoing->m;
         }();
+        */
 
+        const double m1 = this->m + this->high_cost + this->high_outgoing->m;
+        /*
         const double m1 = [&]() {
             if(this->high_outgoing == bdd_branch_node_opt_base<DERIVED>::terminal_0())
                 return std::numeric_limits<double>::infinity();
@@ -924,12 +976,27 @@ void bdd_branch_node_opt_arc_cost_base<DERIVED>::backward_step()
                 return this->m + this->high_cost;
             return this->m + this->high_cost + this->high_outgoing->m;
         }();
+        */
 
         assert(std::isfinite(std::min(m0,m1)));
 
         return {m0,m1};
     }
 
-    class bdd_branch_node_opt_arc_cost : public bdd_branch_node_opt_arc_cost_base<bdd_branch_node_opt_arc_cost> {};
+    class bdd_branch_node_opt_arc_cost : public bdd_branch_node_opt_arc_cost_base<bdd_branch_node_opt_arc_cost> {
+        public:
+            struct static_constructor {
+                static_constructor() {
+                    bdd_branch_node_opt_arc_cost::terminal_0()->m = std::numeric_limits<double>::infinity();
+                    bdd_branch_node_opt_arc_cost::terminal_0()->low_cost = std::numeric_limits<double>::infinity();
+                    bdd_branch_node_opt_arc_cost::terminal_0()->high_cost = std::numeric_limits<double>::infinity();
+
+                    bdd_branch_node_opt_arc_cost::terminal_1()->m = 0.0;
+                    bdd_branch_node_opt_arc_cost::terminal_1()->low_cost = 0.0;
+                    bdd_branch_node_opt_arc_cost::terminal_1()->high_cost = 0.0;
+                }
+            };
+            static inline static_constructor static_constructor_; 
+    };
 
 }

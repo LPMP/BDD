@@ -13,18 +13,28 @@ namespace LPMP {
         using parsing::mand_whitespace;
         using parsing::opt_invisible;
         using parsing::mand_invisible;
-        using parsing::positive_integer;
         using parsing::real_number;
 
         struct min_line : tao::pegtl::seq<opt_whitespace, tao::pegtl::string<'M','i','n','i','m','i','z','e'>, opt_whitespace, tao::pegtl::eol> {};
 
-        struct sign : tao::pegtl::sor<tao::pegtl::string<'+'>, tao::pegtl::string<'-'>> {};
+        //struct sign : tao::pegtl::sor<tao::pegtl::string<'+'>, tao::pegtl::string<'-'>> {};
 
+        struct sign : tao::pegtl::one< '+', '-' > {};
+
+        /*
         struct variable_name : tao::pegtl::seq< 
-                               tao::pegtl::alpha, tao::pegtl::star< tao::pegtl::sor< tao::pegtl::alnum, tao::pegtl::string<'_'>, tao::pegtl::string<'-'>, tao::pegtl::string<'/'>, tao::pegtl::string<'('>, tao::pegtl::string<')'>, tao::pegtl::string<'{'>, tao::pegtl::string<'}'>, tao::pegtl::string<','> > > 
+                               tao::pegtl::alpha, 
+                               tao::pegtl::star< tao::pegtl::sor< tao::pegtl::range<'a', 'z'>, tao::pegtl::range<'A','Z'>, tao::pegtl::range<'0','9'>, tao::pegtl::one< '_', '-', '(', ')', '{', '}', ',' > > >
+                               >{};
+                               
+                               */
+                               
+        struct variable_name : tao::pegtl::seq< 
+                               tao::pegtl::alpha, 
+                               tao::pegtl::star< tao::pegtl::sor< tao::pegtl::alnum, tao::pegtl::string<'_'>, tao::pegtl::string<'-'>, tao::pegtl::string<'/'>, tao::pegtl::string<'('>, tao::pegtl::string<')'>, tao::pegtl::string<'{'>, tao::pegtl::string<'}'>, tao::pegtl::string<','> > > 
                                > {};
 
-        struct variable_coefficient : tao::pegtl::seq< tao::pegtl::opt<real_number> > {};
+        struct variable_coefficient : tao::pegtl::opt<real_number> {};
 
         struct variable : tao::pegtl::seq<variable_coefficient, opt_whitespace, variable_name> {};
 

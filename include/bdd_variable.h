@@ -1,18 +1,20 @@
 #pragma once
+
 #include <array>
+#include <numeric>
 
 namespace LPMP {
 
     template<typename DERIVED>
     class bdd_variable_base {
         public:
-            std::size_t first_node_index = std::numeric_limits<std::size_t>::max();
-            std::size_t last_node_index = std::numeric_limits<std::size_t>::max();
+            size_t first_node_index = std::numeric_limits<size_t>::max();
+            size_t last_node_index = std::numeric_limits<size_t>::max();
 
             DERIVED* prev = nullptr;
             DERIVED* next = nullptr;
 
-            std::size_t nr_bdd_nodes() const { return last_node_index - first_node_index; }
+            size_t nr_bdd_nodes() const { return last_node_index - first_node_index; }
             bool is_first_bdd_variable() const { return prev == nullptr; }
             bool is_last_bdd_variable() const { return next == nullptr; }
             // bool is_initial_state() const { return *this == bdd_variable<DERIVED>{}; }
@@ -51,9 +53,9 @@ namespace LPMP {
 
     class bdd_variable_fix : public bdd_variable_mma_base<bdd_variable_fix> {
         public:
-            std::size_t nr_feasible_low_arcs;
-            std::size_t nr_feasible_high_arcs;
-            std::size_t variable_index;
+            size_t nr_feasible_low_arcs;
+            size_t nr_feasible_high_arcs;
+            size_t variable_index;
     };
 
     inline bool operator==(const bdd_variable_fix& x, const bdd_variable_fix& y)

@@ -5,6 +5,7 @@ namespace LPMP {
 
     bdd_storage::bdd_storage(bdd_preprocessor& bdd_pre)
     {
+        // TODO: parallelize by building up multiple bdd storages and then join them together
         MEASURE_FUNCTION_EXECUTION_TIME;
         // TODO: this is brittle and better way to notify which bdd source is used should be employed
         assert(bdd_pre.get_bdd_collection().nr_bdds() > 0 || bdd_pre.get_bdds().size() > 0);
