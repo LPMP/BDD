@@ -443,7 +443,6 @@ namespace LPMP {
             if(bdd_bases[interval_nr].base.nr_bdds(i) == 0)
                 continue;
 
-            bdd_bases[interval_nr].base.min_marginal_averaging_step_forward(i, min_marginals);
             for(size_t bdd_index=0; bdd_index<bdd_bases[interval_nr].base.nr_bdds(i); ++bdd_index)
             {
                 if(bdd_bases[interval_nr].base.last_variable_of_bdd(i, bdd_index)) // check if bdd is split
@@ -497,6 +496,7 @@ namespace LPMP {
                     }
                 }
             }
+            bdd_bases[interval_nr].base.min_marginal_averaging_step_forward_tmp(i, min_marginals);
         }
 
         // read out queue cache

@@ -187,6 +187,7 @@ public:
 
    std::size_t no_elements() const { return data_.size(); }
    std::size_t size() const { assert(offsets_.size() > 0); return offsets_.size()-1; }
+   size_t size(const size_t i) const { assert(i < no_elements()); return offsets_[i+1] - offsets_[i]; }
 
    ConstArrayAccessObject back() const 
    {

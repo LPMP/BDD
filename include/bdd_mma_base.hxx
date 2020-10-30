@@ -45,6 +45,7 @@ namespace LPMP {
             void solve(const size_t max_iter);
 
             void min_marginal_averaging_step_forward(const size_t var, std::vector<std::array<double,2>>& min_marginals);
+            void min_marginal_averaging_step_forward_tmp(const size_t var, std::vector<std::array<double,2>>& min_marginals);
             void min_marginal_averaging_step_backward(const size_t var, std::vector<std::array<double,2>>& min_marginals); 
 
         protected: 
@@ -112,7 +113,7 @@ namespace LPMP {
         assert(bdd_index < this->nr_bdds(var));
         std::array<double,2> m = {std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity()};
         const auto& bdd_var = this->bdd_variables_(var,bdd_index);
-        for(std::size_t bdd_node_index=bdd_var.first_node_index; bdd_node_index<bdd_var.last_node_index; ++bdd_node_index) {
+        for(size_t bdd_node_index=bdd_var.first_node_index; bdd_node_index<bdd_var.last_node_index; ++bdd_node_index) {
             const auto& bdd = this->bdd_branch_nodes_[bdd_node_index];
             const auto [m0,m1] = bdd.min_marginal();
             m[0] = std::min(m[0], m0);
@@ -364,6 +365,27 @@ namespace LPMP {
         } 
     }
 
+    // use only outgoing arc pointers
+    template<typename BDD_VARIABLE, typename BDD_BRANCH_NODE, typename DERIVED>
+    void bdd_mma_base<BDD_VARIABLE, BDD_BRANCH_NODE, DERIVED>::min_marginal_averaging_step_forward_tmp(const size_t var, std::vector<std::array<double,2>>& min_marginals)
+    {
+        if(this->nr_bdds(var) == 0)
+            return;
+        min_marginals.clear();
+
+        for(std::size_t bdd_index=0; bdd_index<this->nr_bdds(var); ++bdd_index)
+            min_marginals.push_back(min_marginal(var,bdd_index)); 
+ 
+        const std::array<double,2> average_marginal = average_marginals(min_marginals.begin(), min_marginals.end());
+
+        // set marginals in each bdd so min marginals match each other
+        for(std::size_t bdd_index=0; bdd_index<this->nr_bdds(var); ++bdd_index) {
+            set_marginal(var,bdd_index,average_marginal,min_marginals[bdd_index]);
+            this->forward_step_tmp(var,bdd_index);
+        } 
+    }
+
+
     // min marginal averaging
     template<typename BDD_VARIABLE, typename BDD_BRANCH_NODE, typename DERIVED>
     void bdd_mma_base<BDD_VARIABLE, BDD_BRANCH_NODE, DERIVED>::min_marginal_averaging_forward()
@@ -371,7 +393,7 @@ namespace LPMP {
         std::vector<std::array<double,2>> min_marginals;
         for(std::size_t var=0; var<this->nr_variables(); ++var) {
             min_marginals.clear();
-            min_marginal_averaging_step_forward(var, min_marginals);
+            min_marginal_averaging_step_forward_tmp(var, min_marginals);
             continue;
 
             // collect min marginals
@@ -545,7 +567,6 @@ namespace LPMP {
     template<typename BDD_VARIABLE, typename BDD_BRANCH_NODE, typename DERIVED>
     void bdd_mma_base<BDD_VARIABLE, BDD_BRANCH_NODE, DERIVED>::solve(const size_t max_iter)
     {
-        std::cout << "initial lower bound = " << lower_bound() << "\n";
         for(size_t iter=0; iter<max_iter; ++iter)
         {
             iteration();

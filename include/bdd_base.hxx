@@ -1,6 +1,7 @@
 #pragma once
 
 #include "bdd_storage.h"
+#include "bdd_branch_node.h"
 #include <cassert>
 #include <vector>
 #include <tsl/robin_map.h>
@@ -33,11 +34,12 @@ namespace LPMP {
 
             std::size_t nr_variables() const { return bdd_variables_.size(); }
             std::size_t nr_bdds() const { return nr_bdds_; }
-            std::size_t nr_bdds(const std::size_t var) const { assert(var<nr_variables()); return bdd_variables_[var].size(); }
+            std::size_t nr_bdds(const std::size_t var) const { assert(var<nr_variables()); return bdd_variables_.size(var); }
 
             size_t nr_feasible_outgoing_arcs(const size_t var, const size_t bdd_index) const;
 
             void forward_step(const std::size_t var, const std::size_t bdd_index);
+            void forward_step_tmp(const std::size_t var, const std::size_t bdd_index);
             void backward_step(const std::size_t var, const std::size_t bdd_index);
             void forward_step(const std::size_t var);
             void backward_step(const std::size_t var);
@@ -216,18 +218,20 @@ namespace LPMP {
                 BDD_BRANCH_NODE& bdd_low = *(stored_bdd_node_index_to_bdd_address.find(stored_bdd.low)->second);
                 bdd.low_outgoing = &bdd_low;
                 assert(bdd.low_outgoing != nullptr);
-                if(!BDD_BRANCH_NODE::is_terminal(&bdd_low)) {
-                    bdd.next_low_incoming = bdd_low.first_low_incoming;
-                    bdd_low.first_low_incoming = &bdd;
-                }
+                if constexpr(has_incoming_pointers<BDD_BRANCH_NODE>::value)
+                    if(!BDD_BRANCH_NODE::is_terminal(&bdd_low)) {
+                        bdd.next_low_incoming = bdd_low.first_low_incoming;
+                        bdd_low.first_low_incoming = &bdd;
+                    }
 
                 assert(stored_bdd_node_index_to_bdd_address.count(stored_bdd.high) > 0);
                 BDD_BRANCH_NODE& bdd_high = *(stored_bdd_node_index_to_bdd_address.find(stored_bdd.high)->second);
                 bdd.high_outgoing = &bdd_high;
-                if(!BDD_BRANCH_NODE::is_terminal(&bdd_high)) {
-                    bdd.next_high_incoming = bdd_high.first_high_incoming;
-                    bdd_high.first_high_incoming = &bdd;
-                }
+                if constexpr(has_incoming_pointers<BDD_BRANCH_NODE>::value)
+                    if(!BDD_BRANCH_NODE::is_terminal(&bdd_high)) {
+                        bdd.next_high_incoming = bdd_high.first_high_incoming;
+                        bdd_high.first_high_incoming = &bdd;
+                    }
 
                 //if(!bdd.low_outgoing->is_terminal()) { assert(variable_index(bdd) < variable_index(*bdd.low_outgoing)); }
                 //if(!bdd.high_outgoing->is_terminal()) { assert(variable_index(bdd) < variable_index(*bdd.high_outgoing)); }
@@ -423,6 +427,44 @@ namespace LPMP {
             bdd_branch_nodes_[i].forward_step();
         }
     }
+
+    template<typename BDD_VARIABLE, typename BDD_BRANCH_NODE>
+    void bdd_base<BDD_VARIABLE, BDD_BRANCH_NODE>::forward_step_tmp(const size_t var, const size_t bdd_index)
+    {
+        assert(var < this->nr_variables());
+        assert(bdd_index < this->nr_bdds(var));
+
+        const auto& bdd_var = get_bdd_variable(var, bdd_index);
+
+        if(bdd_var.prev == nullptr)
+        {
+                const size_t first_node_index = bdd_var.first_node_index;
+                const size_t last_node_index = bdd_var.last_node_index;
+                for (size_t i=first_node_index; i<last_node_index; ++i)
+                    this->bdd_branch_nodes_[i].m = 0.0;
+        }
+
+        if(bdd_var.next != nullptr)
+        {
+            // set m-values of bdds from next variable to zero
+            {
+                const auto& next_bdd_var = *bdd_var.next;
+                const size_t first_node_index = next_bdd_var.first_node_index;
+                const size_t last_node_index = next_bdd_var.last_node_index;
+                for (size_t i=first_node_index; i<last_node_index; ++i)
+                    this->bdd_branch_nodes_[i].m = std::numeric_limits<double>::infinity();
+            }
+
+            // go over each bdd branch node from this variable and update outgoing m-values
+            {
+                const size_t first_node_index = bdd_var.first_node_index;
+                const size_t last_node_index = bdd_var.last_node_index;
+                for(size_t i=first_node_index; i<last_node_index; ++i)
+                    this->bdd_branch_nodes_[i].forward_step();
+            }
+        } 
+    }
+
 
     template<typename BDD_VARIABLE, typename BDD_BRANCH_NODE>
     void bdd_base<BDD_VARIABLE, BDD_BRANCH_NODE>::forward_step(const std::size_t var)
