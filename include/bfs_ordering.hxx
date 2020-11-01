@@ -11,7 +11,7 @@
 namespace LPMP {
 
     template<typename ADJACENCY_GRAPH>
-    permutation bfs_ordering(const ADJACENCY_GRAPH& adj)
+    permutation bfs_ordering(const ADJACENCY_GRAPH& adj, const size_t nr_vars)
     {
         MEASURE_FUNCTION_EXECUTION_TIME;
         struct node
@@ -33,13 +33,13 @@ namespace LPMP {
             double avg_adj_dist_;
         };
 
-        permutation ordering(adj.size());
+        permutation ordering(nr_vars);
+        std::size_t pos = nr_vars-1;
 
         std::queue<std::size_t> Q;
         std::vector<std::size_t> dist(adj.size(), std::numeric_limits<std::size_t>::max());
         std::vector<char> seen(adj.size(), 0);
         std::vector<char> is_terminal(adj.size(), 0);
-        std::size_t pos = adj.size()-1;
 
         std::vector<size_t> pseudo_peripheral_nodes = find_pseudo_peripheral_nodes(adj);
 
@@ -93,8 +93,10 @@ namespace LPMP {
                 const auto next = dist_queue.top();
                 dist_queue.pop();
                 const auto i = next.index_;
-                // ordering.push_back(i);
-                ordering[pos--] = i;
+
+                // consider only vertices corresponding to variables
+                if (i < nr_vars)
+                    ordering[pos--] = i;
 
                 for(const std::size_t j : adj[i]) {
                     if (seen[j])
@@ -109,9 +111,7 @@ namespace LPMP {
             }
         }
 
-        // std::reverse(ordering.begin(), ordering.end());
-
-        assert(ordering.size() == adj.size());
+        assert(ordering.size() == nr_vars);
         assert(is_permutation(ordering.begin(), ordering.end()));
         return ordering; 
     }

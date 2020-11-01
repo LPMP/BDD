@@ -193,7 +193,37 @@ namespace LPMP {
 
     return adjacency;
     }
-    */ 
+    */
+
+    inline two_dim_variable_array<std::size_t> ILP_input::bipartite_variable_bdd_adjacency_matrix() const
+    {
+        MEASURE_FUNCTION_EXECUTION_TIME
+        std::vector<std::pair<size_t,size_t>> var_bdd_adj_list;
+        std::vector<size_t> degrees(this->nr_variables() + this->nr_constraints(), 0);
+
+        // determine list of adjacencies and vertex degrees
+        for(std::size_t i=0; i<this->linear_constraints_.size(); ++i) {
+            const auto& l = this->linear_constraints_[i];
+            for(const auto& v : l.variables) {
+                var_bdd_adj_list.emplace_back(v.var, i);
+                degrees[v.var]++;
+                degrees[this->nr_variables() + i]++;
+            }
+        }
+
+        // create adjacency matrix
+        two_dim_variable_array<std::size_t> adjacency(degrees.begin(), degrees.end());
+        std::fill(degrees.begin(), degrees.end(), 0);
+        for (auto it = var_bdd_adj_list.begin(); it != var_bdd_adj_list.end(); it++)
+        {
+            size_t var = it->first;
+            size_t bdd = this->nr_variables() + it->second;
+            adjacency(var, degrees[var]++) = bdd;
+            adjacency(bdd, degrees[bdd]++) = var;
+        }
+
+        return adjacency;
+    }
 
     permutation ILP_input::reorder(ILP_input::variable_order var_ord)
     {
@@ -245,8 +275,8 @@ namespace LPMP {
 
     inline permutation ILP_input::reorder_bfs()
     {
-        const auto adj = variable_adjacency_matrix();
-        const auto order = bfs_ordering(adj);
+        const auto adj = bipartite_variable_bdd_adjacency_matrix();
+        const auto order = bfs_ordering(adj, this->nr_variables());
         reorder(order);
         return order;
     }

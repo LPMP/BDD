@@ -72,6 +72,7 @@ namespace LPMP {
 
         private:
             two_dim_variable_array<std::size_t> variable_adjacency_matrix() const;
+            two_dim_variable_array<std::size_t> bipartite_variable_bdd_adjacency_matrix() const;
     };
 
     template<typename ITERATOR>
