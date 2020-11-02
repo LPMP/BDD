@@ -61,7 +61,7 @@ namespace LPMP {
         permutation reorder(variable_order var_ord);
         permutation reorder_bfs();
         permutation reorder_Cuthill_McKee(); 
-        permutation reorder_minimum_degree_averaging();
+        permutation reorder_minimum_degree_ordering();
         void reorder(const permutation& new_order);
 
         private:

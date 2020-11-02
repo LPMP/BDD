@@ -236,7 +236,7 @@ namespace LPMP {
         else
         {
             assert(var_ord == variable_order::mindegree);
-            return this->reorder_minimum_degree_averaging();
+            return this->reorder_minimum_degree_ordering();
         }
     }
 
@@ -283,13 +283,13 @@ namespace LPMP {
 
     inline permutation ILP_input::reorder_Cuthill_McKee()
     {
-        const auto adj = variable_adjacency_matrix();
-        const auto order = Cuthill_McKee(adj);
+        const auto adj = bipartite_variable_bdd_adjacency_matrix();
+        const auto order = Cuthill_McKee(adj, this->nr_variables());
         reorder(order);
         return order;
     }
 
-    inline permutation ILP_input::reorder_minimum_degree_averaging()
+    inline permutation ILP_input::reorder_minimum_degree_ordering()
     {
         const auto adj = variable_adjacency_matrix();
         const auto order = minimum_degree_ordering(adj);

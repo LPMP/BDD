@@ -7,15 +7,17 @@
 #include <queue>
 #include <tuple>
 #include <algorithm>
+#include "time_measure_util.h"
 
 namespace LPMP {
 
     template<typename T>
-    permutation Cuthill_McKee(const two_dim_variable_array<T>& adjacency)
+    permutation Cuthill_McKee(const two_dim_variable_array<T>& adjacency, const size_t nr_vars)
     {
+        MEASURE_FUNCTION_EXECUTION_TIME;
         std::queue<std::size_t> Q;
         permutation result;
-        result.reserve(adjacency.size());
+        result.reserve(nr_vars);
         std::vector<std::size_t> remaining_degree;
         remaining_degree.reserve(adjacency.size());
         std::vector<char> visited(adjacency.size(), 0);
@@ -28,7 +30,8 @@ namespace LPMP {
 
         for (const std::size_t i : pseudo_peripheral_nodes)
         {
-            result.push_back(i);
+            if (i < nr_vars)
+                result.push_back(i);
             Q.push(i);
             visited[i] = 1;
 
@@ -57,14 +60,15 @@ namespace LPMP {
                 for (const auto x : a)
                 {
                     Q.push(x);
-                    result.push_back(x);
+                    if (x < nr_vars)
+                        result.push_back(x);
                     visited[x] = 1;
                 }
                 assert(remaining_degree[i] == 0);
             }
         }
 
-        if(result.size() != adjacency.size())
+        if(result.size() != nr_vars)
             throw std::runtime_error("Graph not connected.");
 
         assert(is_permutation(result.begin(), result.end()));
