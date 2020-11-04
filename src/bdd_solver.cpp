@@ -124,7 +124,7 @@ namespace LPMP {
         std::cout << std::setprecision(10);
         if(bdd_solver_impl_ == bdd_solver_impl::mma)
         {
-            solver = std::move(bdd_mma(stor, ilp.objective().begin(), ilp.objective().end()));
+            solver = std::move(bdd_mma(stor, ilp.objective().begin(), ilp.objective().end(), std::get<bdd_mma::averaging_type>(solver_options_)));
             std::cout << "constructed mma solver\n";
         }
         else if(bdd_solver_impl_ == bdd_solver_impl::decomposition_mma)

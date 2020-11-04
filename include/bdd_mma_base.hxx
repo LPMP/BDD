@@ -22,6 +22,7 @@ namespace LPMP {
             void set_cost(const double c, const size_t var_);
             template<typename ITERATOR>
                 void set_costs(ITERATOR begin, ITERATOR end);
+            void set_avg_type(const bdd_mma::averaging_type avg_type);
 
             template<typename ITERATOR>
                 double evaluate(ITERATOR var_begin, ITERATOR var_end) const;
@@ -62,6 +63,8 @@ namespace LPMP {
 
             std::vector<double> costs_;
             double lower_bound_ = -std::numeric_limits<double>::infinity();
+
+            bdd_mma::averaging_type avg_type_ = bdd_mma::averaging_type::classic;
     };
 
     // this class expects as bdd branch node something derived from bdd_branch_node_opt_arc_cost
@@ -556,9 +559,9 @@ namespace LPMP {
     template<typename BDD_VARIABLE, typename BDD_BRANCH_NODE, typename DERIVED>
     void bdd_mma_base<BDD_VARIABLE, BDD_BRANCH_NODE, DERIVED>::iteration()
     {
-        if(this->avg_type == bdd_mma::averaging_type::classic)
+        if(this->avg_type_ == bdd_mma::averaging_type::classic)
             min_marginal_averaging_iteration();
-        else if(this->avg_type == bdd_mma::averaging_type::srmp)
+        else if(this->avg_type_ == bdd_mma::averaging_type::srmp)
             min_marginal_averaging_iteration_SRMP();
         else
             assert(false);
@@ -601,7 +604,13 @@ namespace LPMP {
             for(size_t bdd_index=0; bdd_index<this->nr_bdds(var); ++bdd_index) {
                 static_cast<DERIVED*>(this)->update_cost(var, bdd_index, c/double(this->nr_bdds(var)));
             }
-        } 
+        }
+
+    template<typename BDD_VARIABLE, typename BDD_BRANCH_NODE, typename DERIVED>
+        void bdd_mma_base<BDD_VARIABLE, BDD_BRANCH_NODE, DERIVED>::set_avg_type(const bdd_mma::averaging_type avg_type)
+        {
+            avg_type_ = avg_type;
+        }
 
     template<typename BDD_VARIABLE, typename BDD_BRANCH_NODE, typename DERIVED>
         template<typename ITERATOR>
