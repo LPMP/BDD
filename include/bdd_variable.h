@@ -48,8 +48,17 @@ namespace LPMP {
             x.cost == y.cost); 
     }
 
-    class bdd_variable_mma : public bdd_variable_mma_base<bdd_variable_mma> {   
+    class bdd_variable_mma : public bdd_variable_mma_base<bdd_variable_mma> {};
+
+    template<typename DERIVED>
+    class bdd_variable_with_indices_base : public bdd_variable_mma_base<DERIVED> {
+        public:
+            size_t variable = std::numeric_limits<size_t>::max();
+            size_t first_variable = std::numeric_limits<size_t>::max();
+            size_t last_variable = std::numeric_limits<size_t>::max();
     };
+
+    class bdd_variable_with_indices : public bdd_variable_with_indices_base<bdd_variable_with_indices> {};
 
     class bdd_variable_fix : public bdd_variable_mma_base<bdd_variable_fix> {
         public:
