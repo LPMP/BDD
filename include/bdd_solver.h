@@ -38,7 +38,7 @@ namespace LPMP {
 
             using solver_type = std::variant<bdd_mma, decomposition_bdd_mma>;
             std::optional<solver_type> solver;
-           size_t max_iter = 1000;
+            size_t max_iter = 1000;
     };
 
 }

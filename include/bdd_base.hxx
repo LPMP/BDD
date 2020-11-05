@@ -67,9 +67,6 @@ namespace LPMP {
             std::vector<BDD_BRANCH_NODE> bdd_branch_nodes_;
             two_dim_variable_array<BDD_VARIABLE> bdd_variables_;
             size_t nr_bdds_ = 0;
-
-            // TODO: put it in mma base
-            bdd_mma::averaging_type avg_type = bdd_mma::averaging_type::classic;
     };
 
     ////////////////////

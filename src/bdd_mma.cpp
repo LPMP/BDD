@@ -41,6 +41,11 @@ namespace LPMP {
         pimpl->mma.set_cost(c, var);
     }
 
+    void bdd_mma::set_avg_type(const bdd_mma::averaging_type avg_type)
+    {
+        pimpl->mma.set_avg_type(avg_type);
+    }
+
     void bdd_mma::backward_run()
     {
         pimpl->mma.backward_run();
