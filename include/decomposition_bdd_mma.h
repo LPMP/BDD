@@ -9,7 +9,6 @@ namespace LPMP {
         public:
 
             struct options {
-                bdd_mma::averaging_type avg_type;
                 size_t nr_threads; 
                 double parallel_message_passing_weight;
             };

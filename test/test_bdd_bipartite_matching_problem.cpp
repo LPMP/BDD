@@ -51,7 +51,11 @@ int main(int argc, char** arv)
 {
     test_problem(matching_3x3_diag, -6.0, {"-s", "mma", "--max_iter", "20"});
     test_problem(matching_3x3_diag, -6.0, {"-s", "decomposition_mma", "--nr_threads", "2", "--max_iter", "1000"});
+    test_problem(matching_3x3_diag, -6.0, {"-s", "anisotropic_mma", "--max_iter", "20"});
+    test_problem(matching_3x3_diag, -6.0, {"-s", "mma_srmp", "--max_iter", "20"});
 
     test_problem(matching_3x3_first_row, -4.0, {"-s", "mma", "--max_iter", "20"});
     test_problem(matching_3x3_first_row, -4.0, {"-s", "decomposition_mma", "--nr_threads", "2", "--max_iter", "1000"});
+    test_problem(matching_3x3_first_row, -4.0, {"-s", "anisotropic_mma", "--max_iter", "20"});
+    test_problem(matching_3x3_first_row, -4.0, {"-s", "mma_srmp", "--max_iter", "20"});
 }

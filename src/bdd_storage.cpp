@@ -18,9 +18,7 @@ namespace LPMP {
             const auto bdd_variable_indices = bdd_pre.get_bdd_indices();
             assert(bdds.size() == bdd_variable_indices.size());
             for(size_t bdd_index=0; bdd_index<bdds.size(); ++bdd_index)
-            {
-add_bdd(bdd_pre.get_bdd_manager(), bdds[bdd_index], bdd_variable_indices[bdd_index].begin(), bdd_variable_indices[bdd_index].end());
-            } 
+                add_bdd(bdd_pre.get_bdd_manager(), bdds[bdd_index], bdd_variable_indices[bdd_index].begin(), bdd_variable_indices[bdd_index].end());
         }
     }
 
@@ -65,17 +63,17 @@ add_bdd(bdd_pre.get_bdd_manager(), bdds[bdd_index], bdd_variable_indices[bdd_ind
         if(bdd.high != bdd_node::terminal_0 && bdd.high != bdd_node::terminal_1) {
             assert(bdd.variable < bdd_nodes_[bdd.high].variable);
         }
-        //assert(bdd.high != bdd.low); this can be so in ou formulation, but not in ordinary BDDs
+        //assert(bdd.high != bdd.low); this can be so in our formulation, but not in ordinary BDDs
     }
 
 
-    std::size_t bdd_storage::first_bdd_node(const std::size_t bdd_nr) const
+    size_t bdd_storage::first_bdd_node(const size_t bdd_nr) const
     {
         assert(bdd_nr < nr_bdds());
         return bdd_nodes_[bdd_delimiters_[bdd_nr]].variable;
     }
 
-    std::size_t bdd_storage::last_bdd_node(const std::size_t bdd_nr) const
+    size_t bdd_storage::last_bdd_node(const size_t bdd_nr) const
     {
         assert(bdd_nr < nr_bdds());
         std::size_t max_node = 0;
@@ -86,9 +84,7 @@ add_bdd(bdd_pre.get_bdd_manager(), bdds[bdd_index], bdd_variable_indices[bdd_ind
 
     std::vector<std::array<size_t,2>> bdd_storage::dependency_graph() const
     {
-        //std::unordered_set<std::array<size_t,2>> edges;
         tsl::robin_set<std::array<size_t,2>> edges;
-        //std::unordered_set<size_t> cur_vars;
         tsl::robin_set<size_t> cur_vars;
         std::vector<size_t> cur_vars_sorted;
         for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
@@ -130,17 +126,11 @@ add_bdd(bdd_pre.get_bdd_manager(), bdds[bdd_index], bdd_variable_indices[bdd_ind
         {
             cumulative_sum += bdds_per_variable[i];
             if(cumulative_sum >= bdd_nodes_.size()*double(interval_boundaries.size())/double(nr_intervals))
-            {
                 interval_boundaries.push_back(i+1); 
-            }
         }
 
         assert(interval_boundaries.size() == nr_intervals+1);
         assert(interval_boundaries.back() == nr_variables());
-
-        //for(size_t interval=0; interval<nr_intervals; ++interval)
-        //    interval_boundaries.push_back(std::round(double(interval*this->nr_variables())/double(nr_intervals))); 
-        //interval_boundaries.push_back(this->nr_variables()); 
 
         std::vector<size_t> variable_interval;
         variable_interval.reserve(this->nr_variables());
@@ -168,7 +158,7 @@ add_bdd(bdd_pre.get_bdd_manager(), bdds[bdd_index], bdd_variable_indices[bdd_ind
         return interval_boundaries.size()-1;
     }
 
-    // take bdd_nodes_ and return two_dim_variable_array<bdd_node> bdd_nodes_split_, two_dim_variable_array<size_t> bdd_delimiters_split_
+    // given bdd storage, split up bdds into nr_intervals sub-bdd_storages. Record where splitting of BDDs is done in second return structure.
     // TODO: do not use nr_bdd_nodes_per_interval in second part, i.e. filling in bdd nodes. bdd_nodes_.size() is enough
     std::tuple<std::vector<bdd_storage>, tsl::robin_set<bdd_storage::duplicate_variable, bdd_storage::duplicate_variable_hash>> bdd_storage::split_bdd_nodes(const size_t nr_intervals)
     {
@@ -296,11 +286,7 @@ add_bdd(bdd_pre.get_bdd_manager(), bdds[bdd_index], bdd_variable_indices[bdd_ind
         //    split_bdd_delimiters(i,0) = 0;
 
         // fill split bdd nodes, record duplicated bdd variables
-
-        // TODO: replace by tsl-robin-set
-        //std::unordered_set<duplicate_variable, duplicate_variable_hash> duplicated_variables;
         tsl::robin_set<duplicate_variable, duplicate_variable_hash> duplicated_variables;
-        //std::unordered_map<std::array<size_t,2>,size_t> split_bdd_node_indices; // bdd index in bdd_nodes_, interval
         tsl::robin_map<std::array<size_t,2>,size_t> split_bdd_node_indices; // bdd index in bdd_nodes_, interval
         for(size_t bdd_counter=0; bdd_counter<bdd_delimiters_.size()-1; ++bdd_counter)
         {

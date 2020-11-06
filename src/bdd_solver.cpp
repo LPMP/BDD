@@ -1,6 +1,5 @@
 #include "bdd_solver.h"
 #include "ILP_parser.h"
-#include <variant>
 #include <iomanip>
 #include <memory>
 #include <CLI/CLI.hpp>
@@ -50,39 +49,23 @@ namespace LPMP {
         app.add_option("--max_iter", max_iter, "maximal number of iterations, default value = 1000")
             ->check(CLI::PositiveNumber);
 
-        enum class bdd_solver_impl { mma, decomposition_mma } bdd_solver_impl_;
+        enum class bdd_solver_impl { mma, mma_srmp, decomposition_mma, anisotropic_mma } bdd_solver_impl_;
         std::unordered_map<std::string, bdd_solver_impl> bdd_solver_impl_map{
             {"mma",bdd_solver_impl::mma},
-            {"decomposition_mma",bdd_solver_impl::decomposition_mma}
+            {"decomposition_mma",bdd_solver_impl::decomposition_mma},
+            {"mma_srmp",bdd_solver_impl::mma_srmp},
+            {"anisotropic_mma",bdd_solver_impl::anisotropic_mma}
         };
 
         app.add_option("-s, --solver", bdd_solver_impl_, "the name of solver for the relaxation")
             ->required()
             ->transform(CLI::CheckedTransformer(bdd_solver_impl_map, CLI::ignore_case));
 
-        std::variant<bdd_mma::averaging_type, decomposition_bdd_mma::options> solver_options_;
-
-        app.callback([&app, &bdd_solver_impl_, &solver_options_]() {
+        decomposition_bdd_mma::options decomposition_mma_options;
+        app.callback([&app, &bdd_solver_impl_, &decomposition_mma_options]() {
                 CLI::App solver_app;
 
-                if(bdd_solver_impl_ == bdd_solver_impl::mma || bdd_solver_impl_ == bdd_solver_impl::decomposition_mma)
-                {
-                bdd_mma::averaging_type avg_type = bdd_mma::averaging_type::classic;
-                std::unordered_map<std::string, bdd_mma::averaging_type> averaging_type_map{
-                {"classic", bdd_mma::averaging_type::classic},
-                {"srmp", bdd_mma::averaging_type::srmp}
-                };
-
-                solver_app.add_option("--averaging", avg_type, "min marginal averaging type")
-                ->transform(CLI::CheckedTransformer(averaging_type_map, CLI::ignore_case));
-
-                if(bdd_solver_impl_ == bdd_solver_impl::mma)
-                {
-                solver_app.parse(app.remaining_for_passthrough()); 
-                std::cout << "use mma solver\n";
-                solver_options_ = avg_type;
-                }
-                else if(bdd_solver_impl_ == bdd_solver_impl::decomposition_mma)
+                if(bdd_solver_impl_ == bdd_solver_impl::decomposition_mma)
                 {
                     std::cout << "use decomposition mma solver\n";
                     size_t nr_threads = 0;
@@ -95,11 +78,8 @@ namespace LPMP {
                         ->check(CLI::Range(0.0,1.0));
 
                     solver_app.parse(app.remaining_for_passthrough());
-                    solver_options_ = decomposition_bdd_mma::options{avg_type, nr_threads, mp_weight};
+                    decomposition_mma_options = decomposition_bdd_mma::options{nr_threads, mp_weight};
                 } 
-                }
-                else
-                    throw std::runtime_error("solver type not supported\n");
         });
 
         app.parse(argc, argv);
@@ -124,13 +104,23 @@ namespace LPMP {
         std::cout << std::setprecision(10);
         if(bdd_solver_impl_ == bdd_solver_impl::mma)
         {
-            solver = std::move(bdd_mma(stor, ilp.objective().begin(), ilp.objective().end(), std::get<bdd_mma::averaging_type>(solver_options_)));
+            solver = std::move(bdd_mma(stor, ilp.objective().begin(), ilp.objective().end()));
             std::cout << "constructed mma solver\n";
+        } 
+        else if(bdd_solver_impl_ == bdd_solver_impl::mma_srmp)
+        {
+            solver = std::move(bdd_mma_srmp(stor, ilp.objective().begin(), ilp.objective().end()));
+            std::cout << "constructed srmp mma solver\n";
         }
         else if(bdd_solver_impl_ == bdd_solver_impl::decomposition_mma)
         {
-            solver = std::move(decomposition_bdd_mma(stor, ilp.objective().begin(), ilp.objective().end(), std::get<decomposition_bdd_mma::options>(solver_options_)));
+            solver = std::move(decomposition_bdd_mma(stor, ilp.objective().begin(), ilp.objective().end(), decomposition_mma_options));
             std::cout << "constructed decomposition mma solver\n";
+        }
+        else if(bdd_solver_impl_ == bdd_solver_impl::anisotropic_mma)
+        {
+            solver = std::move(bdd_mma_anisotropic(stor, ilp.objective().begin(), ilp.objective().end()));
+            std::cout << "constructed anisotropic mma solver\n"; 
         }
         else
         {

@@ -60,6 +60,13 @@ namespace LPMP {
 
     class bdd_variable_with_indices : public bdd_variable_with_indices_base<bdd_variable_with_indices> {};
 
+
+    template<typename BDD_VARIABLE>
+        struct has_variable_indices
+        {
+            constexpr static bool value = std::is_convertible<BDD_VARIABLE*, bdd_variable_with_indices_base<BDD_VARIABLE>*>::value;
+        };
+
     class bdd_variable_fix : public bdd_variable_mma_base<bdd_variable_fix> {
         public:
             size_t nr_feasible_low_arcs;

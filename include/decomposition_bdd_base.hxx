@@ -19,7 +19,7 @@ namespace LPMP {
         public:
             decomposition_bdd_base(bdd_storage& stor, decomposition_bdd_mma::options opt);
 
-            using bdd_sequential_base = bdd_mma_base_arc_costs<bdd_variable_split, bdd_branch_node_opt_arc_cost>;
+            using bdd_sequential_base = bdd_mma_base<bdd_opt_base_arc_costs<bdd_variable_split, bdd_branch_node_opt_arc_cost>>;
 
             void set_cost(const double c, const size_t var);
             void backward_run();
@@ -86,13 +86,10 @@ namespace LPMP {
     inline decomposition_bdd_base::decomposition_bdd_base(bdd_storage& bdd_storage_, decomposition_bdd_mma::options opt)
         : intervals(bdd_storage_.compute_intervals(opt.nr_threads)),
         intra_interval_message_passing_weight(opt.parallel_message_passing_weight)
-
     {
         std::cout << "decomposing BDDs into " << intervals.nr_intervals() << " intervals: ";
         for(size_t i=0; i<intervals.nr_intervals(); ++i)
-        {
             std::cout << "[" << intervals.interval_boundaries[i] << "," << intervals.interval_boundaries[i+1] << "), ";
-        }
         std::cout << "\n";
 
         assert(intra_interval_message_passing_weight >= 0 && intra_interval_message_passing_weight <= 1.0);
@@ -100,20 +97,24 @@ namespace LPMP {
         auto [bdd_storages, duplicated_bdd_variables] = bdd_storage_.split_bdd_nodes(nr_intervals);
 
         bdd_bases = std::make_unique<bdd_sub_base[]>(nr_intervals);
-        two_dim_variable_array<typename bdd_sequential_base::bdd_endpoints_> bdd_endpoints;
+        //two_dim_variable_array<typename bdd_sequential_base::bdd_endpoints_> bdd_endpoints;
+        std::vector<std::vector<typename bdd_sequential_base::bdd_endpoints_>> bdd_endpoints(nr_intervals);
 
+        bdd_endpoints.resize(nr_intervals);
         for(size_t i=0; i<nr_intervals; ++i)
         {
             bdd_bases[i].base.init(bdd_storages[i]); 
-            const auto current_endpoints = bdd_bases[i].base.bdd_endpoints(bdd_storages[i]);
-            bdd_endpoints.push_back(current_endpoints.begin(), current_endpoints.end());
+            bdd_endpoints[i] = bdd_bases[i].base.bdd_endpoints(bdd_storages[i]);
         }
 
         for(const auto [interval_1, bdd_nr_1, interval_2, bdd_nr_2] : duplicated_bdd_variables)
+
         {
             assert(interval_1 < interval_2);
-            const auto [first_bdd_var_1, first_bdd_index_1, last_bdd_var_1, last_bdd_index_1] = bdd_endpoints(interval_1, bdd_nr_1);
-            const auto [first_bdd_var_2, first_bdd_index_2, last_bdd_var_2, last_bdd_index_2] = bdd_endpoints(interval_2, bdd_nr_2);
+            //const auto [first_bdd_var_1, first_bdd_index_1, last_bdd_var_1, last_bdd_index_1] = bdd_endpoints(interval_1, bdd_nr_1);
+            //const auto [first_bdd_var_2, first_bdd_index_2, last_bdd_var_2, last_bdd_index_2] = bdd_endpoints(interval_2, bdd_nr_2);
+            const auto [first_bdd_var_1, first_bdd_index_1, last_bdd_var_1, last_bdd_index_1] = bdd_endpoints[interval_1][bdd_nr_1];
+            const auto [first_bdd_var_2, first_bdd_index_2, last_bdd_var_2, last_bdd_index_2] = bdd_endpoints[interval_2][bdd_nr_2];
 
             //std::cout << first_bdd_var_1 << "," <<  first_bdd_index_1 << "," <<  last_bdd_var_1 << "," <<  last_bdd_index_1 << "\n";
             //std::cout << first_bdd_var_2 << "," <<  first_bdd_index_2 << "," <<  last_bdd_var_2 << "," <<  last_bdd_index_2 << "\n";
@@ -138,7 +139,9 @@ namespace LPMP {
         costs.resize(bdd_storage_.nr_variables(), 0.0);
 
         for(size_t i=0; i<nr_intervals; ++i)
+        {
             bdd_bases[i].init_queue_cache();
+        }
     }
 
     void decomposition_bdd_base::set_cost(const double c, const size_t var)
@@ -237,8 +240,8 @@ namespace LPMP {
     void decomposition_bdd_base::solve(const size_t max_iter)
     {
         std::cout << "initial lower bound = " << lower_bound() << "\n";
-        std::vector<std::thread> threads;
         
+        std::vector<std::thread> threads;
         auto mma = [&](const size_t thread_nr) {
             for(size_t i=0; i<max_iter; ++i)
             {
@@ -251,7 +254,7 @@ namespace LPMP {
         };
 
         for(size_t t=0; t<intervals.nr_intervals(); ++t)
-            threads.push_back(std::thread(mma, t)); 
+            threads.push_back(std::thread(mma, t));
 
         for(auto& t : threads)
             t.join(); 

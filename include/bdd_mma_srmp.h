@@ -5,15 +5,18 @@
 
 namespace LPMP {
 
-    class bdd_mma {
+    class bdd_mma_srmp {
         public:
-            bdd_mma(bdd_storage& stor);
+            enum class averaging_type { classic, srmp };
+
+            bdd_mma_srmp(bdd_storage& stor);
             template<typename ITERATOR>
-            bdd_mma(bdd_storage& stor, ITERATOR cost_begin, ITERATOR cost_end);
-            bdd_mma(bdd_mma&&);
-            bdd_mma& operator=(bdd_mma&&);
-            ~bdd_mma();
+            bdd_mma_srmp(bdd_storage& stor, ITERATOR cost_begin, ITERATOR cost_end);
+            bdd_mma_srmp(bdd_mma_srmp&&);
+            bdd_mma_srmp& operator=(bdd_mma_srmp&&);
+            ~bdd_mma_srmp();
             void set_cost(const double c, const size_t var);
+            void set_avg_type(const averaging_type avg_type);
             double lower_bound();
             void solve(const size_t max_iter);
             void backward_run(); 
@@ -24,8 +27,8 @@ namespace LPMP {
     };
 
     template<typename ITERATOR>
-        bdd_mma::bdd_mma(bdd_storage& stor, ITERATOR cost_begin, ITERATOR cost_end)
-        : bdd_mma(stor)
+        bdd_mma_srmp::bdd_mma_srmp(bdd_storage& stor, ITERATOR cost_begin, ITERATOR cost_end)
+        : bdd_mma_srmp(stor)
         {
             assert(std::distance(cost_begin, cost_end) <= stor.nr_variables());
             size_t var = 0;
@@ -35,3 +38,4 @@ namespace LPMP {
         }
 
 };
+

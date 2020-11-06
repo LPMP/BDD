@@ -12,12 +12,6 @@ namespace LPMP {
     // Base Template Branch Node //
     ///////////////////////////////
 
-    //template<typename BDD_TYPE>
-    //    struct has_incoming_pointers
-    //    {
-    //        constexpr static bool value = false;
-    //    };
-
     template<typename DERIVED>
     class bdd_branch_node {
         public:
@@ -59,7 +53,6 @@ namespace LPMP {
     template<typename BDD_NODE_TYPE>
         struct has_incoming_pointers
         {
-            //constexpr static bool value = std::is_base_of<BDD_NODE_TYPE, bdd_branch_node_incoming_pointers<BDD_NODE_TYPE>>::value;
             constexpr static bool value = std::is_convertible<BDD_NODE_TYPE*, bdd_branch_node_incoming_pointers<BDD_NODE_TYPE>*>::value;
         };
 
