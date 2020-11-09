@@ -9,6 +9,12 @@
 //#include <unordered_map> // TODO: use tsl::robin-map
 //#include <unordered_set> // TODO: use tsl::robin-map
 
+
+#pragma omp declare reduction(vec_size_t_plus : std::vector<size_t> : \
+        std::transform(omp_out.begin(), omp_out.end(), omp_in.begin(), omp_out.begin(), std::plus<size_t>())) \
+        initializer(omp_priv = decltype(omp_orig)(omp_orig.size()))
+
+
 namespace LPMP {
 
     // base class for min marginal averaging and rounding. Take bdd storage as input and lay out bdd nodes per variable.
@@ -102,49 +108,53 @@ namespace LPMP {
         std::vector<size_t> nr_bdds_per_variable(bdd_storage_.nr_variables(), 0);
 
         // TODO: std::unordered_set might be faster (or tsl::unordered_set)
-        std::vector<char> variable_counted(bdd_storage_.nr_variables(), 0);
-        std::vector<size_t> variables_covered;
+        class var_cover {
+            public:
+                std::vector<char> variable_counted;//(bdd_storage_.nr_variables(), 0);
+                std::vector<size_t> variables_covered;
 
-        auto variable_covered = [&](const size_t v) {
-            assert(v < bdd_storage_.nr_variables());
-            assert(variable_counted[v] == 0 || variable_counted[v] == 1);
-            return variable_counted[v] == 1;
-        };
-        auto cover_variable = [&](const size_t v) {
-            assert(!variable_covered(v));
-            variable_counted[v] = 1;
-            variables_covered.push_back(v);
-        };
-        auto uncover_variables = [&]() {
-            for(const size_t v : variables_covered) {
-                assert(variable_covered(v));
-                variable_counted[v] = 0;
-            }
-            variables_covered.clear(); 
-        };
-
-        for(const auto& bdd_node : bdd_storage_.bdd_nodes()) {
-            ++nr_bdd_nodes_per_variable[bdd_node.variable];
-            // if we have additional gap nodes, count them too
-            const auto& next_high = bdd_storage_.bdd_nodes()[bdd_node.high];
-            //std::cout << bdd_node.variable << " ";
-        }
-        //std::cout << "\n";
-        assert(bdd_storage_.bdd_nodes().size() == std::accumulate(nr_bdd_nodes_per_variable.begin(), nr_bdd_nodes_per_variable.end(), 0));
-
-        //std::cout << "cover variables\n";
-        for(size_t bdd_index=0; bdd_index<bdd_storage_.bdd_delimiters().size()-1; ++bdd_index) {
-            for(size_t i=bdd_storage_.bdd_delimiters()[bdd_index]; i<bdd_storage_.bdd_delimiters()[bdd_index+1]; ++i) {
-                const size_t bdd_variable = bdd_storage_.bdd_nodes()[i].variable;
-                if(!variable_covered(bdd_variable)) {
-                    cover_variable(bdd_variable);
-                    ++nr_bdds_per_variable[bdd_variable];
+                var_cover(const size_t n)
+                    : variable_counted(n, 0)
+                {}
+                bool variable_covered(const size_t v) 
+                {
+                    assert(v < variable_counted.size());
+                    assert(variable_counted[v] == 0 || variable_counted[v] == 1);
+                    return variable_counted[v] == 1;
                 }
+                void cover_variable(const size_t v)
+                {
+                    assert(!variable_covered(v));
+                    variable_counted[v] = 1;
+                    variables_covered.push_back(v);
+                }
+                void uncover_variables()
+                {
+                    for(const size_t v : variables_covered) {
+                        assert(variable_covered(v));
+                        variable_counted[v] = 0;
+                    }
+                    variables_covered.clear(); 
+                }
+        };
+
+#pragma omp parallel
+        {
+            var_cover vc(bdd_storage_.nr_variables());
+#pragma omp for reduction(vec_size_t_plus:nr_bdds_per_variable)
+            for(size_t bdd_index=0; bdd_index<bdd_storage_.bdd_delimiters().size()-1; ++bdd_index) {
+                for(size_t i=bdd_storage_.bdd_delimiters()[bdd_index]; i<bdd_storage_.bdd_delimiters()[bdd_index+1]; ++i) {
+                    const size_t bdd_variable = bdd_storage_.bdd_nodes()[i].variable;
+                    ++nr_bdd_nodes_per_variable[bdd_variable];
+                    if(!vc.variable_covered(bdd_variable)) {
+                        vc.cover_variable(bdd_variable);
+                        ++nr_bdds_per_variable[bdd_variable];
+                    }
+                }
+                vc.uncover_variables();
             }
-            //std::cout << "bdd index = " << bdd_index << "\n";
-            uncover_variables();
         }
-        //std::cout << "uncover variables\n";
+        assert(bdd_storage_.bdd_nodes().size() == std::accumulate(nr_bdd_nodes_per_variable.begin(), nr_bdd_nodes_per_variable.end(), 0));
         
         std::vector<size_t> bdd_offset_per_variable;
         bdd_offset_per_variable.reserve(bdd_storage_.nr_variables());
@@ -156,98 +166,94 @@ namespace LPMP {
         bdd_branch_nodes_.resize(bdd_storage_.bdd_nodes().size());
         bdd_variables_.resize(nr_bdds_per_variable.begin(), nr_bdds_per_variable.end());
 
-        for(size_t v=0; v<nr_bdds_per_variable.size(); ++v) {
-            //std::cout << "v = " << v << ", nr bdd nodes per var = " << nr_bdd_nodes_per_variable[v] << ", offset = " << bdd_offset_per_variable[v] << "\n";
-        }
-
         // fill branch instructions into datastructures and set pointers
         std::fill(nr_bdd_nodes_per_variable.begin(), nr_bdd_nodes_per_variable.end(), 0); // counter for bdd instruction per variable
         std::fill(nr_bdds_per_variable.begin(), nr_bdds_per_variable.end(), 0); // counter for bdd per variable
 
-        //std::unordered_map<size_t, BDD_BRANCH_NODE*> stored_bdd_node_index_to_bdd_address;
-        tsl::robin_map<size_t, BDD_BRANCH_NODE*> stored_bdd_node_index_to_bdd_address;
-        //stored_bdd_node_index_to_bdd_address.insert(std::pair<size_t, BDD_BRANCH_NODE*>(bdd_storage::bdd_node::terminal_0, bdd_branch_node_terminal_0));
-        //stored_bdd_node_index_to_bdd_address.insert(std::pair<size_t, BDD_BRANCH_NODE*>(bdd_storage::bdd_node::terminal_1, bdd_branch_node_terminal_1));
+//#pragma omp parallel
+        {
+            tsl::robin_map<size_t, BDD_BRANCH_NODE*> stored_bdd_node_index_to_bdd_address;
+            var_cover vc(bdd_storage_.nr_variables());
+            size_t c = 0; // check if everything is read contiguously
+//#pragma omp for reduction(vec_size_t_plus:nr_bdds_per_variable)
+            for(size_t bdd_index=0; bdd_index<bdd_storage_.nr_bdds(); ++bdd_index) {
+                ++nr_bdds_;
+                vc.uncover_variables(); 
+                stored_bdd_node_index_to_bdd_address.clear();
+                stored_bdd_node_index_to_bdd_address.insert(std::pair<size_t, BDD_BRANCH_NODE*>(bdd_storage::bdd_node::terminal_0, BDD_BRANCH_NODE::terminal_0()));
+                stored_bdd_node_index_to_bdd_address.insert(std::pair<size_t, BDD_BRANCH_NODE*>(bdd_storage::bdd_node::terminal_1, BDD_BRANCH_NODE::terminal_1()));
+                BDD_VARIABLE* next_bdd_var = nullptr;
 
+                //std::cout << "bdd index = " << bdd_index << "\n";
+                const size_t first_stored_bdd_node = bdd_storage_.bdd_delimiters()[bdd_index]; 
+                const size_t last_stored_bdd_node = bdd_storage_.bdd_delimiters()[bdd_index+1];
+                //std::cout << "bdd delimiter = " << bdd_storage_.bdd_delimiters()[bdd_index+1] << "\n";
+                for(size_t stored_bdd_node_index=first_stored_bdd_node; stored_bdd_node_index<last_stored_bdd_node; ++stored_bdd_node_index, ++c) {
+                    assert(c == stored_bdd_node_index);
+                    //std::cout << "stored bdd node index = " << stored_bdd_node_index << "\n";
+                    const auto& stored_bdd = bdd_storage_.bdd_nodes()[stored_bdd_node_index];
+                    const size_t v = stored_bdd.variable;
+                    //std::cout << "bdd variable = " << v << ", bdd variable offset = " << bdd_offset_per_variable[v] << "\n";
 
-        size_t c = 0; // check if everything is read contiguously
-        for(size_t bdd_index=0; bdd_index<bdd_storage_.nr_bdds(); ++bdd_index) {
-            ++nr_bdds_;
-            uncover_variables(); 
-            stored_bdd_node_index_to_bdd_address.clear();
-            stored_bdd_node_index_to_bdd_address.insert(std::pair<size_t, BDD_BRANCH_NODE*>(bdd_storage::bdd_node::terminal_0, BDD_BRANCH_NODE::terminal_0()));
-            stored_bdd_node_index_to_bdd_address.insert(std::pair<size_t, BDD_BRANCH_NODE*>(bdd_storage::bdd_node::terminal_1, BDD_BRANCH_NODE::terminal_1()));
-            BDD_VARIABLE* next_bdd_var = nullptr;
+                    auto& bdd_var = bdd_variables_(v, nr_bdds_per_variable[v]);
+                    if(!vc.variable_covered(v)) {
+                        // assert(bdd_var.is_initial_state());
+                        vc.cover_variable(v);
 
-            //std::cout << "bdd index = " << bdd_index << "\n";
-            const size_t first_stored_bdd_node = bdd_storage_.bdd_delimiters()[bdd_index]; 
-            const size_t last_stored_bdd_node = bdd_storage_.bdd_delimiters()[bdd_index+1];
-            //std::cout << "bdd delimiter = " << bdd_storage_.bdd_delimiters()[bdd_index+1] << "\n";
-            for(size_t stored_bdd_node_index=first_stored_bdd_node; stored_bdd_node_index<last_stored_bdd_node; ++stored_bdd_node_index, ++c) {
-                assert(c == stored_bdd_node_index);
-                //std::cout << "stored bdd node index = " << stored_bdd_node_index << "\n";
-                const auto& stored_bdd = bdd_storage_.bdd_nodes()[stored_bdd_node_index];
-                const size_t v = stored_bdd.variable;
-                //std::cout << "bdd variable = " << v << ", bdd variable offset = " << bdd_offset_per_variable[v] << "\n";
+                        bdd_var.first_node_index = bdd_offset_per_variable[v];
+                        bdd_var.last_node_index = bdd_offset_per_variable[v];
+                        //std::cout << "bdd level offset for var = " << v << ", bdd index = " << bdd_index << " = " << stored_bdd_node_index << "\n";
+                        // TODO: remove, not needed anymore
+                        if(next_bdd_var != nullptr) {
+                            //assert(next_bdd_var > &bdd_var);
+                            bdd_var.next = next_bdd_var;
+                            next_bdd_var->prev = &bdd_var;
+                        }
 
-                auto& bdd_var = bdd_variables_(v, nr_bdds_per_variable[v]);
-                if(!variable_covered(v)) {
-                    // assert(bdd_var.is_initial_state());
-                    cover_variable(v);
-
-                    bdd_var.first_node_index = bdd_offset_per_variable[v];
-                    bdd_var.last_node_index = bdd_offset_per_variable[v];
-                    //std::cout << "bdd level offset for var = " << v << ", bdd index = " << bdd_index << " = " << stored_bdd_node_index << "\n";
-                    // TODO: remove, not needed anymore
-                    if(next_bdd_var != nullptr) {
-                        //assert(next_bdd_var > &bdd_var);
-                        bdd_var.next = next_bdd_var;
-                        next_bdd_var->prev = &bdd_var;
+                        next_bdd_var = &bdd_var;
+                    } else {
+                        // assert(!bdd_var.is_initial_state());
                     }
 
-                    next_bdd_var = &bdd_var;
-                } else {
-                    // assert(!bdd_var.is_initial_state());
+                    const size_t bdd_branch_nodes_index = bdd_var.last_node_index; 
+                    bdd_var.last_node_index++;
+
+                    BDD_BRANCH_NODE& bdd = bdd_branch_nodes_[bdd_branch_nodes_index];
+                    // assert(bdd.is_initial_state());
+                    //std::cout << "address = " << &bdd << "\n";
+
+                    stored_bdd_node_index_to_bdd_address.insert({stored_bdd_node_index, &bdd});
+
+                    assert(stored_bdd_node_index_to_bdd_address.count(stored_bdd.low) > 0);
+                    BDD_BRANCH_NODE& bdd_low = *(stored_bdd_node_index_to_bdd_address.find(stored_bdd.low)->second);
+                    bdd.low_outgoing = &bdd_low;
+                    assert(bdd.low_outgoing != nullptr);
+                    if constexpr(has_incoming_pointers<BDD_BRANCH_NODE>::value)
+                        if(!BDD_BRANCH_NODE::is_terminal(&bdd_low)) {
+                            bdd.next_low_incoming = bdd_low.first_low_incoming;
+                            bdd_low.first_low_incoming = &bdd;
+                        }
+
+                    assert(stored_bdd_node_index_to_bdd_address.count(stored_bdd.high) > 0);
+                    BDD_BRANCH_NODE& bdd_high = *(stored_bdd_node_index_to_bdd_address.find(stored_bdd.high)->second);
+                    bdd.high_outgoing = &bdd_high;
+                    if constexpr(has_incoming_pointers<BDD_BRANCH_NODE>::value)
+                        if(!BDD_BRANCH_NODE::is_terminal(&bdd_high)) {
+                            bdd.next_high_incoming = bdd_high.first_high_incoming;
+                            bdd_high.first_high_incoming = &bdd;
+                        }
+
+                    //if(!bdd.low_outgoing->is_terminal()) { assert(variable_index(bdd) < variable_index(*bdd.low_outgoing)); }
+                    //if(!bdd.high_outgoing->is_terminal()) { assert(variable_index(bdd) < variable_index(*bdd.high_outgoing)); }
+                    //check_bdd_branch_node(bdd, v+1 == nr_variables(), v == 0); // TODO: cannot be enabled because not all pointers are set yet.
+                    //check_bdd_branch_instruction_level(bdd_level, v+1 == nr_variables(), v == 0);
+                    ++nr_bdd_nodes_per_variable[v]; 
+                    ++bdd_offset_per_variable[v];
                 }
 
-                const size_t bdd_branch_nodes_index = bdd_var.last_node_index; 
-                bdd_var.last_node_index++;
-
-                BDD_BRANCH_NODE& bdd = bdd_branch_nodes_[bdd_branch_nodes_index];
-                // assert(bdd.is_initial_state());
-                //std::cout << "address = " << &bdd << "\n";
-
-                stored_bdd_node_index_to_bdd_address.insert({stored_bdd_node_index, &bdd});
-
-                assert(stored_bdd_node_index_to_bdd_address.count(stored_bdd.low) > 0);
-                BDD_BRANCH_NODE& bdd_low = *(stored_bdd_node_index_to_bdd_address.find(stored_bdd.low)->second);
-                bdd.low_outgoing = &bdd_low;
-                assert(bdd.low_outgoing != nullptr);
-                if constexpr(has_incoming_pointers<BDD_BRANCH_NODE>::value)
-                    if(!BDD_BRANCH_NODE::is_terminal(&bdd_low)) {
-                        bdd.next_low_incoming = bdd_low.first_low_incoming;
-                        bdd_low.first_low_incoming = &bdd;
-                    }
-
-                assert(stored_bdd_node_index_to_bdd_address.count(stored_bdd.high) > 0);
-                BDD_BRANCH_NODE& bdd_high = *(stored_bdd_node_index_to_bdd_address.find(stored_bdd.high)->second);
-                bdd.high_outgoing = &bdd_high;
-                if constexpr(has_incoming_pointers<BDD_BRANCH_NODE>::value)
-                    if(!BDD_BRANCH_NODE::is_terminal(&bdd_high)) {
-                        bdd.next_high_incoming = bdd_high.first_high_incoming;
-                        bdd_high.first_high_incoming = &bdd;
-                    }
-
-                //if(!bdd.low_outgoing->is_terminal()) { assert(variable_index(bdd) < variable_index(*bdd.low_outgoing)); }
-                //if(!bdd.high_outgoing->is_terminal()) { assert(variable_index(bdd) < variable_index(*bdd.high_outgoing)); }
-                //check_bdd_branch_node(bdd, v+1 == nr_variables(), v == 0); // TODO: cannot be enabled because not all pointers are set yet.
-                //check_bdd_branch_instruction_level(bdd_level, v+1 == nr_variables(), v == 0);
-                ++nr_bdd_nodes_per_variable[v]; 
-                ++bdd_offset_per_variable[v];
-            }
-
-            for(const size_t v : variables_covered) {
-                ++nr_bdds_per_variable[v];
+                for(const size_t v : vc.variables_covered) {
+                    ++nr_bdds_per_variable[v];
+                }
             }
         }
 
@@ -263,6 +269,7 @@ namespace LPMP {
         if constexpr(has_variable_indices<BDD_VARIABLE>::value)
         {
             std::cout << "Set variable indices\n";
+#pragma omp parallel for
             for(size_t i=0; i<this->nr_variables(); ++i)
             {
                 for(size_t bdd_index=0; bdd_index<nr_bdds(i); ++bdd_index) {

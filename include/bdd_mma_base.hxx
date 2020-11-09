@@ -21,8 +21,8 @@ namespace LPMP {
             void iteration();
             void solve(const size_t max_iter);
 
+            //void min_marginal_averaging_step_forward(const size_t var, std::vector<std::array<double,2>>& min_marginals);
             void min_marginal_averaging_step_forward(const size_t var, std::vector<std::array<double,2>>& min_marginals);
-            void min_marginal_averaging_step_forward_tmp(const size_t var, std::vector<std::array<double,2>>& min_marginals);
             void min_marginal_averaging_step_backward(const size_t var, std::vector<std::array<double,2>>& min_marginals); 
     };
 
@@ -30,35 +30,9 @@ namespace LPMP {
     // implementation //
     ////////////////////
     
-    template<typename BDD_OPT_BASE>
-    void bdd_mma_base<BDD_OPT_BASE>::min_marginal_averaging_step_forward(const size_t var, std::vector<std::array<double,2>>& min_marginals)
-    {
-        assert(this->nr_bdds(var) > 0);
-        //std::cout << "variable " << var << " of " << this->nr_variables() << std::endl;
-        // collect min marginals
-        if(this->nr_bdds(var) == 0)
-            return;
-
-        std::array<double,2> min_marginals_tmp[this->nr_bdds(var)];
-
-        min_marginals.clear();
-        for(size_t bdd_index=0; bdd_index<this->nr_bdds(var); ++bdd_index) {
-            this->forward_step(var,bdd_index);
-            min_marginals_tmp[bdd_index] = this->min_marginal(var,bdd_index);
-            //min_marginals.push_back(min_marginal(var,bdd_index)); 
-        }
-
-        const std::array<double,2> average_marginal = this->average_marginals(min_marginals_tmp, min_marginals_tmp + this->nr_bdds(var));
-
-        // set marginals in each bdd so min marginals match each other
-        for(size_t bdd_index=0; bdd_index<this->nr_bdds(var); ++bdd_index) {
-            this->set_marginal(var,bdd_index,average_marginal,min_marginals_tmp[bdd_index]);
-        } 
-    }
-
     // use only outgoing arc pointers
     template<typename BDD_OPT_BASE>
-    void bdd_mma_base<BDD_OPT_BASE>::min_marginal_averaging_step_forward_tmp(const size_t var, std::vector<std::array<double,2>>& min_marginals)
+    void bdd_mma_base<BDD_OPT_BASE>::min_marginal_averaging_step_forward(const size_t var, std::vector<std::array<double,2>>& min_marginals)
     {
         if(this->nr_bdds(var) == 0)
             return;
@@ -89,7 +63,7 @@ namespace LPMP {
         std::vector<std::array<double,2>> min_marginals;
         for(size_t var=0; var<this->nr_variables(); ++var) {
             min_marginals.clear();
-            min_marginal_averaging_step_forward_tmp(var, min_marginals);
+            min_marginal_averaging_step_forward(var, min_marginals);
             continue;
 
             // collect min marginals

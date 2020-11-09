@@ -15,20 +15,21 @@ namespace LPMP {
     permutation Cuthill_McKee(const two_dim_variable_array<T>& adjacency, const size_t nr_vars)
     {
         MEASURE_FUNCTION_EXECUTION_TIME;
-        std::queue<std::size_t> Q;
+        std::queue<size_t> Q;
         permutation result;
         result.reserve(nr_vars);
-        std::vector<std::size_t> remaining_degree;
+        std::vector<size_t> remaining_degree;
         remaining_degree.reserve(adjacency.size());
         std::vector<char> visited(adjacency.size(), 0);
 
-        for(std::size_t i=0; i<adjacency.size(); ++i) {
+        for(size_t i=0; i<adjacency.size(); ++i) {
             remaining_degree.push_back(adjacency[i].size());
         }
 
         const auto pseudo_peripheral_nodes = find_pseudo_peripheral_nodes(adjacency);
+        std::vector<size_t> a;
 
-        for (const std::size_t i : pseudo_peripheral_nodes)
+        for(const size_t i : pseudo_peripheral_nodes)
         {
             if (i < nr_vars)
                 result.push_back(i);
@@ -37,12 +38,12 @@ namespace LPMP {
 
             while (!Q.empty())
             {
-                const std::size_t i = Q.front();
+                const size_t i = Q.front();
                 Q.pop();
                 assert(visited[i] == 1);
                 visited[i] = 2;
-                std::vector<std::size_t> a;
-                for (const std::size_t x : adjacency[i])
+                a.clear();
+                for (const size_t x : adjacency[i])
                 {
                     if (visited[x] == 0 && x != i)
                     { // TODO: second check not needed!
@@ -56,8 +57,8 @@ namespace LPMP {
                         remaining_degree[x]--;
                     }
                 }
-                std::sort(a.begin(), a.end(), [&](const std::size_t x, const std::size_t y) { return remaining_degree[x] < remaining_degree[y]; });
-                for (const auto x : a)
+                std::sort(a.begin(), a.end(), [&](const size_t x, const size_t y) { return remaining_degree[x] < remaining_degree[y]; });
+                for(const size_t x : a)
                 {
                     Q.push(x);
                     if (x < nr_vars)

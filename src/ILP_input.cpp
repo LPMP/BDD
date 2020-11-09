@@ -245,27 +245,29 @@ namespace LPMP {
         MEASURE_FUNCTION_EXECUTION_TIME;
         assert(order.size() == this->nr_variables());
         std::vector<double> new_objective(this->nr_variables());
-        for(std::size_t i=0; i<this->nr_variables(); ++i)
+        std::vector<std::size_t> inverse_order(this->nr_variables());
+        std::vector<std::string> new_var_index_to_name(this->nr_variables());
+
+#pragma omp parallel for schedule(guided)
+        for(size_t i=0; i<this->nr_variables(); ++i)
+        {
             if(order[i] < this->objective_.size())
                 new_objective[i] = this->objective_[order[i]];
             else
                 new_objective[i] = 0.0;
-        std::swap(this->objective_, new_objective);
 
-        std::vector<std::size_t> inverse_order(this->nr_variables());
-        for(std::size_t i=0; i<order.size(); ++i)
+            if(order[i] < this->var_index_to_name_.size())
+                new_var_index_to_name[i] = std::move(this->var_index_to_name_[order[i]]);
+
             inverse_order[order[i]] = i;
-
-        for(auto it=this->var_name_to_index_.begin(); it!=this->var_name_to_index_.end(); ++it)
-            it.value() = inverse_order[it.value()];
-
-        std::vector<std::string> new_var_index_to_name(this->nr_variables());
-        for(std::size_t i=0; i<this->var_index_to_name_.size(); ++i) {
-            new_var_index_to_name[i] = std::move(this->var_index_to_name_[order[i]]);
         }
+        std::swap(this->objective_, new_objective);
         std::swap(new_var_index_to_name, this->var_index_to_name_);
 
-        for(auto& l : this->linear_constraints_) {
+#pragma omp parallel for schedule(guided)
+        for(size_t lc_index=0; lc_index<this->linear_constraints_.size(); ++lc_index)
+        {
+            auto& l = this->linear_constraints_[lc_index];
             for(auto& x : l.variables) {
                 x.var = inverse_order[x.var];
             }

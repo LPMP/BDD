@@ -14,6 +14,11 @@ target_include_directories(LPMP-BDD INTERFACE external/tsl-robin-map/include)
 target_include_directories(LPMP-BDD INTERFACE external/PEGTL/include)
 target_include_directories(LPMP-BDD INTERFACE external/CLI11/include)
 
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(LPMP-BDD INTERFACE OpenMP::OpenMP_CXX)
+endif()
+
 add_subdirectory(external/LBDD)
 
 add_subdirectory(src)

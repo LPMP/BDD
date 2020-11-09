@@ -16,14 +16,14 @@ namespace LPMP {
         public:
 
         struct bdd_node {
-            constexpr static std::size_t terminal_0 = std::numeric_limits<std::size_t>::max()-1;
-            constexpr static std::size_t terminal_1 = std::numeric_limits<std::size_t>::max();
+            constexpr static size_t terminal_0 = std::numeric_limits<size_t>::max()-1;
+            constexpr static size_t terminal_1 = std::numeric_limits<size_t>::max();
             bool low_is_terminal() const { return low == terminal_0 || low == terminal_1; }
             bool high_is_terminal() const { return high == terminal_0 || high == terminal_1; }
 
-            std::size_t low;
-            std::size_t high;
-            std::size_t variable;
+            size_t low;
+            size_t high;
+            size_t variable;
         };
 
         bdd_storage(bdd_preprocessor& bdd_pre);
@@ -37,16 +37,16 @@ namespace LPMP {
         template <typename STREAM>
         void export_dot(STREAM &s) const;
 
-        std::size_t nr_bdds() const { return bdd_delimiters().size()-1; }
-        std::size_t nr_variables() const { return nr_variables_; }
-        std::size_t nr_bdd_nodes(const std::size_t bdd_nr) const { assert(bdd_nr < nr_bdds()); return bdd_delimiters_[bdd_nr+1] - bdd_delimiters_[bdd_nr]; }
+        size_t nr_bdds() const { return bdd_delimiters().size()-1; }
+        size_t nr_variables() const { return nr_variables_; }
+        size_t nr_bdd_nodes(const size_t bdd_nr) const { assert(bdd_nr < nr_bdds()); return bdd_delimiters_[bdd_nr+1] - bdd_delimiters_[bdd_nr]; }
 
         const std::vector<bdd_node>& bdd_nodes() const { return bdd_nodes_; }
-        const std::vector<std::size_t>& bdd_delimiters() const { return bdd_delimiters_; }
+        const std::vector<size_t>& bdd_delimiters() const { return bdd_delimiters_; }
 
         // TODO: rename to ..._variable
-        std::size_t first_bdd_node(const std::size_t bdd_nr) const;
-        std::size_t last_bdd_node(const std::size_t bdd_nr) const;
+        size_t first_bdd_node(const size_t bdd_nr) const;
+        size_t last_bdd_node(const size_t bdd_nr) const;
 
         // return all edges with endpoints being variables that are consecutive in some BDD
         std::vector<std::array<size_t,2>> dependency_graph() const;
@@ -66,8 +66,8 @@ namespace LPMP {
         void check_bdd_node(const bdd_node bdd) const;
 
         std::vector<bdd_node> bdd_nodes_;
-        std::vector<std::size_t> bdd_delimiters_ = {0};
-        std::size_t nr_variables_ = 0;
+        std::vector<size_t> bdd_delimiters_ = {0};
+        size_t nr_variables_ = 0;
 
     public:
         // for BDD decomposition
@@ -152,7 +152,7 @@ return interval_1 == o.interval_1 && bdd_index_1 == o.bdd_index_1 && interval_2 
             //std::unordered_map<BDD_NODE_TYPE, size_t> node_to_index;
             tsl::robin_map<BDD_NODE_TYPE, size_t> node_to_index;
 
-            auto get_node_index = [&](BDD_NODE_TYPE node) -> std::size_t {
+            auto get_node_index = [&](BDD_NODE_TYPE node) -> size_t {
                 if(node.is_botsink()) {
                     return bdd_node::terminal_0;
                 } else if(node.is_topsink()) {
@@ -164,20 +164,21 @@ return interval_1 == o.interval_1 && bdd_index_1 == o.bdd_index_1 && interval_2 
             };
 
             // node indices of chain pointing to terminal_1
-            constexpr static std::size_t pointer_to_terminal_1_not_set = std::numeric_limits<std::size_t>::max()-2;
-            std::vector<std::size_t> var_to_bdd_node_terminal_1(std::distance(bdd_vars_begin, bdd_vars_end), pointer_to_terminal_1_not_set);
+            constexpr static size_t pointer_to_terminal_1_not_set = std::numeric_limits<size_t>::max()-2;
+            std::vector<size_t> var_to_bdd_node_terminal_1(std::distance(bdd_vars_begin, bdd_vars_end), pointer_to_terminal_1_not_set);
             var_to_bdd_node_terminal_1.back() = bdd_node::terminal_1;
 
-            auto add_intermediate_nodes = [&](BDD_NODE_TYPE start, BDD_NODE_TYPE end) -> std::size_t {
+            auto add_intermediate_nodes = [&](BDD_NODE_TYPE start, BDD_NODE_TYPE end) -> size_t {
 
-                const std::size_t start_var = get_var(start);
+                const size_t start_var = get_var(start);
 
                 if(!end.is_terminal()) {
                     const size_t end_var = get_var(end);
                     size_t last_index = get_node_index(end);
-                    for(std::size_t i = end_var-1; i != start_var; --i) {
+                    for(size_t i=end_var-1; i!=start_var; --i)
+                    {
                         assert(i>0);
-                        const std::size_t v_intermed = *(bdd_vars_begin + i);
+                        const size_t v_intermed = *(bdd_vars_begin + i);
                         bdd_nodes_.push_back({last_index, last_index, v_intermed});
                         last_index = bdd_nodes_.size()-1;
                     }
@@ -189,7 +190,7 @@ return interval_1 == o.interval_1 && bdd_index_1 == o.bdd_index_1 && interval_2 
                         for(std::ptrdiff_t i = std::ptrdiff_t(std::distance(bdd_vars_begin, bdd_vars_end))-2; i >= std::ptrdiff_t(start_var); --i) {
                             assert(i >= 0 && i < var_to_bdd_node_terminal_1.size());
                             if(var_to_bdd_node_terminal_1[i] == pointer_to_terminal_1_not_set) {
-                                const std::size_t v_intermed = *(bdd_vars_begin + i+1);
+                                const size_t v_intermed = *(bdd_vars_begin + i+1);
                                 bdd_nodes_.push_back({var_to_bdd_node_terminal_1[i+1], var_to_bdd_node_terminal_1[i+1], v_intermed}); 
                                 check_node_valid(bdd_nodes_.back());
                                 var_to_bdd_node_terminal_1[i] = bdd_nodes_.size()-1;
@@ -233,7 +234,7 @@ return interval_1 == o.interval_1 && bdd_index_1 == o.bdd_index_1 && interval_2 
         {
             s << "digraph bdd_min_marginal_averaging {\n";
 
-            auto get_node_string = [&](const std::size_t i) -> std::string {
+            auto get_node_string = [&](const size_t i) -> std::string {
                 if(i == bdd_node::terminal_0)
                     return "false";
                 if(i == bdd_node::terminal_1)
@@ -241,7 +242,7 @@ return interval_1 == o.interval_1 && bdd_index_1 == o.bdd_index_1 && interval_2 
                 return std::to_string(i);
             };
 
-            for(std::size_t i=0; i<bdd_nodes_.size(); ++i) {
+            for(size_t i=0; i<bdd_nodes_.size(); ++i) {
                 s << i << " -> " << get_node_string(bdd_nodes_[i].low) << " [label=\"0\"];\n";
                 s << i << " -> " << get_node_string(bdd_nodes_[i].high) << " [label=\"1\"];\n";
             }

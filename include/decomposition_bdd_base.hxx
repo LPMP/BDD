@@ -101,6 +101,7 @@ namespace LPMP {
         std::vector<std::vector<typename bdd_sequential_base::bdd_endpoints_>> bdd_endpoints(nr_intervals);
 
         bdd_endpoints.resize(nr_intervals);
+#pragma omp parallel for
         for(size_t i=0; i<nr_intervals; ++i)
         {
             bdd_bases[i].base.init(bdd_storages[i]); 
@@ -138,6 +139,7 @@ namespace LPMP {
         costs.clear();
         costs.resize(bdd_storage_.nr_variables(), 0.0);
 
+#pragma omp parallel for
         for(size_t i=0; i<nr_intervals; ++i)
         {
             bdd_bases[i].init_queue_cache();
@@ -499,7 +501,7 @@ namespace LPMP {
                     }
                 }
             }
-            bdd_bases[interval_nr].base.min_marginal_averaging_step_forward_tmp(i, min_marginals);
+            bdd_bases[interval_nr].base.min_marginal_averaging_step_forward(i, min_marginals);
         }
 
         // read out queue cache
