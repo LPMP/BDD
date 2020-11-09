@@ -8,8 +8,9 @@
 namespace LPMP {
 
     template<typename ADJACENCY_GRAPH>
-    permutation minimum_degree_ordering(const ADJACENCY_GRAPH& adj)
+    permutation minimum_degree_ordering(const ADJACENCY_GRAPH& adj, const size_t nr_vars)
     {
+        MEASURE_FUNCTION_EXECUTION_TIME;
         Eigen::AMDOrdering<int> ordering;
         Eigen::PermutationMatrix<Eigen::Dynamic, Eigen::Dynamic, int> perm(adj.size());
         Eigen::SparseMatrix<double> A(adj.size(), adj.size()); 
@@ -25,8 +26,10 @@ namespace LPMP {
         ordering(A, perm);
         permutation o;
         for(std::size_t i=0; i<perm.indices().size(); ++i) {
-            o.push_back(perm.indices()[i]);
+            if (perm.indices()[i] < nr_vars)
+                o.push_back(perm.indices()[i]);
         }
+        assert(is_permutation(o.begin(), o.end()));
         return o; 
     }
 

@@ -293,8 +293,8 @@ namespace LPMP {
 
     inline permutation ILP_input::reorder_minimum_degree_ordering()
     {
-        const auto adj = variable_adjacency_matrix();
-        const auto order = minimum_degree_ordering(adj);
+        const auto adj = bipartite_variable_bdd_adjacency_matrix();
+        const auto order = minimum_degree_ordering(adj, this->nr_variables());
         reorder(order);
         return order;
     }
