@@ -27,8 +27,11 @@ target_link_libraries(bdd_mma_anisotropic LPMP-BDD LBDD)
 add_library(decomposition_bdd_mma decomposition_bdd_mma.cpp)
 target_link_libraries(decomposition_bdd_mma LPMP-BDD LBDD)
 
+add_library(bdd_mma_vec bdd_mma_vec.cpp)
+target_link_libraries(bdd_mma_vec LPMP-BDD LBDD) 
+
 add_library(bdd_solver bdd_solver.cpp)
-target_link_libraries(bdd_solver bdd_mma decomposition_bdd_mma bdd_mma_srmp bdd_mma_anisotropic bdd_preprocessor ILP_parser bdd_storage ILP_input LPMP-BDD LBDD pthread)
+target_link_libraries(bdd_solver bdd_mma decomposition_bdd_mma bdd_mma_srmp bdd_mma_anisotropic bdd_mma_vec bdd_preprocessor ILP_parser bdd_storage ILP_input LPMP-BDD LBDD pthread)
 
 target_link_libraries(LPMP-BDD INTERFACE bdd_solver)
 

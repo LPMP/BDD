@@ -501,7 +501,7 @@ namespace LPMP {
                     }
                 }
             }
-            bdd_bases[interval_nr].base.min_marginal_averaging_step_forward(i, min_marginals);
+            bdd_bases[interval_nr].base.min_marginal_averaging_step_forward(i);
         }
 
         // read out queue cache
@@ -610,7 +610,7 @@ namespace LPMP {
                     }
                 }
             }
-            bdd_bases[interval_nr].base.min_marginal_averaging_step_backward(i, min_marginals);
+            bdd_bases[interval_nr].base.min_marginal_averaging_step_backward(i);
         }
 
         // read out queue cache

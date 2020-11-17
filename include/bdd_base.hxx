@@ -6,6 +6,7 @@
 #include <vector>
 #include <tsl/robin_map.h>
 #include <iostream> // TODO: delete
+#include "time_measure_util.h"
 //#include <unordered_map> // TODO: use tsl::robin-map
 //#include <unordered_set> // TODO: use tsl::robin-map
 
@@ -43,13 +44,12 @@ namespace LPMP {
             size_t nr_bdds() const { return nr_bdds_; }
             size_t nr_bdds(const size_t var) const { assert(var<nr_variables()); return bdd_variables_.size(var); }
 
-
             template <typename ITERATOR>
                 bool check_feasibility(ITERATOR var_begin, ITERATOR var_end) const;
 
             size_t nr_feasible_outgoing_arcs(const size_t var, const size_t bdd_index) const;
 
-            // TODO: possibly put into bdd_opt_base
+            // TODO: possibly put into bdd_opt_base //
             void backward_step(const size_t var, const size_t bdd_index);
             void backward_step(const BDD_VARIABLE& bdd_var);
             void backward_step(const size_t var);
@@ -60,6 +60,7 @@ namespace LPMP {
 
             void backward_run(); // also used to initialize
             void forward_run();
+            ////////////////////////////////////////////
 
             BDD_VARIABLE &get_bdd_variable(const size_t var, const size_t bdd_index);
             const BDD_VARIABLE &get_bdd_variable(const size_t var, const size_t bdd_index) const;
@@ -69,6 +70,10 @@ namespace LPMP {
             bool first_variable_of_bdd(const size_t var, const size_t bdd_index) const;
             bool last_variable_of_bdd(const size_t var, const size_t bdd_index) const;
 
+            // TODO: use downstream
+            // void nr_bdds(const size_t var) const { return nr_bdds_per_variable_[var]; }
+            std::array<BDD_BRANCH_NODE*,2> bdd_range(const size_t var) const;
+            std::array<BDD_BRANCH_NODE*,2> bdd_range(const size_t var, const size_t bdd_index) const;
         protected:
             size_t bdd_branch_node_index(const BDD_BRANCH_NODE* bdd) const;
             size_t bdd_branch_node_index(const BDD_BRANCH_NODE& bdd) const { return bdd_branch_node_index(&bdd); }
@@ -81,6 +86,10 @@ namespace LPMP {
             std::vector<BDD_BRANCH_NODE> bdd_branch_nodes_;
             two_dim_variable_array<BDD_VARIABLE> bdd_variables_;
             size_t nr_bdds_ = 0;
+
+            std::vector<size_t> nr_bdds_per_variable_;
+            std::vector<size_t> bdds_of_variable_offset_;
+            two_dim_variable_array<size_t> bdd_of_variable_bdd_index_offset_;
     };
 
     ////////////////////
@@ -543,8 +552,13 @@ namespace LPMP {
     template<typename BDD_VARIABLE, typename BDD_BRANCH_NODE>
     void bdd_base<BDD_VARIABLE, BDD_BRANCH_NODE>::backward_run()
     {
-        for(std::ptrdiff_t var=nr_variables()-1; var>=0; --var)
-            backward_step(var); 
+        MEASURE_FUNCTION_EXECUTION_TIME;
+        for(std::ptrdiff_t i=this->bdd_branch_nodes_.size()-1; i>=0; --i)
+        {
+            this->bdd_branch_nodes_[i].backward_step();
+        }
+        //for(std::ptrdiff_t var=nr_variables()-1; var>=0; --var)
+        //    backward_step(var); 
     }
 
     template<typename BDD_VARIABLE, typename BDD_BRANCH_NODE>

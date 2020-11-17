@@ -22,12 +22,10 @@ namespace LPMP {
     template<typename BDD_OPT_BASE>
         void bdd_mma_anisotropic_base<BDD_OPT_BASE>::min_marginal_averaging_forward()
         {
-            std::vector<std::array<double,2>> min_marginals;
             for(size_t var=0; var<this->nr_variables(); ++var) {
 
                 // collect min marginals
-                min_marginals.clear();
-                this->min_marginal_averaging_step_forward(var, min_marginals);
+                this->min_marginal_averaging_step_forward(var);
 
                 // check if some of the BDDs of the current variable are last and propagate min-marginals of preceeding variables to bdds that are used later on
                 for(size_t bdd_index=0; bdd_index<this->nr_bdds(var); ++bdd_index)
@@ -77,11 +75,9 @@ namespace LPMP {
     template<typename BDD_OPT_BASE>
         void bdd_mma_anisotropic_base<BDD_OPT_BASE>::min_marginal_averaging_backward()
         {
-            std::vector<std::array<double,2>> min_marginals;
 
             for(std::ptrdiff_t var=this->nr_variables()-1; var>=0; --var) {
-                min_marginals.clear();
-                this->min_marginal_averaging_step_backward(var, min_marginals);
+                this->min_marginal_averaging_step_backward(var);
                 for(size_t bdd_index=0; bdd_index<this->nr_bdds(var); ++bdd_index)
                 {
                     const auto& bdd_var = this->bdd_variables_(var, bdd_index);

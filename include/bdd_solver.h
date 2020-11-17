@@ -8,6 +8,7 @@
 #include "bdd_mma_srmp.h"
 #include "decomposition_bdd_mma.h"
 #include "bdd_mma_anisotropic.h"
+#include "bdd_mma_vec.h"
 #include <variant> 
 #include <optional>
 #include <CLI/CLI.hpp>
@@ -38,7 +39,7 @@ namespace LPMP {
             void construct_solver(bdd_storage& bs);
 
 
-            using solver_type = std::variant<bdd_mma, bdd_mma_srmp, decomposition_bdd_mma, bdd_mma_anisotropic>;
+            using solver_type = std::variant<bdd_mma, bdd_mma_srmp, decomposition_bdd_mma, bdd_mma_anisotropic, bdd_mma_vec>;
             std::optional<solver_type> solver;
             size_t max_iter = 1000;
     };
