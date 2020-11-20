@@ -163,11 +163,11 @@ namespace LPMP {
         for(long int var=this->nr_variables()-1; var>=0; --var) {
 
             // collect min marginals and determine maximum first variable index
-            size_t max_first_var_index = std::numeric_limits<size_t>::max();
+            size_t max_first_var_index = std::numeric_limits<size_t>::min();
             min_marginals.clear();
             for(size_t bdd_index=0; bdd_index<this->nr_bdds(var); ++bdd_index) {
                 auto & bdd_var = this->bdd_variables_(var,bdd_index);
-                if (bdd_var.first_var_index < max_first_var_index)
+                if (bdd_var.first_var_index > max_first_var_index)
                     max_first_var_index = bdd_var.first_var_index;
                 min_marginals.push_back(this->min_marginal(var,bdd_index)); 
             }
