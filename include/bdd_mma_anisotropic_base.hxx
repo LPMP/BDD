@@ -32,12 +32,12 @@ namespace LPMP {
                 {
                     auto& bdd_var = this->bdd_variables_(var, bdd_index);
                     if(bdd_var.is_last_bdd_variable()) {
-                        const size_t last_var_index = bdd_var.last_variable;
-                        assert(last_var_index == bdd_var.variable);
+                        const size_t last_var_index = bdd_var.last_var_index;
+                        assert(last_var_index == bdd_var.var_index);
                         auto* var = &bdd_var;
                         while(var != nullptr)
                         {
-                            const size_t cur_variable_index = var->variable;
+                            const size_t cur_variable_index = var->var_index;
                             assert(cur_variable_index <= last_var_index);
                             const std::array<double,2> min_marg = this->min_marginal(*var);
 
@@ -45,7 +45,7 @@ namespace LPMP {
                             for(size_t bdd_index=0; bdd_index<this->nr_bdds(cur_variable_index); ++bdd_index)
                             {
                                 const auto& bdd_var = this->bdd_variables_(cur_variable_index, bdd_index);
-                                if(bdd_var.last_variable > last_var_index)
+                                if(bdd_var.last_var_index > last_var_index)
                                     ++nr_bdds_to_push;
                             }
 
@@ -57,7 +57,7 @@ namespace LPMP {
                                 for(size_t bdd_index=0; bdd_index<this->nr_bdds(cur_variable_index); ++bdd_index)
                                 {
                                     const auto& bdd_var = this->bdd_variables_(cur_variable_index, bdd_index);
-                                    if(bdd_var.last_variable > last_var_index)
+                                    if(bdd_var.last_var_index > last_var_index)
                                     {
                                         this->update_cost(cur_variable_index, bdd_index, delta);
                                     }
@@ -82,18 +82,18 @@ namespace LPMP {
                 {
                     const auto& bdd_var = this->bdd_variables_(var, bdd_index);
                     if(bdd_var.is_first_bdd_variable()) {
-                        const size_t first_var_index = bdd_var.first_variable;
+                        const size_t first_var_index = bdd_var.first_var_index;
                         auto* var = bdd_var.prev;
                         while(var != nullptr)
                         {
-                            const size_t cur_variable_index = var->variable;
+                            const size_t cur_variable_index = var->var_index;
                             const std::array<double,2> min_marg = this->min_marginal(*var);
 
                             size_t nr_bdds_to_push = 0;
                             for(size_t bdd_index=0; bdd_index<this->nr_bdds(cur_variable_index); ++bdd_index)
                             {
                                 const auto& bdd_var = this->bdd_variables_(cur_variable_index, bdd_index);
-                                if(bdd_var.first_variable < first_var_index)
+                                if(bdd_var.first_var_index < first_var_index)
                                     ++nr_bdds_to_push;
                             }
 
@@ -105,7 +105,7 @@ namespace LPMP {
                                 for(size_t bdd_index=0; bdd_index<this->nr_bdds(cur_variable_index); ++bdd_index)
                                 {
                                     const auto& bdd_var = this->bdd_variables_(cur_variable_index, bdd_index);
-                                    if(bdd_var.first_variable < first_var_index)
+                                    if(bdd_var.first_var_index < first_var_index)
                                     {
                                         this->update_cost(cur_variable_index, bdd_index, delta);
                                     }

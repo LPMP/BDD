@@ -11,7 +11,7 @@
 //#include <unordered_set> // TODO: use tsl::robin-map
 
 
-#pragma omp declare reduction(vec_size_t_plus : std::vector<size_t> : \
+// #pragma omp declare reduction(vec_size_t_plus : std::vector<size_t> : \
         std::transform(omp_out.begin(), omp_out.end(), omp_in.begin(), omp_out.begin(), std::plus<size_t>())) \
         initializer(omp_priv = decltype(omp_orig)(omp_orig.size()))
 
@@ -147,10 +147,10 @@ namespace LPMP {
                 }
         };
 
-#pragma omp parallel
+// #pragma omp parallel
         {
             var_cover vc(bdd_storage_.nr_variables());
-#pragma omp for reduction(vec_size_t_plus:nr_bdds_per_variable)
+// #pragma omp for reduction(vec_size_t_plus:nr_bdds_per_variable)
             for(size_t bdd_index=0; bdd_index<bdd_storage_.bdd_delimiters().size()-1; ++bdd_index) {
                 for(size_t i=bdd_storage_.bdd_delimiters()[bdd_index]; i<bdd_storage_.bdd_delimiters()[bdd_index+1]; ++i) {
                     const size_t bdd_variable = bdd_storage_.bdd_nodes()[i].variable;
@@ -278,12 +278,12 @@ namespace LPMP {
         if constexpr(has_variable_indices<BDD_VARIABLE>::value)
         {
             std::cout << "Set variable indices\n";
-#pragma omp parallel for
+// #pragma omp parallel for
             for(size_t i=0; i<this->nr_variables(); ++i)
             {
                 for(size_t bdd_index=0; bdd_index<nr_bdds(i); ++bdd_index) {
                     {
-                        bdd_variables_(i, bdd_index).variable = i;
+                        bdd_variables_(i, bdd_index).var_index = i;
                     }
                 } 
             }
@@ -294,9 +294,9 @@ namespace LPMP {
                 {
                     auto& bdd_var = bdd_variables_(i, bdd_index);
                     if(bdd_var.is_first_bdd_variable())
-                        bdd_var.first_variable = i;
+                        bdd_var.first_var_index = i;
                     else
-                        bdd_var.first_variable = bdd_var.prev->first_variable;
+                        bdd_var.first_var_index = bdd_var.prev->first_var_index;
                 }
             }
 
@@ -306,9 +306,9 @@ namespace LPMP {
                 {
                     auto& bdd_var = bdd_variables_(i, bdd_index);
                     if(bdd_var.is_last_bdd_variable())
-                        bdd_var.last_variable = i;
+                        bdd_var.last_var_index = i;
                     else
-                        bdd_var.last_variable = bdd_var.next->last_variable;
+                        bdd_var.last_var_index = bdd_var.next->last_var_index;
                 }
             }
         }

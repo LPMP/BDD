@@ -5,14 +5,14 @@
 
 namespace LPMP {
 
-    class bdd_mma_srmp {
+    class bdd_mma_agg {
         public:
-            bdd_mma_srmp(bdd_storage& stor);
+            bdd_mma_agg(bdd_storage& stor);
             template<typename ITERATOR>
-            bdd_mma_srmp(bdd_storage& stor, ITERATOR cost_begin, ITERATOR cost_end);
-            bdd_mma_srmp(bdd_mma_srmp&&);
-            bdd_mma_srmp& operator=(bdd_mma_srmp&&);
-            ~bdd_mma_srmp();
+            bdd_mma_agg(bdd_storage& stor, ITERATOR cost_begin, ITERATOR cost_end);
+            bdd_mma_agg(bdd_mma_agg&&);
+            bdd_mma_agg& operator=(bdd_mma_agg&&);
+            ~bdd_mma_agg();
             void set_cost(const double c, const size_t var);
             double lower_bound();
             void solve(const size_t max_iter);
@@ -24,8 +24,8 @@ namespace LPMP {
     };
 
     template<typename ITERATOR>
-        bdd_mma_srmp::bdd_mma_srmp(bdd_storage& stor, ITERATOR cost_begin, ITERATOR cost_end)
-        : bdd_mma_srmp(stor)
+        bdd_mma_agg::bdd_mma_agg(bdd_storage& stor, ITERATOR cost_begin, ITERATOR cost_end)
+        : bdd_mma_agg(stor)
         {
             assert(std::distance(cost_begin, cost_end) <= stor.nr_variables());
             size_t var = 0;

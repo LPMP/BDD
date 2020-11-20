@@ -49,11 +49,12 @@ namespace LPMP {
         app.add_option("--max_iter", max_iter, "maximal number of iterations, default value = 1000")
             ->check(CLI::PositiveNumber);
 
-        enum class bdd_solver_impl { mma, mma_srmp, decomposition_mma, anisotropic_mma, mma_vec } bdd_solver_impl_;
+        enum class bdd_solver_impl { mma, mma_srmp, mma_agg, decomposition_mma, anisotropic_mma, mma_vec } bdd_solver_impl_;
         std::unordered_map<std::string, bdd_solver_impl> bdd_solver_impl_map{
             {"mma",bdd_solver_impl::mma},
             {"decomposition_mma",bdd_solver_impl::decomposition_mma},
             {"mma_srmp",bdd_solver_impl::mma_srmp},
+            {"mma_agg",bdd_solver_impl::mma_agg},
             {"anisotropic_mma",bdd_solver_impl::anisotropic_mma},
             {"mma_vec",bdd_solver_impl::mma_vec}
         };
@@ -112,6 +113,11 @@ namespace LPMP {
         {
             solver = std::move(bdd_mma_srmp(stor, ilp.objective().begin(), ilp.objective().end()));
             std::cout << "constructed srmp mma solver\n";
+        }
+        else if(bdd_solver_impl_ == bdd_solver_impl::mma_agg)
+        {
+            solver = std::move(bdd_mma_agg(stor, ilp.objective().begin(), ilp.objective().end()));
+            std::cout << "constructed aggressive mma solver\n";
         }
         else if(bdd_solver_impl_ == bdd_solver_impl::decomposition_mma)
         {
