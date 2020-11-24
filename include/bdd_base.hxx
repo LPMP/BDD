@@ -147,10 +147,10 @@ namespace LPMP {
                 }
         };
 
-#pragma omp parallel
+//#pragma omp parallel
         {
             var_cover vc(bdd_storage_.nr_variables());
-#pragma omp for reduction(vec_size_t_plus:nr_bdds_per_variable)
+//#pragma omp for reduction(vec_size_t_plus:nr_bdds_per_variable)
             for(size_t bdd_index=0; bdd_index<bdd_storage_.bdd_delimiters().size()-1; ++bdd_index) {
                 for(size_t i=bdd_storage_.bdd_delimiters()[bdd_index]; i<bdd_storage_.bdd_delimiters()[bdd_index+1]; ++i) {
                     const size_t bdd_variable = bdd_storage_.bdd_nodes()[i].variable;

@@ -1,5 +1,6 @@
 #include "bdd_mma_vec.h"
 #include "bdd_branch_node_vector.h"
+#include "bdd_branch_node_vec8f.h"
 #include "time_measure_util.h"
 
 namespace LPMP {
@@ -10,7 +11,8 @@ namespace LPMP {
                 : mma(bdd_storage_)
             {};
 
-            bdd_mma_base_vec<4> mma;
+            //bdd_mma_base_vec<1> mma;
+            bdd_mma_base_8f mma;
     };
 
     bdd_mma_vec::bdd_mma_vec(bdd_storage& stor)
