@@ -53,9 +53,9 @@ namespace LPMP {
     template<typename DERIVED>
     class bdd_variable_with_indices_base : public bdd_variable_mma_base<DERIVED> {
         public:
-            size_t variable = std::numeric_limits<size_t>::max();
-            size_t first_variable = std::numeric_limits<size_t>::max();
-            size_t last_variable = std::numeric_limits<size_t>::max();
+            size_t var_index = std::numeric_limits<size_t>::max();
+            size_t first_var_index = std::numeric_limits<size_t>::max();
+            size_t last_var_index = std::numeric_limits<size_t>::max();
     };
 
     class bdd_variable_with_indices : public bdd_variable_with_indices_base<bdd_variable_with_indices> {};
