@@ -13,3 +13,6 @@
 [submodule "external/tsl-robin-map"]
 	path = external/tsl-robin-map
 	url = https://github.com/Tessil/robin-map.git
+[submodule "external/vectorclass"]
+	path = external/vectorclass
+	url = https://github.com/vectorclass/version2.git
