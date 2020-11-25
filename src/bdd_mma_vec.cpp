@@ -11,8 +11,8 @@ namespace LPMP {
                 : mma(bdd_storage_)
             {};
 
-            //bdd_mma_base_vec<1> mma;
-            bdd_mma_base_8f mma;
+            bdd_mma_base_vec mma;
+            //bdd_mma_base_8f mma;
     };
 
     bdd_mma_vec::bdd_mma_vec(bdd_storage& stor)
