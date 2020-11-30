@@ -18,6 +18,17 @@ namespace LPMP {
         return argv; 
     }
 
+    void print_statistics(ILP_input& ilp, bdd_storage& stor)
+    {
+        std::cout << "#variables = " << ilp.nr_variables() << "\n";
+        std::cout << "#constraints = " << ilp.nr_constraints() << "\n";
+        std::cout << "#BDDs = " << stor.nr_bdds() << "\n";
+        const auto var_groups = stor.compute_variable_groups();
+        std::cout << "#var groups = " << var_groups.size() << "\n";
+        std::cout << "#average nr vars per group = " << stor.nr_variables() / double(var_groups.size()) << "\n";
+
+    }
+
     bdd_solver::bdd_solver(int argc, char** argv)
     {
         // setup command line arguemnts
@@ -59,9 +70,13 @@ namespace LPMP {
             {"mma_vec",bdd_solver_impl::mma_vec}
         };
 
-        app.add_option("-s, --solver", bdd_solver_impl_, "the name of solver for the relaxation")
-            ->required()
+        auto solver_group = app.add_option_group("solver", "solver either a BDD solver or output of statistics");
+        solver_group->add_option("-s, --solver", bdd_solver_impl_, "the name of solver for the relaxation")
             ->transform(CLI::CheckedTransformer(bdd_solver_impl_map, CLI::ignore_case));
+
+        bool statistics = false;
+        solver_group->add_flag("--statistics", statistics, "statistics of the problem");
+        solver_group->require_option(1); // either a solver or statistics
 
         decomposition_bdd_mma::options decomposition_mma_options;
         app.callback([&app, &bdd_solver_impl_, &decomposition_mma_options]() {
@@ -104,7 +119,13 @@ namespace LPMP {
         bdd_storage stor(bdd_pre);
 
         std::cout << std::setprecision(10);
-        if(bdd_solver_impl_ == bdd_solver_impl::mma)
+
+        if(statistics)
+        {
+            print_statistics(ilp, stor);
+            exit(0);
+        }
+        else if(bdd_solver_impl_ == bdd_solver_impl::mma)
         {
             solver = std::move(bdd_mma(stor, ilp.objective().begin(), ilp.objective().end()));
             std::cout << "constructed mma solver\n";
@@ -161,6 +182,7 @@ namespace LPMP {
     {
 
     }
+
 
     void bdd_solver::solve()
     {

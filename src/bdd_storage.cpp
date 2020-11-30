@@ -442,4 +442,54 @@ namespace LPMP {
         return {bdd_storages, duplicated_variables};
     }
 
+    two_dim_variable_array<size_t> bdd_storage::compute_variable_groups() const
+    {
+        const auto dep_graph_arcs = dependency_graph();
+        std::vector<size_t> nr_outgoing_arcs(nr_variables(), 0);
+        std::vector<size_t> nr_incoming_arcs(nr_variables(), 0);
+        for(const auto [i,j] : dep_graph_arcs)
+        {
+            assert(i < j);
+            ++nr_outgoing_arcs[i];
+            ++nr_incoming_arcs[j];
+        }
+        two_dim_variable_array<size_t> dep_graph_adj(nr_outgoing_arcs.begin(), nr_outgoing_arcs.end());
+        std::fill(nr_outgoing_arcs.begin(), nr_outgoing_arcs.end(), 0);
+        for(const auto [i,j] : dep_graph_arcs)
+            dep_graph_adj(i,nr_outgoing_arcs[i]++) = j;
+
+        two_dim_variable_array<size_t> variable_groups;
+        std::vector<size_t> current_nodes;
+
+        // first group consists of all variables with in-degree zero
+        for(size_t i=0; i<nr_incoming_arcs.size(); ++i)
+            if(nr_incoming_arcs[i] == 0)
+                current_nodes.push_back(i);
+        std::cout << "nr initial nodes in first variable group = " << current_nodes.size() << "\n";
+
+        std::vector<size_t> next_nodes;
+        while(current_nodes.size() > 0)
+        {
+            next_nodes.clear();
+            variable_groups.push_back(current_nodes.begin(), current_nodes.end());
+            // decrease in-degree of every node that has incoming arc from one of current nodes. If in-degree reaches zero, schedule nodes to be added to next variable group; 
+            for(const size_t i : current_nodes)
+            {
+                for(const size_t j : dep_graph_adj[i])
+                {
+                    assert(nr_incoming_arcs[j] > 0);
+                    --nr_incoming_arcs[j];
+                    if(nr_incoming_arcs[j] == 0)
+                        next_nodes.push_back(j); 
+                }
+            }
+            std::swap(current_nodes, next_nodes);
+        }
+
+        for(const size_t d : nr_incoming_arcs)
+            assert(d == 0);
+
+        return variable_groups;
+    } 
+
 }

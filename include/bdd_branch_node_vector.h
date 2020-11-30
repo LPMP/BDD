@@ -122,25 +122,21 @@ namespace LPMP {
     {
         if(offset_low == terminal_0_offset || offset_low == terminal_1_offset)
         {
-            //min_marg0 = m + low_cost;
             reduced_min_marginals[bdd_index][0] = std::min(m + low_cost, reduced_min_marginals[bdd_index][0]);
         }
         else
         {
             const auto low_branch_node = address(offset_low);
-            //min_marg0 = m + low_cost + low_branch_node->m[o];
             reduced_min_marginals[bdd_index][0] = std::min(m + low_cost + low_branch_node->m, reduced_min_marginals[bdd_index][0]);
         }
 
         if(offset_high == terminal_0_offset || offset_high == terminal_1_offset)
         {
-            //min_marg1 = m + high_cost;
             reduced_min_marginals[bdd_index][1] = std::min(m + high_cost, reduced_min_marginals[bdd_index][1]);
         }
         else
         {
             const auto high_branch_node = address(offset_high);
-            //min_marg1 = m + high_cost + high_branch_node->m[o];
             reduced_min_marginals[bdd_index][1] = std::min(m + high_cost + high_branch_node->m, reduced_min_marginals[bdd_index][1]);
         }
     }
@@ -158,8 +154,8 @@ namespace LPMP {
     // bdds are stored in variable groups. Each variable group is a set of variables that can be processed in parallel.
     class bdd_mma_base_vec {
         public:
+            bdd_mma_base_vec() {}
             bdd_mma_base_vec(const bdd_storage& bdd_storage_) { init(bdd_storage_); }
-            two_dim_variable_array<size_t> compute_variable_groups(const bdd_storage& bdd_storage_) const;
             void init(const bdd_storage& bdd_storage_);
             size_t nr_variables() const;
             size_t nr_variable_groups() const;
@@ -209,59 +205,14 @@ namespace LPMP {
         return bdd_branch_node_offsets_[var+1] - bdd_branch_node_offsets_[var];
     } 
 
-    two_dim_variable_array<size_t> bdd_mma_base_vec::compute_variable_groups(const bdd_storage& bdd_storage_) const
-    {
-        const auto dep_graph_arcs = bdd_storage_.dependency_graph();
-        std::vector<size_t> nr_outgoing_arcs(bdd_storage_.nr_variables(), 0);
-        std::vector<size_t> nr_incoming_arcs(bdd_storage_.nr_variables(), 0);
-        for(const auto [i,j] : dep_graph_arcs)
-        {
-            assert(i < j);
-            ++nr_outgoing_arcs[i];
-            ++nr_incoming_arcs[j];
-        }
-        two_dim_variable_array<size_t> dep_graph_adj(nr_outgoing_arcs.begin(), nr_outgoing_arcs.end());
-        std::fill(nr_outgoing_arcs.begin(), nr_outgoing_arcs.end(), 0);
-        for(const auto [i,j] : dep_graph_arcs)
-            dep_graph_adj(i,nr_outgoing_arcs[i]++) = j;
-
-        two_dim_variable_array<size_t> variable_groups;
-        std::vector<size_t> current_nodes;
-
-        // first group consists of all variables with in-degree zero
-        for(size_t i=0; i<nr_incoming_arcs.size(); ++i)
-            if(nr_incoming_arcs[i] == 0)
-                current_nodes.push_back(i);
-        std::cout << "nr initial nodes in first variable group = " << current_nodes.size() << "\n";
-
-        std::vector<size_t> next_nodes;
-        while(current_nodes.size() > 0)
-        {
-            next_nodes.clear();
-            variable_groups.push_back(current_nodes.begin(), current_nodes.end());
-            // decrease in-degree of every node that has incoming arc from one of current nodes. If in-degree reaches zero, schedule nodes to be added to next variable group; 
-            for(const size_t i : current_nodes)
-            {
-                for(const size_t j : dep_graph_adj[i])
-                {
-                    assert(nr_incoming_arcs[j] > 0);
-                    --nr_incoming_arcs[j];
-                    if(nr_incoming_arcs[j] == 0)
-                        next_nodes.push_back(j); 
-                }
-            }
-            std::swap(current_nodes, next_nodes);
-        }
-
-        for(const size_t d : nr_incoming_arcs)
-            assert(d == 0);
-
-        return variable_groups;
-    }
-
-
     void bdd_mma_base_vec::init(const bdd_storage& bdd_storage_)
     {
+        bdd_branch_nodes_.clear();
+        bdd_branch_node_offsets_.clear();
+        nr_bdds_.clear();
+        first_bdd_node_indices_.clear();
+        lower_bound_ = -std::numeric_limits<double>::infinity();
+
         /*
            const auto variable_groups = compute_variable_groups(bdd_storage_);
            std::cout << "# variable groups: = " << variable_groups.size() << "\n";

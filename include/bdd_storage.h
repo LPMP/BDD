@@ -101,6 +101,8 @@ return interval_1 == o.interval_1 && bdd_index_1 == o.bdd_index_1 && interval_2 
         };
 
         std::tuple<std::vector<bdd_storage>, tsl::robin_set<duplicate_variable, duplicate_variable_hash>> split_bdd_nodes(const size_t nr_intervals);
+
+    two_dim_variable_array<size_t> compute_variable_groups() const;
     };
 
 
