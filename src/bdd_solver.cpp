@@ -82,7 +82,7 @@ namespace LPMP {
         std::unordered_map<std::string, int> fixing_var_value_map{{"marg",0},{"red",1},{"one",2},{"zero",3}};
         if (primal_rounding)
         {
-            // TODO fix adoption of options (default value is not changed)
+            // TODO fix adoption of options (current code fails to change default values)
             app.add_option("--fixing_order", fixing_var_order_, "variable order for primal heuristic, default value = marg_up")
                 ->transform(CLI::CheckedTransformer(fixing_var_order_map, CLI::ignore_case));
             app.add_option("--fixing_value", fixing_var_value_, "preferred variable value for primal heuristic, default value = marg")
@@ -182,8 +182,6 @@ namespace LPMP {
 
         if (primal_rounding)
         {
-            std::cout << "Fixing variable order: " << fixing_var_order_ << std::endl;
-            std::cout << "Fixing variable value: " << fixing_var_value_ << std::endl;
             primal_heuristic = std::move(bdd_fix(stor, fixing_var_order_, fixing_var_value_));
             std::cout << "constructed primal heuristic\n";
         }

@@ -32,13 +32,7 @@ namespace LPMP {
             std::array<double, 2> min_marginal(const BDD_VARIABLE& bdd_var) const;
             template <typename ITERATOR>
                 static std::array<double, 2> average_marginals(ITERATOR marginals_begin, ITERATOR marginals_end, const std::size_t nr_marginals_to_distribute = std::numeric_limits<std::size_t>::max());
-            template <typename ITERATOR>
-                std::pair<std::array<double, 2>, bool> average_marginals_forward_SRMP(ITERATOR marginals_begin, ITERATOR marginals_end, const std::size_t var) const;
-            template <typename ITERATOR>
-                std::pair<std::array<double, 2>, bool> average_marginals_backward_SRMP(ITERATOR marginals_begin, ITERATOR marginals_end, const std::size_t var) const;
             void set_marginal(const std::size_t var, const std::size_t bdd_index, const std::array<double, 2> marginals, const std::array<double, 2> min_marginals);
-            void set_marginal_forward_SRMP(const std::size_t var, const std::size_t bdd_index, const std::array<double, 2> marginals, const std::array<double, 2> min_marginals, const bool default_avg);
-            void set_marginal_backward_SRMP(const std::size_t var, const std::size_t bdd_index, const std::array<double, 2> marginals, const std::array<double, 2> min_marginals, const bool default_avg);
 
             std::vector<double> costs_;
             double lower_bound_ = -std::numeric_limits<double>::infinity();
@@ -126,51 +120,6 @@ namespace LPMP {
         assert(std::isfinite(marginal_diff));
         assert(std::isfinite(marginal_diff_target));
         static_cast<DERIVED*>(this)->update_cost(var, bdd_index, -marginal_diff + marginal_diff_target);
-    }
-
-    template<typename BDD_VARIABLE, typename BDD_BRANCH_NODE, typename DERIVED>
-    void bdd_opt_base<BDD_VARIABLE, BDD_BRANCH_NODE, DERIVED>::set_marginal_forward_SRMP(const std::size_t var, const std::size_t bdd_index, const std::array<double,2> marginals, const std::array<double,2> min_marginals, const bool default_avg)
-    {
-        const double marginal_diff = min_marginals[1] - min_marginals[0];
-        const double marginal_diff_target = marginals[1] - marginals[0];
-        assert(std::isfinite(marginal_diff));
-        assert(std::isfinite(marginal_diff_target));
-        if (default_avg)
-        {
-            static_cast<DERIVED*>(this)->update_cost(var, bdd_index, -marginal_diff + marginal_diff_target);
-            //bdd_var.cost += -marginal_diff + marginal_diff_target;
-        }
-        else if(this->last_variable_of_bdd(var, bdd_index)) {
-            static_cast<DERIVED*>(this)->update_cost(var, bdd_index, -marginal_diff);
-            //bdd_var.cost -= marginal_diff;
-        } else {
-            assert(std::isfinite(marginal_diff_target));
-            static_cast<DERIVED*>(this)->update_cost(var, bdd_index, -marginal_diff + marginal_diff_target);
-            //bdd_var.cost += -marginal_diff + marginal_diff_target; 
-        } 
-    }
-
-    template<typename BDD_VARIABLE, typename BDD_BRANCH_NODE, typename DERIVED>
-    void bdd_opt_base<BDD_VARIABLE, BDD_BRANCH_NODE, DERIVED>::set_marginal_backward_SRMP(const std::size_t var, const std::size_t bdd_index, const std::array<double,2> marginals, const std::array<double,2> min_marginals, const bool default_avg)
-    {
-        auto& bdd_var = this->bdd_variables_(var,bdd_index);
-        const double marginal_diff = min_marginals[1] - min_marginals[0];
-        const double marginal_diff_target = marginals[1] - marginals[0];
-        assert(std::isfinite(marginal_diff));
-        assert(std::isfinite(marginal_diff_target));
-        if (default_avg)
-        {
-            static_cast<DERIVED*>(this)->update_cost(var, bdd_index, -marginal_diff + marginal_diff_target);
-            //bdd_var.cost += -marginal_diff + marginal_diff_target;
-        }
-        else if(this->first_variable_of_bdd(var, bdd_index)) {
-            static_cast<DERIVED*>(this)->update_cost(var, bdd_index, -marginal_diff);
-            //bdd_var.cost -= marginal_diff;
-        } else {
-            assert(std::isfinite(marginal_diff_target));
-            static_cast<DERIVED*>(this)->update_cost(var, bdd_index, -marginal_diff + marginal_diff_target);
-            //bdd_var.cost += -marginal_diff + marginal_diff_target; 
-        }
     }
 
     template<typename BDD_VARIABLE, typename BDD_BRANCH_NODE, typename DERIVED>

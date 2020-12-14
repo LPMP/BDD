@@ -1,6 +1,6 @@
 #pragma once
 
-#include "bdd_opt_base.hxx"
+#include "bdd_mma_base.hxx"
 #include "time_measure_util.h"
 #include <vector>
 #include <array>
@@ -10,9 +10,9 @@ namespace LPMP {
 
     // base class for min marginal averaging with SRMP-like distribution of excess costs
     template<typename BDD_OPT_BASE>
-        class bdd_mma_srmp_base : public BDD_OPT_BASE {
+        class bdd_mma_srmp_base : public bdd_mma_base<BDD_OPT_BASE> {
         public:
-            using BDD_OPT_BASE::BDD_OPT_BASE;
+            using bdd_mma_base<BDD_OPT_BASE>::bdd_mma_base;
 
             void min_marginal_averaging_forward_SRMP();
             void min_marginal_averaging_backward_SRMP();
@@ -203,11 +203,14 @@ namespace LPMP {
         void bdd_mma_srmp_base<BDD_OPT_BASE>::solve(const size_t max_iter)
         {
             std::cout << "initial lower bound = " << this->lower_bound() << "\n";
-            for(size_t iter=0; iter<max_iter; ++iter)
+            for(size_t iter=0; iter<max_iter-1; ++iter)
             {
                 iteration();
                 std::cout << "iteration " << iter << ", lower bound = " << this->lower_bound() << "\n";
             }
+            bdd_mma_base<BDD_OPT_BASE>::iteration();
+            std::cout << "iteration " << max_iter-1 << ", lower bound = " << this->lower_bound() << "\n";
+            std::cout << "(last iteration with default averaging)" << std::endl;
             std::cout << "final lower bound = " << this->lower_bound() << "\n";
 
         }

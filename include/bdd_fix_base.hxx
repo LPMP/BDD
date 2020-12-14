@@ -500,11 +500,6 @@ namespace LPMP {
     bool bdd_fix_base::fix_variables()
     {
         std::vector<double> reduction_coeffs = search_space_reduction_coeffs();
-        // this->backward_run();
-        // // additional MMA iteration increases chance of finding a feasible solution
-        // min_marginal_averaging_iteration();
-        // std::vector<double> total_min_marginals = this->total_min_marginals();
-
         std::vector<size_t> variables;
         for (size_t i = 0; i < this->nr_variables(); i++)
             variables.push_back(i);
