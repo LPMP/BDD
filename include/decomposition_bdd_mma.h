@@ -26,6 +26,7 @@ namespace LPMP {
             void iteration();
             void solve(const size_t max_iter);
             double lower_bound();
+            std::vector<double> total_min_marginals();
 
         private:
             struct impl;

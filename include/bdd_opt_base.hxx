@@ -25,6 +25,7 @@ namespace LPMP {
             double lower_bound_backward(const std::size_t var, const std::size_t bdd_index);
             double lower_bound_forward(const std::size_t var, const std::size_t bdd_index);
             double compute_lower_bound();
+            std::vector<double> total_min_marginals();
 
         protected: 
             std::array<double, 2> min_marginal(const size_t var, const size_t bdd_index) const;
@@ -170,6 +171,25 @@ namespace LPMP {
             static_cast<DERIVED*>(this)->update_cost(var, bdd_index, -marginal_diff + marginal_diff_target);
             //bdd_var.cost += -marginal_diff + marginal_diff_target; 
         }
+    }
+
+    template<typename BDD_VARIABLE, typename BDD_BRANCH_NODE, typename DERIVED>
+    std::vector<double> bdd_opt_base<BDD_VARIABLE, BDD_BRANCH_NODE, DERIVED>::total_min_marginals()
+    {
+        this->backward_run();
+        std::vector<double> total_min_marginals;
+        for(std::size_t var=0; var<this->nr_variables(); ++var)
+        {
+            double total_min_marg = 0;
+            for(std::size_t bdd_index=0; bdd_index<this->nr_bdds(var); ++bdd_index)
+            {
+                std::array<double,2> min_marg = min_marginal(var,bdd_index);
+                total_min_marg += (min_marg[1] - min_marg[0]);
+                this->forward_step(var,bdd_index);
+            }
+            total_min_marginals.push_back(total_min_marg);
+        }
+        return total_min_marginals;
     }
 
     template<typename BDD_VARIABLE, typename BDD_BRANCH_NODE, typename DERIVED>

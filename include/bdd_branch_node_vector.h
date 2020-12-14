@@ -175,6 +175,7 @@ namespace LPMP {
             void iteration();
             void backward_run();
             void compute_lower_bound(); 
+            std::vector<double> total_min_marginals();
             void solve(const size_t max_iter); 
             double lower_bound() const { return lower_bound_; }
             void set_cost(const double c, const size_t var);
@@ -463,4 +464,11 @@ namespace LPMP {
         for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
             bdd_branch_nodes_[i].high_cost += c / float(nr_bdds(var));
     }
+
+    std::vector<double> bdd_mma_base_vec::total_min_marginals()
+    {
+        std::vector<double> total_min_marginals;
+        return total_min_marginals;
+        // TODO implement
+    } 
 }

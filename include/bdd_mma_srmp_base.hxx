@@ -84,23 +84,23 @@ namespace LPMP {
         {
             assert(this->nr_bdds(var) == std::distance(marginals_begin, marginals_end));
             std::array<double,2> average_marginal = {0.0, 0.0};
-            size_t nr_averaged_marginals = 0;
+            size_t divisor = 0;
             for(size_t bdd_index=0; bdd_index<this->nr_bdds(var); ++bdd_index) {
                     average_marginal[0] += (*(marginals_begin+bdd_index))[0];
                     average_marginal[1] += (*(marginals_begin+bdd_index))[1];
                 if(!this->last_variable_of_bdd(var, bdd_index))
-                    ++nr_averaged_marginals;
+                    ++divisor;
             }
             // if no BDD satisfies forward condition, resort to averaging over all BDDs
             bool default_avg = false;
-            if (nr_averaged_marginals == 0)
+            if (divisor == 0)
             {
-                nr_averaged_marginals = this->nr_bdds(var);
+                divisor = this->nr_bdds(var);
                 default_avg = true;
             }
 
-            average_marginal[0] /= double(nr_averaged_marginals);
-            average_marginal[1] /= double(nr_averaged_marginals);
+            average_marginal[0] /= double(divisor);
+            average_marginal[1] /= double(divisor);
 
             return std::make_pair(average_marginal, default_avg);
         }
@@ -111,23 +111,23 @@ namespace LPMP {
         {
             assert(this->nr_bdds(var) == std::distance(marginals_begin, marginals_end));
             std::array<double,2> average_marginal = {0.0, 0.0};
-            size_t nr_averaged_marginals = 0;
+            size_t divisor = 0;
             for(size_t bdd_index=0; bdd_index<this->nr_bdds(var); ++bdd_index) {
                     average_marginal[0] += (*(marginals_begin+bdd_index))[0];
                     average_marginal[1] += (*(marginals_begin+bdd_index))[1];
                 if(!this->first_variable_of_bdd(var, bdd_index))
-                    ++nr_averaged_marginals;
+                    ++divisor;
             }
             // if no BDD satisfies forward condition, resort to averaging over all BDDs
             bool default_avg = false;
-            if (nr_averaged_marginals == 0)
+            if (divisor == 0)
             {
-                nr_averaged_marginals = this->nr_bdds(var);
+                divisor = this->nr_bdds(var);
                 default_avg = true;
             }
 
-            average_marginal[0] /= double(nr_averaged_marginals);
-            average_marginal[1] /= double(nr_averaged_marginals);
+            average_marginal[0] /= double(divisor);
+            average_marginal[1] /= double(divisor);
 
             assert(std::isfinite(average_marginal[0]));
             assert(std::isfinite(average_marginal[1]));

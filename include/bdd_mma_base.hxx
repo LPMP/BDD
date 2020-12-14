@@ -56,7 +56,7 @@ namespace LPMP {
     template<typename BDD_OPT_BASE>
     void bdd_mma_base<BDD_OPT_BASE>::min_marginal_averaging_forward()
     {
-        MEASURE_FUNCTION_EXECUTION_TIME
+        // MEASURE_FUNCTION_EXECUTION_TIME
         for(size_t var=0; var<this->nr_variables(); ++var) {
             min_marginal_averaging_step_forward(var);
         }
@@ -97,7 +97,7 @@ namespace LPMP {
     template<typename BDD_OPT_BASE>
     void bdd_mma_base<BDD_OPT_BASE>::min_marginal_averaging_backward()
     {
-        MEASURE_FUNCTION_EXECUTION_TIME;
+        // MEASURE_FUNCTION_EXECUTION_TIME;
         double lb = 0.0;
 
         for(std::ptrdiff_t var=this->nr_variables()-1; var>=0; --var) {

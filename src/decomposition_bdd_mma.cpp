@@ -51,4 +51,9 @@ namespace LPMP {
     {
         return pimpl->lower_bound();
     }
+
+    std::vector<double> decomposition_bdd_mma::total_min_marginals()
+    {
+        return pimpl->total_min_marginals();
+    }
 }

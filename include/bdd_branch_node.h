@@ -791,11 +791,13 @@ bdd_branch_node_exp_sum_entry bdd_branch_node_opt_smoothed_base<DERIVED>::exp_su
     // Variable Fixing Branch Node
     /////////////////////////////////
 
-/*
-    class bdd_branch_node_fix : public bdd_branch_node_opt_smoothed_base<bdd_branch_node_fix> {
+
+    class bdd_branch_node_fix : public bdd_branch_node_incoming_pointers<bdd_branch_node_fix> {
         public:
             bdd_branch_node_fix* prev_low_incoming = nullptr;
             bdd_branch_node_fix* prev_high_incoming = nullptr;
+
+            size_t m = 0; // solution count
 
             bdd_variable_fix* bdd_var;
 
@@ -807,6 +809,14 @@ bdd_branch_node_exp_sum_entry bdd_branch_node_opt_smoothed_base<DERIVED>::exp_su
 
             double count_low();
             double count_high();
+
+            struct static_constructor {
+                static_constructor() {
+                    bdd_branch_node_fix::terminal_0()->m = 0.0;
+                    bdd_branch_node_fix::terminal_1()->m = 1.0;
+                }
+            };
+            static inline static_constructor static_constructor_; 
     };
 
     inline bool operator==(const bdd_branch_node_fix& x, const bdd_branch_node_fix& y)
@@ -823,83 +833,67 @@ bdd_branch_node_exp_sum_entry bdd_branch_node_opt_smoothed_base<DERIVED>::exp_su
         return equal;
     }
 
-    // template<typename DERIVED>
-    // class bdd_branch_node_fix_base : virtual public bdd_branch_node<DERIVED> {
-    //     public:
-    //         DERIVED* prev_low_incoming = nullptr;
-    //         DERIVED* prev_high_incoming = nullptr;
-
-    //         bdd_variable_fix* bdd_var;
-
-    //         // From C++20
-    //         friend bool operator==(const DERIVED& x, const DERIVED& y);
-
-    // };
-
-    // template<typename DERIVED>
-    // bool operator==(const DERIVED& x, const DERIVED& y)
-    // {
-    //     const bool equal = ((bdd_branch_node<DERIVED>) x == (bdd_branch_node<DERIVED>) y &&
-    //         x.prev_low_incoming == y.prev_low_incoming &&
-    //         x.prev_high_incoming == y.prev_high_incoming &&
-    //         x.bdd_var == y.bdd_var);
-    //     return equal;
-    // }
-
-    // class bdd_branch_node_fix : public bdd_branch_node_opt_base<bdd_branch_node_fix>, public bdd_branch_node_fix_base<bdd_branch_node_fix> {
-    // };
-
     inline void bdd_branch_node_fix::count_forward_step()
     {
-        if(this->is_first()) {
-            m = 1.0;
-            return;
-        }
+        // if(this->is_first()) {
+        //     m = 1.0;
+        //     return;
+        // }
 
-        m = 0.0;
+        // m = 0.0;
 
-        // iterate over all incoming low edges 
-        {
-            auto* cur = this->first_low_incoming;
-            while(cur != nullptr) {
-                m += cur->m;
-                cur = cur->next_low_incoming;
-            }
-        }
+        // // iterate over all incoming low edges 
+        // {
+        //     auto* cur = this->first_low_incoming;
+        //     while(cur != nullptr) {
+        //         m += cur->m;
+        //         cur = cur->next_low_incoming;
+        //     }
+        // }
 
-        // iterate over all incoming high edges 
-        {
-            auto* cur = this->first_high_incoming;
-            while(cur != nullptr) {
-                m += cur->m;
-                cur = cur->next_high_incoming;
-            }
-        }
+        // // iterate over all incoming high edges 
+        // {
+        //     auto* cur = this->first_high_incoming;
+        //     while(cur != nullptr) {
+        //         m += cur->m;
+        //         cur = cur->next_high_incoming;
+        //     }
+        // }
+
+        if (m == 0)
+            m = 1;
+        if (!this->is_terminal(this->low_outgoing))
+            low_outgoing->m += m;
+        if (!this->is_terminal(this->high_outgoing))
+            high_outgoing->m += m; 
     }
 
     inline void bdd_branch_node_fix::count_backward_step()
     {
-        // low edge
-        const double low_count = [&]() {
-            if(this->low_outgoing == bdd_branch_node_fix::terminal_0()) {
-                return 0.0;
-            } else if(this->low_outgoing == bdd_branch_node_fix::terminal_1()) {
-                return 1.0;
-            } else {
-                return this->low_outgoing->m;
-            }
-        }();
+        // // low edge
+        // const double low_count = [&]() {
+        //     if(this->low_outgoing == bdd_branch_node_fix::terminal_0()) {
+        //         return 0.0;
+        //     } else if(this->low_outgoing == bdd_branch_node_fix::terminal_1()) {
+        //         return 1.0;
+        //     } else {
+        //         return this->low_outgoing->m;
+        //     }
+        // }();
 
-        // high edge
-        const double high_count = [&]() {
-            if(this->high_outgoing == bdd_branch_node_fix::terminal_0()) {
-                return 0.0; 
-            } else if(this->high_outgoing == bdd_branch_node_fix::terminal_1()) {
-                return 1.0; 
-            } else {
-                return this->high_outgoing->m;
-            }
-        }();
+        // // high edge
+        // const double high_count = [&]() {
+        //     if(this->high_outgoing == bdd_branch_node_fix::terminal_0()) {
+        //         return 0.0; 
+        //     } else if(this->high_outgoing == bdd_branch_node_fix::terminal_1()) {
+        //         return 1.0; 
+        //     } else {
+        //         return this->high_outgoing->m;
+        //     }
+        // }();
+
+        size_t low_count = this->low_outgoing->m;
+        size_t high_count = this->high_outgoing->m;
 
         m = low_count + high_count;
     }
@@ -923,7 +917,8 @@ bdd_branch_node_exp_sum_entry bdd_branch_node_opt_smoothed_base<DERIVED>::exp_su
         else
             return m * this->high_outgoing->m;
     }
-*/
+
+    //////////////////////
 
     // bdd branch node with individual arc costs, for use in decomposition bdd base (since there are Lagrange multipliers for individual arcs)
     template<typename DERIVED>
