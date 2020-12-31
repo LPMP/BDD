@@ -126,6 +126,15 @@ namespace LPMP {
         }();
 
         std::cout << "ILP has " << ilp.nr_variables() << " variables and " << ilp.nr_constraints() << " constraints\n";
+        if (ilp.preprocess())
+            std::cout << "ILP has " << ilp.nr_variables() << " variables and " << ilp.nr_constraints() << " constraints after preprocessing\n";
+        else
+        {
+            std::cout << "The problem appears to be infeasible." << std::endl;
+            return;
+        }
+
+        // ilp.write(std::cout);
 
         ilp.reorder(variable_order_);
         costs = ilp.objective();

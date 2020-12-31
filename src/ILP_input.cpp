@@ -111,6 +111,77 @@ namespace LPMP {
         return linear_constraints_.size();
     }
 
+    bool ILP_input::preprocess()
+    {
+        for (auto it = linear_constraints_.begin(); it != linear_constraints_.end(); it++)
+        {
+            bool remove = false;
+
+            // empty constraints
+            if (it->variables.empty())
+            {
+                // feasibility check
+                switch (it->ineq)
+                {
+                    case inequality_type::smaller_equal:
+                        if(it->right_hand_side < 0)
+                            return false;
+                        break;
+                    case inequality_type::greater_equal:
+                        if(it->right_hand_side > 0)
+                            return false;
+                        break;
+                    case inequality_type::equal:
+                        if(it->right_hand_side != 0)
+                            return false;
+                        break;
+                    default:
+                        throw std::runtime_error("inequality type not supported");
+                }
+                remove = true;
+            }
+
+            // variable bounds and fixations
+            if (it->variables.size() == 1)
+            {
+                auto variable = it->variables.back();
+                switch (it->ineq)
+                {
+                    case inequality_type::smaller_equal:
+                        if(std::min(variable.coefficient, 0) > it->right_hand_side)
+                            return false;
+                        if(std::max(variable.coefficient, 0) <= it->right_hand_side)
+                            remove = true;
+                        break;
+                    case inequality_type::greater_equal:
+                        if(std::max(variable.coefficient, 0) < it->right_hand_side)
+                            return false;
+                        if(std::min(variable.coefficient, 0) >= it->right_hand_side)
+                            remove = true;
+                        break;
+                    case inequality_type::equal:
+                        if(it->right_hand_side != 0 && it->right_hand_side != variable.coefficient)
+                            return false;
+                        break;
+                    default:
+                        throw std::runtime_error("inequality type not supported");
+                }
+            }
+
+            // TODO implement preprocessing of variable/group fixations (e.g. x = 1, x + y = 0)
+
+            // remove redundant constraint
+            if (remove)
+            {
+                *it = linear_constraints_.back();
+                linear_constraints_.pop_back();
+                it--;    
+            }
+        }
+
+        return true;
+    }
+
     inline two_dim_variable_array<std::size_t> ILP_input::variable_adjacency_matrix() const
     {
         MEASURE_FUNCTION_EXECUTION_TIME

@@ -40,6 +40,8 @@ namespace LPMP {
         const double marginal_diff_target = marginals[1] - marginals[0];
         assert(std::isfinite(marginal_diff));
         assert(std::isfinite(marginal_diff_target));
+        if (marginal_diff_target == std::numeric_limits<double>::infinity() || marginal_diff_target == -std::numeric_limits<double>::infinity())
+            return;
         if (default_avg)
         {
             this->update_cost(var, bdd_index, -marginal_diff + marginal_diff_target);
@@ -63,6 +65,8 @@ namespace LPMP {
         const double marginal_diff_target = marginals[1] - marginals[0];
         assert(std::isfinite(marginal_diff));
         assert(std::isfinite(marginal_diff_target));
+        if (marginal_diff_target == std::numeric_limits<double>::infinity() || marginal_diff_target == -std::numeric_limits<double>::infinity())
+            return;
         if (default_avg)
         {
             this->update_cost(var, bdd_index, -marginal_diff + marginal_diff_target);

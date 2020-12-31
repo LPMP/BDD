@@ -44,6 +44,7 @@ namespace LPMP {
     void bdd_mma_srmp::backward_run()
     {
         pimpl->mma.backward_run();
+        pimpl->mma.compute_lower_bound();
     }
 
     void bdd_mma_srmp::solve(const size_t max_iter)
