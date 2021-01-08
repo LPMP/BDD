@@ -364,5 +364,11 @@ namespace LPMP {
         return lb;
     }
 
+    std::vector<double> decomposition_bdd_base::total_min_marginals()
+    {
+        std::vector<double> total_min_marginals;
+        return total_min_marginals;
+        // TODO implement
+    }
 
 }

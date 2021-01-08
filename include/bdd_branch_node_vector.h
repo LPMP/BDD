@@ -546,7 +546,7 @@ namespace LPMP {
         return offsets;
     }
 
-    std::vector<double> bdd_mma_base_vec::total_min_marginals()
+    inline std::vector<double> bdd_mma_base_vec::total_min_marginals()
     {
         std::vector<double> total_min_marginals;
         return total_min_marginals;
