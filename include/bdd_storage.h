@@ -102,7 +102,16 @@ return interval_1 == o.interval_1 && bdd_index_1 == o.bdd_index_1 && interval_2 
 
         std::tuple<std::vector<bdd_storage>, tsl::robin_set<duplicate_variable, duplicate_variable_hash>> split_bdd_nodes(const size_t nr_intervals);
 
-    two_dim_variable_array<size_t> compute_variable_groups() const;
+        // assuming BDDs are laid out in interleaved fashion, give out vector of first and last variables and bdd indices.
+        struct bdd_endpoints_ {
+            size_t first_variable;
+            size_t first_bdd_index;
+            size_t last_variable;
+            size_t last_bdd_index;
+        };
+        std::vector<bdd_endpoints_> bdd_endpoints() const;
+
+        two_dim_variable_array<size_t> compute_variable_groups() const;
     };
 
 

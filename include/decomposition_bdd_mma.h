@@ -5,17 +5,17 @@
 
 namespace LPMP {
 
+    struct decomposition_mma_options {
+        size_t nr_threads; 
+        double parallel_message_passing_weight;
+    };
+
     class decomposition_bdd_mma {
         public:
 
-            struct options {
-                size_t nr_threads; 
-                double parallel_message_passing_weight;
-            };
-
-            decomposition_bdd_mma(bdd_storage& bdd_storage_, options opt);
+            decomposition_bdd_mma(bdd_storage& bdd_storage_, decomposition_mma_options opt);
             template<typename ITERATOR>
-                decomposition_bdd_mma(bdd_storage& stor, ITERATOR cost_begin, ITERATOR cost_end, options opt);
+                decomposition_bdd_mma(bdd_storage& stor, ITERATOR cost_begin, ITERATOR cost_end, decomposition_mma_options opt);
             decomposition_bdd_mma(decomposition_bdd_mma&&);
 
             decomposition_bdd_mma& operator=(decomposition_bdd_mma&&);
@@ -34,7 +34,7 @@ namespace LPMP {
     };
 
     template<typename ITERATOR>
-        decomposition_bdd_mma::decomposition_bdd_mma(bdd_storage& stor, ITERATOR cost_begin, ITERATOR cost_end, decomposition_bdd_mma::options opt)
+        decomposition_bdd_mma::decomposition_bdd_mma(bdd_storage& stor, ITERATOR cost_begin, ITERATOR cost_end, decomposition_mma_options opt)
         : decomposition_bdd_mma(stor, opt)
         {
             assert(std::distance(cost_begin, cost_end) <= stor.nr_variables());

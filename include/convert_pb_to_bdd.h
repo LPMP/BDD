@@ -6,6 +6,7 @@
 #include <tsl/robin_map.h>
 #include <numeric>
 #include <tuple>
+#include <iostream>
 
 namespace LPMP {
 
@@ -19,13 +20,16 @@ namespace LPMP {
 
             BDD::node_ref convert_to_bdd(const std::vector<int> coefficients, const ILP_input::inequality_type ineq, const int right_hand_side); 
 
+            bool is_always_true(const int min_val, const int max_val, const std::vector<int>& nf, const ILP_input::inequality_type ineq) const;
+            bool is_always_false(const int min_val, const int max_val, const std::vector<int>& nf, const ILP_input::inequality_type ineq) const;
+
         private:
             // returned vector has as its first element the right hand side, then follow the coefficients
             template<typename COEFF_ITERATOR>
                 static std::tuple< std::vector<int>, ILP_input::inequality_type >
                 normal_form(COEFF_ITERATOR begin, COEFF_ITERATOR end, const ILP_input::inequality_type ineq, const int right_hand_side);
 
-            BDD::node_ref convert_to_bdd_impl(std::vector<int>& nf, const ILP_input::inequality_type ineq);
+            BDD::node_ref convert_to_bdd_impl(std::vector<int>& nf, const ILP_input::inequality_type ineq, const int min_val, const int max_val);
 
             BDD::bdd_mgr& bdd_mgr_;
             //using constraint_cache_type = std::unordered_map<std::vector<int>,BDD::node_ref>;
@@ -60,7 +64,15 @@ namespace LPMP {
         BDD::node_ref bdd_converter::convert_to_bdd(LEFT_HAND_SIDE_ITERATOR begin, LEFT_HAND_SIDE_ITERATOR end, const ILP_input::inequality_type ineq, const int right_hand_side)
         {
             auto [nf, ineq_nf] = normal_form(begin, end, ineq, right_hand_side);
-            return convert_to_bdd_impl(nf, ineq_nf); 
-        }
 
+            int min_val = 0;
+            int max_val = 0;
+            for(size_t i=1; i<nf.size(); ++i)
+            {
+                min_val += std::min(0, nf[i]);
+                max_val += std::max(0, nf[i]);
+            }
+
+            return convert_to_bdd_impl(nf, ineq_nf, min_val, max_val); 
+        } 
 }

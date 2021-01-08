@@ -11,6 +11,7 @@
 #include "bdd_variable.h"
 #include "bdd_branch_node.h"
 #include "bdd_mma_base.hxx"
+#include "time_measure_util.h"
 #include <iostream> // TODO: remove
 
 namespace LPMP {

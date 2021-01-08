@@ -1,5 +1,5 @@
+#include "decomposition_bdd_mma_base.h"
 #include "decomposition_bdd_mma.h"
-#include "decomposition_bdd_base.hxx"
 
 namespace LPMP {
 
@@ -8,11 +8,11 @@ namespace LPMP {
             using decomposition_bdd_base::decomposition_bdd_base; 
     };
 
-    decomposition_bdd_mma::decomposition_bdd_mma(bdd_storage& bdd_storage_, decomposition_bdd_mma::options opt)
-   {
-       MEASURE_FUNCTION_EXECUTION_TIME;
-       pimpl = std::make_unique<impl>(bdd_storage_, opt);
-   }
+    decomposition_bdd_mma::decomposition_bdd_mma(bdd_storage& bdd_storage_, decomposition_mma_options opt)
+    {
+        MEASURE_FUNCTION_EXECUTION_TIME;
+        pimpl = std::make_unique<impl>(bdd_storage_, opt);
+    }
 
     decomposition_bdd_mma::decomposition_bdd_mma(decomposition_bdd_mma&& o)
         : pimpl(std::move(o.pimpl))

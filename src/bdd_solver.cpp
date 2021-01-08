@@ -57,7 +57,7 @@ namespace LPMP {
             ->transform(CLI::CheckedTransformer(variable_order_map, CLI::ignore_case));
 
 
-        app.add_option("--max_iter", max_iter, "maximal number of iterations, default value = 1000")
+        app.add_option("-m, --max_iter", max_iter, "maximal number of iterations, default value = 1000")
             ->check(CLI::PositiveNumber);
 
         enum class bdd_solver_impl { mma, mma_srmp, mma_agg, decomposition_mma, anisotropic_mma, mma_vec } bdd_solver_impl_;
@@ -78,8 +78,8 @@ namespace LPMP {
         solver_group->add_flag("--statistics", statistics, "statistics of the problem");
         solver_group->require_option(1); // either a solver or statistics
 
-        decomposition_bdd_mma::options decomposition_mma_options;
-        app.callback([&app, &bdd_solver_impl_, &decomposition_mma_options]() {
+        decomposition_mma_options decomposition_mma_options_;
+        app.callback([&app, &bdd_solver_impl_, &decomposition_mma_options_]() {
                 CLI::App solver_app;
 
                 if(bdd_solver_impl_ == bdd_solver_impl::decomposition_mma)
@@ -95,7 +95,7 @@ namespace LPMP {
                         ->check(CLI::Range(0.0,1.0));
 
                     solver_app.parse(app.remaining_for_passthrough());
-                    decomposition_mma_options = decomposition_bdd_mma::options{nr_threads, mp_weight};
+                    decomposition_mma_options_ = decomposition_mma_options{nr_threads, mp_weight};
                 } 
         });
 
@@ -142,7 +142,7 @@ namespace LPMP {
         }
         else if(bdd_solver_impl_ == bdd_solver_impl::decomposition_mma)
         {
-            solver = std::move(decomposition_bdd_mma(stor, ilp.objective().begin(), ilp.objective().end(), decomposition_mma_options));
+            solver = std::move(decomposition_bdd_mma(stor, ilp.objective().begin(), ilp.objective().end(), decomposition_mma_options_));
             std::cout << "constructed decomposition mma solver\n";
         }
         else if(bdd_solver_impl_ == bdd_solver_impl::anisotropic_mma)

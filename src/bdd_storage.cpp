@@ -442,6 +442,43 @@ namespace LPMP {
         return {bdd_storages, duplicated_variables};
     }
 
+    std::vector<typename bdd_storage::bdd_endpoints_> bdd_storage::bdd_endpoints() const
+    {
+        // iterate through bdd storage bdds and get first and last variable of bdd. Then record bdd indices at corresponding variables
+        std::vector<bdd_endpoints_> endpoints;
+        endpoints.reserve(nr_bdds());
+        std::vector<size_t> bdd_index_counter(nr_variables(), 0);
+
+        tsl::robin_set<size_t> bdd_variables;
+        for(size_t bdd_index=0; bdd_index<nr_bdds(); ++bdd_index)
+        {
+            size_t first_bdd_var = std::numeric_limits<size_t>::max();
+            size_t last_bdd_var = 0;
+            bdd_variables.clear();
+            for(size_t i=bdd_delimiters()[bdd_index]; i<bdd_delimiters()[bdd_index+1]; ++i)
+            {
+                const size_t bdd_var = bdd_nodes()[i].variable;
+                if(bdd_var < nr_variables()) // otherwise top and bottom sink
+                {
+                    first_bdd_var = std::min(bdd_var, first_bdd_var);
+                    last_bdd_var = std::max(bdd_var, last_bdd_var); 
+                    bdd_variables.insert(bdd_var);
+                }
+            }
+
+            assert(first_bdd_var <= last_bdd_var);
+            assert(last_bdd_var < this->nr_variables());
+            assert(bdd_variables.count(first_bdd_var) > 0);
+            assert(bdd_variables.count(last_bdd_var) > 0);
+
+            endpoints.push_back({first_bdd_var, bdd_index_counter[first_bdd_var], last_bdd_var, bdd_index_counter[last_bdd_var]});
+            for(size_t v : bdd_variables)
+                ++bdd_index_counter[v];
+        }
+
+        return endpoints;
+    }
+
     two_dim_variable_array<size_t> bdd_storage::compute_variable_groups() const
     {
         const auto dep_graph_arcs = dependency_graph();
