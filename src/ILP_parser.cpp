@@ -15,6 +15,8 @@ namespace LPMP {
         using parsing::mand_invisible;
         using parsing::real_number;
 
+        struct comment_line : tao::pegtl::seq<tao::pegtl::string<'\\'>, tao::pegtl::until<tao::pegtl::eol, tao::pegtl::any>> {};
+
         struct min_line : tao::pegtl::seq<opt_whitespace, tao::pegtl::string<'M','i','n','i','m','i','z','e'>, opt_whitespace, tao::pegtl::eol> {};
 
         //struct sign : tao::pegtl::sor<tao::pegtl::string<'+'>, tao::pegtl::string<'-'>> {};
@@ -74,6 +76,7 @@ namespace LPMP {
         struct end_line : tao::pegtl::seq<opt_whitespace, tao::pegtl::string<'E','n','d'>, opt_whitespace, tao::pegtl::eolf> {};
 
         struct grammar : tao::pegtl::seq<
+                         tao::pegtl::star<comment_line>,
                          min_line,
                          tao::pegtl::star<objective_line>,
                          subject_to_line,

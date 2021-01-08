@@ -10,6 +10,7 @@
 #include "decomposition_bdd_mma.h"
 #include "bdd_mma_anisotropic.h"
 #include "bdd_mma_vec.h"
+#include "bdd_fix.h"
 #include <variant> 
 #include <optional>
 #include <CLI/CLI.hpp>
@@ -30,7 +31,7 @@ namespace LPMP {
             bdd_solver(const std::vector<std::string>& args);
 
             void solve();
-            //void round();
+            void round();
             double lower_bound();
 
         private:
@@ -43,6 +44,8 @@ namespace LPMP {
             using solver_type = std::variant<bdd_mma, bdd_mma_srmp, bdd_mma_agg, decomposition_bdd_mma, bdd_mma_anisotropic, bdd_mma_vec>;
             std::optional<solver_type> solver;
             size_t max_iter = 1000;
+            std::vector<double> costs;
+            std::optional<bdd_fix> primal_heuristic;
     };
 
 }

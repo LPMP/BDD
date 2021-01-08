@@ -1,6 +1,6 @@
 #pragma once
 
-#include "bdd_opt_base.hxx"
+#include "bdd_mma_base.hxx"
 #include "time_measure_util.h"
 #include <vector>
 #include <array>
@@ -10,9 +10,9 @@ namespace LPMP {
 
     // base class for min marginal averaging with SRMP-like distribution of excess costs
     template<typename BDD_OPT_BASE>
-        class bdd_mma_srmp_base : public BDD_OPT_BASE {
+        class bdd_mma_srmp_base : public bdd_mma_base<BDD_OPT_BASE> {
         public:
-            using BDD_OPT_BASE::BDD_OPT_BASE;
+            using bdd_mma_base<BDD_OPT_BASE>::bdd_mma_base;
 
             void min_marginal_averaging_forward_SRMP();
             void min_marginal_averaging_backward_SRMP();
@@ -40,6 +40,8 @@ namespace LPMP {
         const double marginal_diff_target = marginals[1] - marginals[0];
         assert(std::isfinite(marginal_diff));
         assert(std::isfinite(marginal_diff_target));
+        if (marginal_diff_target == std::numeric_limits<double>::infinity() || marginal_diff_target == -std::numeric_limits<double>::infinity())
+            return;
         if (default_avg)
         {
             this->update_cost(var, bdd_index, -marginal_diff + marginal_diff_target);
@@ -63,6 +65,8 @@ namespace LPMP {
         const double marginal_diff_target = marginals[1] - marginals[0];
         assert(std::isfinite(marginal_diff));
         assert(std::isfinite(marginal_diff_target));
+        if (marginal_diff_target == std::numeric_limits<double>::infinity() || marginal_diff_target == -std::numeric_limits<double>::infinity())
+            return;
         if (default_avg)
         {
             this->update_cost(var, bdd_index, -marginal_diff + marginal_diff_target);
@@ -84,23 +88,23 @@ namespace LPMP {
         {
             assert(this->nr_bdds(var) == std::distance(marginals_begin, marginals_end));
             std::array<double,2> average_marginal = {0.0, 0.0};
-            size_t nr_averaged_marginals = 0;
+            size_t divisor = 0;
             for(size_t bdd_index=0; bdd_index<this->nr_bdds(var); ++bdd_index) {
                     average_marginal[0] += (*(marginals_begin+bdd_index))[0];
                     average_marginal[1] += (*(marginals_begin+bdd_index))[1];
                 if(!this->last_variable_of_bdd(var, bdd_index))
-                    ++nr_averaged_marginals;
+                    ++divisor;
             }
             // if no BDD satisfies forward condition, resort to averaging over all BDDs
             bool default_avg = false;
-            if (nr_averaged_marginals == 0)
+            if (divisor == 0)
             {
-                nr_averaged_marginals = this->nr_bdds(var);
+                divisor = this->nr_bdds(var);
                 default_avg = true;
             }
 
-            average_marginal[0] /= double(nr_averaged_marginals);
-            average_marginal[1] /= double(nr_averaged_marginals);
+            average_marginal[0] /= double(divisor);
+            average_marginal[1] /= double(divisor);
 
             return std::make_pair(average_marginal, default_avg);
         }
@@ -111,23 +115,23 @@ namespace LPMP {
         {
             assert(this->nr_bdds(var) == std::distance(marginals_begin, marginals_end));
             std::array<double,2> average_marginal = {0.0, 0.0};
-            size_t nr_averaged_marginals = 0;
+            size_t divisor = 0;
             for(size_t bdd_index=0; bdd_index<this->nr_bdds(var); ++bdd_index) {
                     average_marginal[0] += (*(marginals_begin+bdd_index))[0];
                     average_marginal[1] += (*(marginals_begin+bdd_index))[1];
                 if(!this->first_variable_of_bdd(var, bdd_index))
-                    ++nr_averaged_marginals;
+                    ++divisor;
             }
             // if no BDD satisfies forward condition, resort to averaging over all BDDs
             bool default_avg = false;
-            if (nr_averaged_marginals == 0)
+            if (divisor == 0)
             {
-                nr_averaged_marginals = this->nr_bdds(var);
+                divisor = this->nr_bdds(var);
                 default_avg = true;
             }
 
-            average_marginal[0] /= double(nr_averaged_marginals);
-            average_marginal[1] /= double(nr_averaged_marginals);
+            average_marginal[0] /= double(divisor);
+            average_marginal[1] /= double(divisor);
 
             assert(std::isfinite(average_marginal[0]));
             assert(std::isfinite(average_marginal[1]));
@@ -203,11 +207,14 @@ namespace LPMP {
         void bdd_mma_srmp_base<BDD_OPT_BASE>::solve(const size_t max_iter)
         {
             std::cout << "initial lower bound = " << this->lower_bound() << "\n";
-            for(size_t iter=0; iter<max_iter; ++iter)
+            for(size_t iter=0; iter<max_iter-1; ++iter)
             {
                 iteration();
                 std::cout << "iteration " << iter << ", lower bound = " << this->lower_bound() << "\n";
             }
+            bdd_mma_base<BDD_OPT_BASE>::iteration();
+            std::cout << "iteration " << max_iter-1 << ", lower bound = " << this->lower_bound() << "\n";
+            std::cout << "(last iteration with default averaging)" << std::endl;
             std::cout << "final lower bound = " << this->lower_bound() << "\n";
 
         }

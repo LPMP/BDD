@@ -27,6 +27,7 @@ namespace LPMP {
             void iteration();
             void solve(const size_t max_iter);
             double lower_bound();
+            std::vector<double> total_min_marginals();
 
         private:
             void min_marginal_averaging_forward(const size_t interval_nr);
@@ -651,6 +652,13 @@ namespace LPMP {
         for(size_t i=0; i<intervals.nr_intervals(); ++i)
             lb += bdd_bases[i].base.lower_bound();
         return lb;
+    }
+
+    std::vector<double> decomposition_bdd_base::total_min_marginals()
+    {
+        std::vector<double> total_min_marginals;
+        return total_min_marginals;
+        // TODO implement
     }
 
 }

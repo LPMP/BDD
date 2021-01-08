@@ -44,6 +44,7 @@ namespace LPMP {
     void bdd_mma_srmp::backward_run()
     {
         pimpl->mma.backward_run();
+        pimpl->mma.compute_lower_bound();
     }
 
     void bdd_mma_srmp::solve(const size_t max_iter)
@@ -55,7 +56,12 @@ namespace LPMP {
     double bdd_mma_srmp::lower_bound()
     {
         return pimpl->mma.lower_bound();
-    } 
+    }
+
+    std::vector<double> bdd_mma_srmp::total_min_marginals()
+    {
+        return pimpl->mma.total_min_marginals();
+    }
 
 }
 

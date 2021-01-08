@@ -58,6 +58,8 @@ namespace LPMP {
         template<typename STREAM>
             void write(STREAM& s) const;
 
+        bool preprocess();
+
         permutation reorder(variable_order var_ord);
         permutation reorder_bfs();
         permutation reorder_Cuthill_McKee(); 
