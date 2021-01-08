@@ -1,4 +1,5 @@
 #include "convert_pb_to_bdd.h"
+#include <iostream> // TODO: remove
 
 namespace LPMP {
 
@@ -19,9 +20,9 @@ namespace LPMP {
                 break;
             case ILP_input::inequality_type::smaller_equal:
                 {
-                // compute maximum value attainable
-                return max_val <= right_hand_side;
-                break;
+                    // compute maximum value attainable
+                    return max_val <= right_hand_side;
+                    break;
                 }
             case ILP_input::inequality_type::greater_equal:
                 throw std::runtime_error("not implemented yet");
@@ -38,20 +39,20 @@ namespace LPMP {
         switch(ineq) {
             case ILP_input::inequality_type::equal: 
                 {
-                if(nf.size() == 1 && right_hand_side != 0)
-                    return true;
-                if(min_val > right_hand_side)
-                    return true;
-                if(max_val < right_hand_side)
-                    return true;
-                return false;
-                break;
+                    if(nf.size() == 1 && right_hand_side != 0)
+                        return true;
+                    if(min_val > right_hand_side)
+                        return true;
+                    if(max_val < right_hand_side)
+                        return true;
+                    return false;
+                    break;
                 }
             case ILP_input::inequality_type::smaller_equal:
                 {
-                // compute maximum value attainable
-                return min_val > right_hand_side;
-                break;
+                    // compute maximum value attainable
+                    return min_val > right_hand_side;
+                    break;
                 }
             case ILP_input::inequality_type::greater_equal:
                 throw std::runtime_error("not implemented yet");
@@ -62,6 +63,7 @@ namespace LPMP {
 
     BDD::node_ref bdd_converter::convert_to_bdd_impl(std::vector<int>& nf, const ILP_input::inequality_type ineq, const int min_val, const int max_val)
     {
+        tmp_rec_calls++;
         if(is_always_true(min_val, max_val, nf, ineq))
             return bdd_mgr_.topsink();
         if(is_always_false(min_val, max_val, nf, ineq))

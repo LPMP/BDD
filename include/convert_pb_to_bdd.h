@@ -6,7 +6,7 @@
 #include <tsl/robin_map.h>
 #include <numeric>
 #include <tuple>
-#include <iostream>
+#include <iostream> // TODO: remove
 
 namespace LPMP {
 
@@ -24,6 +24,7 @@ namespace LPMP {
             bool is_always_false(const int min_val, const int max_val, const std::vector<int>& nf, const ILP_input::inequality_type ineq) const;
 
         private:
+            mutable size_t tmp_rec_calls = 0;
             // returned vector has as its first element the right hand side, then follow the coefficients
             template<typename COEFF_ITERATOR>
                 static std::tuple< std::vector<int>, ILP_input::inequality_type >
@@ -45,7 +46,10 @@ namespace LPMP {
             assert(std::distance(begin,end) >= 1);
             int d = std::gcd(right_hand_side, *begin);
             for(auto it = begin+1; it != end; ++it)
+            {
+                assert(*it != 0);
                 d = std::gcd(d, *it);
+            }
 
             std::vector<int> c;
             c.reserve(std::distance(begin, end) + 1);
@@ -73,6 +77,7 @@ namespace LPMP {
                 max_val += std::max(0, nf[i]);
             }
 
+            tmp_rec_calls = 0;
             return convert_to_bdd_impl(nf, ineq_nf, min_val, max_val); 
         } 
 }
