@@ -10,6 +10,37 @@
 
 namespace LPMP {
 
+    struct bdd_node {
+
+        bdd_node() {}
+        bdd_node(int lb, int ub, bdd_node* zero_kid, bdd_node* one_kid)
+        : lb_(lb), ub_(ub), zero_kid_(zero_kid), one_kid_(one_kid)
+        {}
+
+        int lb_;
+        int ub_;
+
+        bdd_node* zero_kid_;
+        bdd_node* one_kid_;
+    };
+
+    struct bdd {
+
+        bdd() {}
+        bdd(const size_t dim) : inverted(dim), 
+            topsink(0, std::numeric_limits<int>::max(), nullptr, nullptr), 
+            botsink(std::numeric_limits<int>::min(), -1, nullptr, nullptr)
+        {}
+
+        bdd_node* root_node;
+
+        std::vector<char> inverted; // flags inverted variables
+
+        bdd_node topsink;
+        bdd_node botsink;
+        std::vector<std::vector<bdd_node>> levels;
+    };
+
     class bdd_converter {
         public:
             bdd_converter(BDD::bdd_mgr& bdd_mgr) : bdd_mgr_(bdd_mgr) 
@@ -18,10 +49,12 @@ namespace LPMP {
             template<typename LEFT_HAND_SIDE_ITERATOR>
                 BDD::node_ref convert_to_bdd(LEFT_HAND_SIDE_ITERATOR begin, LEFT_HAND_SIDE_ITERATOR end, const ILP_input::inequality_type ineq, const int right_hand_side);
 
-            BDD::node_ref convert_to_bdd(const std::vector<int> coefficients, const ILP_input::inequality_type ineq, const int right_hand_side); 
+            BDD::node_ref convert_to_bdd(const std::vector<int> coefficients, const ILP_input::inequality_type ineq, const int right_hand_side);
 
-            bool is_always_true(const int min_val, const int max_val, const std::vector<int>& nf, const ILP_input::inequality_type ineq) const;
-            bool is_always_false(const int min_val, const int max_val, const std::vector<int>& nf, const ILP_input::inequality_type ineq) const;
+            template<typename LEFT_HAND_SIDE_ITERATOR>
+                bdd & build_bdd(LEFT_HAND_SIDE_ITERATOR begin, LEFT_HAND_SIDE_ITERATOR end, const ILP_input::inequality_type ineq, const int right_hand_side);
+            bdd & build_bdd(const std::vector<int> coefficients, const ILP_input::inequality_type ineq, const int right_hand_side);
+            bdd & get_bdd() { return bdd_; };
 
         private:
             mutable size_t tmp_rec_calls = 0;
@@ -30,13 +63,21 @@ namespace LPMP {
                 static std::tuple< std::vector<int>, ILP_input::inequality_type >
                 normal_form(COEFF_ITERATOR begin, COEFF_ITERATOR end, const ILP_input::inequality_type ineq, const int right_hand_side);
 
+            // implemenation with global subinequality cache
+            bool is_always_true(const int min_val, const int max_val, const std::vector<int>& nf, const ILP_input::inequality_type ineq) const;
+            bool is_always_false(const int min_val, const int max_val, const std::vector<int>& nf, const ILP_input::inequality_type ineq) const;
             BDD::node_ref convert_to_bdd_impl(std::vector<int>& nf, const ILP_input::inequality_type ineq, const int min_val, const int max_val);
+
+            // implementation with equivalent node detection per inequality (Behle, 2007)
+            bdd_node* build_bdd_node(const int slack, const int level, const int rest, const std::vector<int> & ineq, const ILP_input::inequality_type ineq_type);
 
             BDD::bdd_mgr& bdd_mgr_;
             //using constraint_cache_type = std::unordered_map<std::vector<int>,BDD::node_ref>;
             using constraint_cache_type = tsl::robin_map<std::vector<int>,BDD::node_ref>;
             constraint_cache_type equality_cache;
             constraint_cache_type lower_equal_cache;
+
+            bdd bdd_;
     };
 
     template<typename COEFF_ITERATOR>
@@ -79,5 +120,33 @@ namespace LPMP {
 
             tmp_rec_calls = 0;
             return convert_to_bdd_impl(nf, ineq_nf, min_val, max_val); 
-        } 
+        }
+
+    template<typename LEFT_HAND_SIDE_ITERATOR>
+        bdd & bdd_converter::build_bdd(LEFT_HAND_SIDE_ITERATOR begin, LEFT_HAND_SIDE_ITERATOR end, const ILP_input::inequality_type ineq, const int right_hand_side)
+        {
+            auto [nf, ineq_nf] = normal_form(begin, end, ineq, right_hand_side);
+
+            const size_t dim = nf.size() - 1;
+            bdd_ = bdd(dim);
+
+            // transform to nonnegative coefficients
+            for (size_t i = 1; i < dim + 1; i++)
+            {
+                if (nf[i] < 0)
+                {
+                    nf[0] -= nf[i];
+                    nf[i] = -nf[i];
+                    bdd_.inverted[i] = 1;
+                }
+            }
+
+            const int rest = std::accumulate(nf.begin()+1, nf.end(), 0);
+            const int level = 0;
+            const int slack = nf[0];
+
+            tmp_rec_calls = 0;
+            bdd_.root_node = build_bdd_node(slack, level, rest, nf, ineq_nf);
+            return bdd_;
+        }
 }
