@@ -27,7 +27,7 @@ namespace LPMP {
     struct bdd {
 
         bdd() {}
-        bdd(const size_t dim) : inverted(dim), 
+        bdd(const size_t dim) : inverted(dim), levels(dim),
             topsink(0, std::numeric_limits<int>::max(), nullptr, nullptr), 
             botsink(std::numeric_limits<int>::min(), -1, nullptr, nullptr)
         {}
