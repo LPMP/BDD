@@ -4,42 +4,13 @@
 #include "ILP_input.h"
 #include "hash_helper.hxx"
 #include <tsl/robin_map.h>
+#include "lineq_bdd.h"
 #include <numeric>
 #include <tuple>
 #include <iostream> // TODO: remove
 
 namespace LPMP {
-
-    struct bdd_node {
-
-        bdd_node() {}
-        bdd_node(int lb, int ub, bdd_node* zero_kid, bdd_node* one_kid)
-        : lb_(lb), ub_(ub), zero_kid_(zero_kid), one_kid_(one_kid)
-        {}
-
-        int lb_;
-        int ub_;
-
-        bdd_node* zero_kid_;
-        bdd_node* one_kid_;
-    };
-
-    struct bdd {
-
-        bdd() {}
-        bdd(const size_t dim) : inverted(dim), levels(dim),
-            topsink(0, std::numeric_limits<int>::max(), nullptr, nullptr), 
-            botsink(std::numeric_limits<int>::min(), -1, nullptr, nullptr)
-        {}
-
-        bdd_node* root_node;
-
-        std::vector<char> inverted; // flags inverted variables
-
-        bdd_node topsink;
-        bdd_node botsink;
-        std::vector<std::vector<bdd_node>> levels;
-    };
+    
 
     class bdd_converter {
         public:
@@ -52,9 +23,9 @@ namespace LPMP {
             BDD::node_ref convert_to_bdd(const std::vector<int> coefficients, const ILP_input::inequality_type ineq, const int right_hand_side);
 
             template<typename LEFT_HAND_SIDE_ITERATOR>
-                bdd & build_bdd(LEFT_HAND_SIDE_ITERATOR begin, LEFT_HAND_SIDE_ITERATOR end, const ILP_input::inequality_type ineq, const int right_hand_side);
-            bdd & build_bdd(const std::vector<int> coefficients, const ILP_input::inequality_type ineq, const int right_hand_side);
-            bdd & get_bdd() { return bdd_; };
+                lineq_bdd & build_bdd(LEFT_HAND_SIDE_ITERATOR begin, LEFT_HAND_SIDE_ITERATOR end, const ILP_input::inequality_type ineq, const int right_hand_side);
+            lineq_bdd & build_bdd(const std::vector<int> coefficients, const ILP_input::inequality_type ineq, const int right_hand_side);
+            lineq_bdd & get_bdd() { return bdd_; };
 
         private:
             mutable size_t tmp_rec_calls = 0;
@@ -69,7 +40,7 @@ namespace LPMP {
             BDD::node_ref convert_to_bdd_impl(std::vector<int>& nf, const ILP_input::inequality_type ineq, const int min_val, const int max_val);
 
             // implementation with equivalent node detection per inequality (Behle, 2007)
-            bdd_node* build_bdd_node(const int slack, const int level, const int rest, const std::vector<int> & ineq, const ILP_input::inequality_type ineq_type);
+            lineq_bdd_node* build_bdd_node(const int slack, const int level, const int rest, const std::vector<int> & ineq, const ILP_input::inequality_type ineq_type);
 
             BDD::bdd_mgr& bdd_mgr_;
             //using constraint_cache_type = std::unordered_map<std::vector<int>,BDD::node_ref>;
@@ -77,7 +48,7 @@ namespace LPMP {
             constraint_cache_type equality_cache;
             constraint_cache_type lower_equal_cache;
 
-            bdd bdd_;
+            lineq_bdd bdd_;
     };
 
     template<typename COEFF_ITERATOR>
@@ -123,12 +94,12 @@ namespace LPMP {
         }
 
     template<typename LEFT_HAND_SIDE_ITERATOR>
-        bdd & bdd_converter::build_bdd(LEFT_HAND_SIDE_ITERATOR begin, LEFT_HAND_SIDE_ITERATOR end, const ILP_input::inequality_type ineq, const int right_hand_side)
+        lineq_bdd & bdd_converter::build_bdd(LEFT_HAND_SIDE_ITERATOR begin, LEFT_HAND_SIDE_ITERATOR end, const ILP_input::inequality_type ineq, const int right_hand_side)
         {
             auto [nf, ineq_nf] = normal_form(begin, end, ineq, right_hand_side);
 
             const size_t dim = nf.size() - 1;
-            bdd_ = bdd(dim);
+            bdd_ = lineq_bdd(dim);
 
             // transform to nonnegative coefficients
             for (size_t i = 1; i < dim + 1; i++)

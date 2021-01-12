@@ -149,12 +149,12 @@ namespace LPMP {
     }
 
 
-    bdd & bdd_converter::build_bdd(const std::vector<int> coefficients, const ILP_input::inequality_type ineq, const int right_hand_side)
+    lineq_bdd & bdd_converter::build_bdd(const std::vector<int> coefficients, const ILP_input::inequality_type ineq, const int right_hand_side)
     {
         return build_bdd(coefficients.begin(), coefficients.end(), ineq, right_hand_side);
     }
 
-    bdd_node* bdd_converter::build_bdd_node(const int slack, const int level, const int rest, const std::vector<int> & ineq, const ILP_input::inequality_type ineq_type)
+    lineq_bdd_node* bdd_converter::build_bdd_node(const int slack, const int level, const int rest, const std::vector<int> & ineq, const ILP_input::inequality_type ineq_type)
     {
         assert(rest == std::accumulate(ineq.begin()+level+1, ineq.end(), 0)); 
         tmp_rec_calls++;
@@ -190,14 +190,14 @@ namespace LPMP {
         }
 
         // otherwise build children recursively
-        const int coeff = ineq[level];
+        const int coeff = ineq[level+1]; // first entry is right hand side
         auto* bdd_0 = build_bdd_node(slack, level+1, rest - coeff, ineq, ineq_type);
         auto* bdd_1 = build_bdd_node(slack + coeff, level+1, rest - coeff, ineq, ineq_type);
 
         const int lb = std::max(bdd_0->lb_, bdd_1->lb_ + coeff);
         const int ub = std::min(bdd_0->ub_, bdd_1->ub_ + coeff);
 
-        bdd_node node(lb, ub, bdd_0, bdd_1);
+        lineq_bdd_node node(lb, ub, bdd_0, bdd_1);
         bdd_.levels[level].push_back(node);
 
         return &node;
