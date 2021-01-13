@@ -17,6 +17,8 @@ namespace LPMP {
         bdd_converter converter(bdd_mgr);
 
         for(const auto& constraint : input.constraints()) {
+            // input.write(std::cout, constraint);
+            // std::cout << "\n";
             coefficients.clear();
             variables.clear();
             for(const auto e : constraint.variables) {
@@ -26,6 +28,8 @@ namespace LPMP {
             assert(std::is_sorted(variables.begin(), variables.end()));
             
             BDD::node_ref bdd = converter.convert_to_bdd(coefficients, constraint.ineq, constraint.right_hand_side);
+            // converter.build_bdd(coefficients, constraint.ineq, constraint.right_hand_side);
+            // BDD::node_ref bdd = converter.get_bdd().convert_to_bdd(bdd_mgr);
             add_bdd(bdd, variables.begin(), variables.end());
         }
 

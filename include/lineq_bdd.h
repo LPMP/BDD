@@ -1,7 +1,11 @@
 #pragma once
 
 #include <numeric>
+#include <list>
+#include <vector>
+#include <tsl/robin_map.h>
 #include "bdd.h"
+#include <iostream> // temporary
 
 namespace LPMP {
 
@@ -22,12 +26,13 @@ namespace LPMP {
     struct lineq_bdd {
 
         lineq_bdd() {}
+        lineq_bdd(lineq_bdd & other) = delete;
         lineq_bdd(const size_t dim) : inverted(dim), levels(dim),
             topsink(0, std::numeric_limits<int>::max(), nullptr, nullptr), 
             botsink(std::numeric_limits<int>::min(), -1, nullptr, nullptr)
         {}
 
-        BDD::node_ref convert_to_bdd(BDD::bdd_mgr bdd_mgr_) const; 
+        BDD::node_ref convert_to_bdd(BDD::bdd_mgr & bdd_mgr_) const;
 
         lineq_bdd_node* root_node;
 
@@ -35,37 +40,42 @@ namespace LPMP {
 
         lineq_bdd_node topsink;
         lineq_bdd_node botsink;
-        std::vector<std::vector<lineq_bdd_node>> levels;
+        std::vector<std::list<lineq_bdd_node>> levels;
     };
 
-    inline BDD::node_ref lineq_bdd::convert_to_bdd(BDD::bdd_mgr bdd_mgr_) const
+    inline BDD::node_ref lineq_bdd::convert_to_bdd(BDD::bdd_mgr & bdd_mgr_) const
     {
         std::vector<std::vector<BDD::node_ref>> bdd_nodes(levels.size());
+        tsl::robin_map<lineq_bdd_node const*,size_t> node_refs; 
         for(std::ptrdiff_t l=levels.size()-1; l>=0; --l)
         {
-            for(size_t i=0; i<levels[l].size(); ++i)
+            for(auto it = levels[l].begin(); it != levels[l].end(); it++)
             {
-                auto& lbdd = levels[l][i];
+                auto& lbdd = *it;
                 auto get_node = [&](lineq_bdd_node const* ptr) {
                     if(ptr == &botsink)
-                    {
                         return bdd_mgr_.botsink();
-                    }
                     else if(ptr == &topsink)
-                    {
                         return bdd_mgr_.botsink();
-                    }
                     else
                     {
-                        assert(l+1 < levels.size());
-                        const size_t offset = std::distance(&levels[l+1][0], ptr);
-                        assert(offset < levels[l+1].size());
-                        return bdd_nodes[l+1][offset]; 
+                        auto ref = node_refs.find(ptr);
+                        if (ref != node_refs.end())
+                        {
+                            assert(ref->second < bdd_nodes[l+1].size());
+                            return bdd_nodes[l+1][ref->second];
+                        }
+                        else
+                            throw std::runtime_error("node reference not found");
                     }
                 };
                 BDD::node_ref zero_bdd_node = get_node(lbdd.zero_kid_);
                 BDD::node_ref one_bdd_node = get_node(lbdd.one_kid_);
-                bdd_nodes[l].push_back(bdd_mgr_.ite_rec(bdd_mgr_.projection(l), zero_bdd_node, one_bdd_node));
+                if (inverted[l])
+                    bdd_nodes[l].push_back(bdd_mgr_.ite_rec(bdd_mgr_.projection(l), one_bdd_node, zero_bdd_node));
+                else
+                    bdd_nodes[l].push_back(bdd_mgr_.ite_rec(bdd_mgr_.projection(l), zero_bdd_node, one_bdd_node));
+                node_refs.insert(std::make_pair(&lbdd, bdd_nodes[l].size()-1));
             }
         }
         return bdd_nodes[0][0];

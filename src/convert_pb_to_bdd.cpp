@@ -173,6 +173,7 @@ namespace LPMP {
                     return &bdd_.botsink;
                 if (slack >= rest)
                     return &bdd_.topsink;
+                break;
             case ILP_input::inequality_type::greater_equal:
                 throw std::runtime_error("greater equal constraint not in normal form");
                 break;
@@ -181,18 +182,23 @@ namespace LPMP {
                 break;
         }
 
+        assert(level < bdd_.levels.size());
+        assert(level < ineq.size() - 1);
+
         // check for equivalent nodes
         // TODO: implement binary search over nodes at current level
-        for (auto & node : bdd_.levels[level])
+        for (auto it = bdd_.levels[level].begin(); it != bdd_.levels[level].end(); it++)
         {
-            if (slack >= node.lb_ && slack <= node.ub_)
-                return &node;
+            if (slack >= it->lb_ && slack <= it->ub_)
+                return &(*it);
         }
 
         // otherwise build children recursively
         const int coeff = ineq[level+1]; // first entry is right hand side
         auto* bdd_0 = build_bdd_node(slack, level+1, rest - coeff, ineq, ineq_type);
-        auto* bdd_1 = build_bdd_node(slack + coeff, level+1, rest - coeff, ineq, ineq_type);
+        auto* bdd_1 = build_bdd_node(slack - coeff, level+1, rest - coeff, ineq, ineq_type);
+        assert(bdd_0 != nullptr);
+        assert(bdd_1 != nullptr);
 
         const int lb = std::max(bdd_0->lb_, bdd_1->lb_ + coeff);
         const int ub = std::min(bdd_0->ub_, bdd_1->ub_ + coeff);
@@ -200,7 +206,7 @@ namespace LPMP {
         lineq_bdd_node node(lb, ub, bdd_0, bdd_1);
         bdd_.levels[level].push_back(node);
 
-        return &node;
+        return &bdd_.levels[level].back();
     }
 
 }

@@ -100,12 +100,13 @@ namespace LPMP {
             bdd_ = lineq_bdd(dim);
 
             // transform to nonnegative coefficients
-            for (size_t i = 1; i < dim + 1; i++)
+            for (size_t i = 0; i < dim; i++)
             {
-                if (nf[i] < 0)
+                size_t j = i+1;
+                if (nf[j] < 0)
                 {
-                    nf[0] -= nf[i];
-                    nf[i] = -nf[i];
+                    nf[0] -= nf[j];
+                    nf[j] = -nf[j];
                     bdd_.inverted[i] = 1;
                 }
             }

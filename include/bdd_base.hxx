@@ -109,7 +109,8 @@ namespace LPMP {
     template<typename BDD_VARIABLE, typename BDD_BRANCH_NODE>
     void bdd_base<BDD_VARIABLE, BDD_BRANCH_NODE>::init(bdd_storage& bdd_storage_)
     {
-        assert(bdd_storage_.nr_variables() > 0 && bdd_storage_.nr_bdds() > 0);
+        assert(bdd_storage_.nr_variables() > 0);
+        assert(bdd_storage_.nr_bdds() > 0);
         // allocate datastructures holding bdd instructions
         
         // helper vectors used throughout initialization
