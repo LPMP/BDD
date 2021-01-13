@@ -372,6 +372,7 @@ void two_dim_variable_array<T>::clear()
 {
     data_.clear();
     offsets_.clear();
+    offsets_.push_back(0);
 }
 
 template<typename T>

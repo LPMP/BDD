@@ -38,6 +38,7 @@ namespace LPMP {
     template<typename ITERATOR>
         permutation inverse_permutation(ITERATOR begin, ITERATOR end)
         {
+            assert(is_permutation(begin, end));
             permutation inverse_perm(std::distance(begin, end));
             for(std::size_t i=0; i<std::distance(begin, end); ++i) 
                 inverse_perm[(*begin+i)] = i;

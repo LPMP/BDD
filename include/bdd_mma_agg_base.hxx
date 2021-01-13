@@ -45,7 +45,7 @@ namespace LPMP {
         if(this->bdd_variables_(var,bdd_index).last_var_index == min_last_var_index) {
             this->update_cost(var, bdd_index, -marginal_diff + marginal_diff_target_in);
         } else {
-            assert(std::isfinite(marginal_diff_target));
+            assert(std::isfinite(marginal_diff_target_out));
             this->update_cost(var, bdd_index, -marginal_diff + marginal_diff_target_out);
         } 
     }
