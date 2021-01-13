@@ -56,7 +56,7 @@ namespace LPMP {
                     if(ptr == &botsink)
                         return bdd_mgr_.botsink();
                     else if(ptr == &topsink)
-                        return bdd_mgr_.botsink();
+                        return bdd_mgr_.topsink();
                     else
                     {
                         auto ref = node_refs.find(ptr);
@@ -78,6 +78,7 @@ namespace LPMP {
                 node_refs.insert(std::make_pair(&lbdd, bdd_nodes[l].size()-1));
             }
         }
+        assert(bdd_nodes[0].size() == 1);
         return bdd_nodes[0][0];
     }
 

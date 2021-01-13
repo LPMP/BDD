@@ -93,6 +93,8 @@ int main(int argc, char** argv)
         for(size_t i=0; i<10000; ++i)
             simplex_weights.push_back(1);
         auto & bdd = converter.build_bdd(simplex_weights.begin(), simplex_weights.end(), ILP_input::inequality_type::equal, 1);
+        BDD::node_ref bdd2 = bdd.convert_to_bdd(bdd_mgr);
+        std::cout << "# bdd nodes of simplex with 10000 vars = " << bdd2.nodes_postorder().size() << "\n";
     }
 
     // hard examples of inequalities from MIPLib
@@ -102,6 +104,8 @@ int main(int argc, char** argv)
         std::cout << "nr coefficients = " << weights.size() << "\n";
         // auto bdd = converter.convert_to_bdd(weights.begin(), weights.end(), ILP_input::inequality_type::smaller_equal, 0);
         auto & bdd = converter.build_bdd(weights.begin(), weights.end(), ILP_input::inequality_type::smaller_equal, 0);
+        BDD::node_ref bdd2 = bdd.convert_to_bdd(bdd_mgr);
+        std::cout << "# bdd nodes of MIPLib = " << bdd2.nodes_postorder().size() << "\n";
     }
 
 }
