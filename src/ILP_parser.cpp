@@ -15,7 +15,7 @@ namespace LPMP {
         using parsing::mand_invisible;
         using parsing::real_number;
 
-        struct comment_line : tao::pegtl::seq<tao::pegtl::string<'\\'>, tao::pegtl::until<tao::pegtl::eol, tao::pegtl::any>> {};
+        struct comment_line : tao::pegtl::seq<tao::pegtl::string<'\\'>, tao::pegtl::until<tao::pegtl::eol>> {};
 
         struct min_line : tao::pegtl::seq<opt_whitespace, tao::pegtl::string<'M','i','n','i','m','i','z','e'>, opt_whitespace, tao::pegtl::eol> {};
 
@@ -64,14 +64,16 @@ namespace LPMP {
             tao::pegtl::star<opt_whitespace, inequality_term, opt_whitespace, tao::pegtl::opt<tao::pegtl::eol>>,
             opt_whitespace, inequality_type, opt_whitespace, right_hand_side, opt_whitespace, tao::pegtl::eol> {};
 
-        struct bounds_begin : tao::pegtl::seq<opt_whitespace, tao::pegtl::string<'B','o','u','n','d','s'>, opt_whitespace, tao::pegtl::eol> {};
-        struct binaries : tao::pegtl::seq<opt_whitespace, tao::pegtl::string<'B','i','n','a','r','i','e','s'>, opt_whitespace, tao::pegtl::eol> {};
+        struct bounds_begin : tao::pegtl::opt<tao::pegtl::seq<opt_whitespace, tao::pegtl::string<'B','o','u','n','d','s'>, opt_whitespace, tao::pegtl::eol>> {};
+        struct generals_begin : tao::pegtl::opt<tao::pegtl::seq<opt_whitespace, tao::pegtl::string<'G','e','n','e','r','a','l','s'>, opt_whitespace, tao::pegtl::eol>> {};
+
+        struct binaries_begin : tao::pegtl::seq<opt_whitespace, tao::pegtl::string<'B','i','n','a','r','i','e','s'>, opt_whitespace, tao::pegtl::eol> {};
         struct binary_variable : variable_name {};
         struct list_of_binary_variables : tao::pegtl::seq< 
             tao::pegtl::star<opt_whitespace, tao::pegtl::opt<tao::pegtl::eol>, opt_whitespace, tao::pegtl::not_at< tao::pegtl::string<'E','n','d'> >, binary_variable>,
             opt_whitespace, tao::pegtl::eol > {};
 
-        struct bounds : tao::pegtl::seq<tao::pegtl::opt<bounds_begin, binaries, list_of_binary_variables> > {};
+        struct binaries : tao::pegtl::opt<binaries_begin, list_of_binary_variables> {};
 
         struct end_line : tao::pegtl::seq<opt_whitespace, tao::pegtl::string<'E','n','d'>, opt_whitespace, tao::pegtl::eolf> {};
 
@@ -81,8 +83,10 @@ namespace LPMP {
                          tao::pegtl::star<objective_line>,
                          subject_to_line,
                          tao::pegtl::star<inequality_line>,
-                         bounds,
-                         end_line> {};
+                         bounds_begin, // ignore everything after bounds (variables are assumed to be binary)
+                         // binaries,
+                         // end_line> {};
+                         tao::pegtl::until<end_line>> {};
 
         template< typename Rule >
             struct action

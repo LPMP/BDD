@@ -97,7 +97,7 @@ namespace LPMP {
 
             void revert_changes(const size_t target_log_size);
 
-            void init_primal_solution() { primal_solution_.resize(this->nr_variables(), 2); }
+            void init_primal_solution();
             const std::vector<char> & primal_solution() const { return primal_solution_; }
             const size_t log_size() const { return log_.size(); }
 
@@ -150,6 +150,12 @@ namespace LPMP {
             }
         }
         init_primal_solution(); 
+    }
+
+    void bdd_fix_base::init_primal_solution()
+    {
+        primal_solution_.resize(this->nr_variables());
+        std::fill(primal_solution_.begin(), primal_solution_.end(), 2);
     }
 
     bool bdd_fix_base::fix_variable(const std::size_t var, const char value)

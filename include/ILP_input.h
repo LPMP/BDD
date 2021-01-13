@@ -56,6 +56,8 @@ namespace LPMP {
             double evaluate(ITERATOR begin, ITERATOR end) const; 
 
         template<typename STREAM>
+            void write(STREAM& s, const linear_constraint & constr) const;
+        template<typename STREAM>
             void write(STREAM& s) const;
 
         bool preprocess();
@@ -124,19 +126,13 @@ namespace LPMP {
         }
 
     template<typename STREAM>
-        void ILP_input::write(STREAM& s) const
+        void ILP_input::write(STREAM& s, const linear_constraint & constr) const
         {
-            s << "Minimize\n";
-            for(const auto o : var_name_to_index_) {
-                s << (objective(o.second) < 0.0 ? "- " : "+ ") <<  std::abs(objective(o.second)) << " " << o.first << "\n"; 
-            }
-            s << "Subject To\n";
-            for(const auto& ineq : constraints()) {
-                for(const auto term : ineq.variables) {
+            for(const auto term : constr.variables) {
                     s << (term.coefficient < 0.0 ? "- " : "+ ") <<  std::abs(term.coefficient) << " " << var_index_to_name_[term.var] << " "; 
                 }
 
-                switch(ineq.ineq) {
+                switch(constr.ineq) {
                     case inequality_type::smaller_equal:
                         s << " <= ";
                         break;
@@ -150,7 +146,19 @@ namespace LPMP {
                         throw std::runtime_error("inequality type not supported");
                         break;
                 }
-                s << ineq.right_hand_side << "\n";
+                s << constr.right_hand_side << "\n";   
+        }
+
+    template<typename STREAM>
+        void ILP_input::write(STREAM& s) const
+        {
+            s << "Minimize\n";
+            for(const auto o : var_name_to_index_) {
+                s << (objective(o.second) < 0.0 ? "- " : "+ ") <<  std::abs(objective(o.second)) << " " << o.first << "\n"; 
+            }
+            s << "Subject To\n";
+            for(const auto& constr : constraints()) {
+                write(s, constr);
             }
             s << "Bounds\n";
             s << "Binaries\n";

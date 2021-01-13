@@ -10,11 +10,15 @@ R"(Minimize
 x1 + 2*x2 + 1.5 * x3 - 0.5*x4 - x5
 Subject To
 x1 + 2*x2 + 3 * x3 - 5*x4 - x5 >= 1
+Bounds
+ x1 <= 1
+ x2 >= 0
 End)";
 
 int main(int argc, char** argv)
 {
     const ILP_input input = ILP_parser::parse_string(ILP_example);
+
     test(input.nr_variables() == 5);
     test(input.var_exists("x1"));
     test(input.var_exists("x2"));
