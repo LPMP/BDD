@@ -58,10 +58,8 @@ namespace LPMP {
             assert(std::distance(begin,end) >= 1);
             int d = std::gcd(right_hand_side, *begin);
             for(auto it = begin+1; it != end; ++it)
-            {
-                assert(*it != 0);
-                d = std::gcd(d, *it);
-            }
+                if(*it != 0)
+                    d = std::gcd(d, *it);
 
             std::vector<int> c;
             c.reserve(std::distance(begin, end) + 1);
