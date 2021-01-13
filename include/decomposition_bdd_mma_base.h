@@ -56,20 +56,22 @@ namespace LPMP {
 
                 // TODO: possibly not needed?
                 // we first write Lagrange multipliers that need to be synchronized via the queue in this cache in order to save synchronization calls
-                std::vector<Lagrange_multiplier> queue_cache;
-                std::vector<size_t> queue_cache_offset;
-                size_t queue_cache_offset_counter;
+                //std::vector<Lagrange_multiplier> queue_cache;
+                //std::vector<size_t> queue_cache_offset;
+                //size_t queue_cache_offset_counter;
 
                 // write Lagrange multipliers into queue cache
-                template<typename ITERATOR>
-                    void write_to_cache(const size_t interval_nr, size_t offset, ITERATOR begin, ITERATOR end);
+                //template<typename ITERATOR>
+                //    void write_to_cache(const size_t interval_nr, size_t offset, ITERATOR begin, ITERATOR end);
 
                 // write from cache to queue
+                //template<typename ITERATOR>
+                //    size_t write_to_queue(ITERATOR it);
                 template<typename ITERATOR>
-                    size_t write_to_queue(ITERATOR it);
+                    void write_to_queue(const size_t node_nr, ITERATOR begin, ITERATOR end);
 
-                void init_cache(const std::vector<endpoint>& endpoints);
-                void reset_cache();
+                //void init_cache(const std::vector<endpoint>& endpoints);
+                //void reset_cache();
             };
 
             struct bdd_sub_base {
@@ -89,8 +91,8 @@ namespace LPMP {
             std::unique_ptr<bdd_sub_base[]> bdd_bases;
             double intra_interval_message_passing_weight;
 
-            void flush_cache_forward(const size_t interval_nr);
-            void flush_cache_backward(const size_t interval_nr);
+            //void flush_cache_forward(const size_t interval_nr);
+            //void flush_cache_backward(const size_t interval_nr);
     };
 
 }

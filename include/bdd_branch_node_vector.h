@@ -225,7 +225,7 @@ namespace LPMP {
             std::vector<size_t> bdd_branch_node_offsets_; // offsets into where bdd branch nodes belonging to a variable start 
             std::vector<size_t> bdd_branch_node_group_offsets_; // offsets into where bdd branch nodes belonging to a variable group start 
             std::vector<size_t> nr_bdds_;
-            std::vector<size_t> first_bdd_node_indices_; // used for computing lower bound
+            two_dim_variable_array<size_t> first_bdd_node_indices_;  // used for computing lower bound
             double lower_bound_ = -std::numeric_limits<double>::infinity();
     };
 
@@ -251,6 +251,7 @@ namespace LPMP {
         bdd_branch_nodes_.clear();
         bdd_branch_node_offsets_.clear();
         nr_bdds_.clear();
+        std::vector<size_t> cur_first_bdd_node_indices;
         first_bdd_node_indices_.clear();
         lower_bound_ = -std::numeric_limits<double>::infinity();
 
@@ -284,6 +285,7 @@ namespace LPMP {
 
         for(size_t bdd_index=0; bdd_index<bdd_storage_.nr_bdds(); ++bdd_index)
         {
+            cur_first_bdd_node_indices.clear();
             const size_t first_stored_bdd_node = bdd_storage_.bdd_delimiters()[bdd_index]; 
             const size_t last_stored_bdd_node = bdd_storage_.bdd_delimiters()[bdd_index+1];
             for(size_t stored_bdd_node_index=first_stored_bdd_node; stored_bdd_node_index<last_stored_bdd_node; ++stored_bdd_node_index)
@@ -294,7 +296,7 @@ namespace LPMP {
                 ++bdd_branch_nodes_counter[v];
 
                 if(v == bdd_storage_.bdd_nodes()[last_stored_bdd_node-1].variable)
-                    first_bdd_node_indices_.push_back(bdd_branch_index);
+                    cur_first_bdd_node_indices.push_back(bdd_branch_index);
 
                 if(stored_bdd.low == bdd_storage::bdd_node::terminal_0)
                 {
@@ -337,9 +339,11 @@ namespace LPMP {
 
                 stored_bdd_index_to_bdd_offset[stored_bdd_node_index] = &bdd_branch_nodes_[bdd_branch_index];
             }
+
+            first_bdd_node_indices_.push_back(cur_first_bdd_node_indices.begin(), cur_first_bdd_node_indices.end()); 
         }
 
-        //assert(first_bdd_node_indices_.size() == bdd_storage_.nr_bdds()); // only holds for non-split BDD storage
+        assert(first_bdd_node_indices_.size() == bdd_storage_.nr_bdds());
 
         nr_bdds_.clear();
         nr_bdds_.reserve(nr_variables());
@@ -363,6 +367,8 @@ namespace LPMP {
             }
             nr_bdds_.push_back(bdd_index_redux.size());
         }
+
+        std::cout << "nr bdd nodes = " << bdd_branch_nodes_.size() << "\n";
     }
 
     inline void bdd_mma_base_vec::forward_step(const size_t var)
@@ -428,6 +434,8 @@ namespace LPMP {
     {
         // TODO: pad to four so that SIMD instructions can be applied?
         const size_t _nr_bdds = nr_bdds(var);
+        if(_nr_bdds == 0)
+            return;
         std::array<float,2> min_marginals[_nr_bdds];
         std::fill(min_marginals, min_marginals + _nr_bdds, std::array<float,2>{std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity()});
 
@@ -436,6 +444,7 @@ namespace LPMP {
 
         std::array<float,2> avg_marginals = average_marginals(min_marginals, _nr_bdds);
 
+        //std::cout << "backward step for var " << var << ", offset = " << bdd_branch_node_offsets_[var] << ", #nodes = " << bdd_branch_nodes_.size() << "\n";
         for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
         {
             bdd_branch_nodes_[i].set_marginal(min_marginals, avg_marginals);
@@ -485,17 +494,21 @@ namespace LPMP {
     inline void bdd_mma_base_vec::compute_lower_bound()
     {
         double lb = 0.0;
-        for(const size_t bdd_node_index : first_bdd_node_indices_)
+        for(size_t i=0; i<first_bdd_node_indices_.size(); ++i)
         {
-            assert(std::isfinite(bdd_branch_nodes_[bdd_node_index].m)); 
-            lb += bdd_branch_nodes_[bdd_node_index].m; // only works if BDDs have one root node (not necessarily so for split BDDs).
+            float bdd_lb = std::numeric_limits<float>::infinity();
+            for(size_t j=0; j<first_bdd_node_indices_.size(i); ++j)
+                bdd_lb = std::min(bdd_branch_nodes_[first_bdd_node_indices_(i,j)].m, bdd_lb);
+            lb += bdd_lb;
         }
 
+        assert(lb >= lower_bound_ - 1e-8);
         lower_bound_ = lb;
     } 
 
     inline void bdd_mma_base_vec::set_cost(const double c, const size_t var)
     {
+        assert(nr_bdds(var) > 0);
         for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
             bdd_branch_nodes_[i].high_cost += c / float(nr_bdds(var));
     }
@@ -503,21 +516,25 @@ namespace LPMP {
     template<typename ITERATOR>
         void bdd_mma_base_vec::update_arc_costs(const size_t first_node, ITERATOR begin, ITERATOR end)
         {
-            assert(first_node + std::distance(begin,end) < bdd_branch_nodes_.size());
+            assert(std::distance(begin,end) % 2 == 0);
+            assert(first_node + std::distance(begin,end)/2 <= bdd_branch_nodes_.size());
             size_t l=first_node;
             for(auto it=begin; it!=end; ++l)
             {
                 assert(bdd_branch_nodes_[first_node].bdd_index == bdd_branch_nodes_[l].bdd_index);
-                bdd_branch_nodes_[l].low_cost += *it++; 
-                bdd_branch_nodes_[l].high_cost += *it++; 
-            } 
+                if(bdd_branch_nodes_[l].offset_low != bdd_branch_node_vec::terminal_0_offset)
+                    bdd_branch_nodes_[l].low_cost += *it; 
+                ++it;
+                if(bdd_branch_nodes_[l].offset_high != bdd_branch_node_vec::terminal_0_offset)
+                    bdd_branch_nodes_[l].high_cost += *it; 
+                ++it;
+            }
         }
 
     inline void bdd_mma_base_vec::get_arc_marginals(const size_t first_node, const size_t last_node, std::vector<double>& arc_marginals)
     {
         arc_marginals.clear();
-        assert(first_node+1 < bdd_branch_nodes_.size());
-        size_t l=first_node;
+        assert(first_node < bdd_branch_nodes_.size());
         for(size_t l=first_node; l<last_node; ++l)
         {
             assert(bdd_branch_nodes_[first_node].bdd_index == bdd_branch_nodes_[l].bdd_index);
@@ -542,6 +559,9 @@ namespace LPMP {
             if(bdd_branch_nodes_[i].bdd_index != bdd_index)
                 break;
         offsets[1] = i; 
+
+        assert(offsets[0] < bdd_branch_node_offsets_[var+1]);
+        assert(offsets[0] < offsets[1]);
 
         return offsets;
     }

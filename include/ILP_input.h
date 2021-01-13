@@ -15,7 +15,7 @@ namespace LPMP {
         public:
         struct weighted_variable {
             int coefficient;
-            std::size_t var;
+            size_t var;
             bool operator<(const weighted_variable& o) const { return var < o.var; }
         };
 
@@ -31,22 +31,22 @@ namespace LPMP {
         enum class variable_order { input, bfs, cuthill, mindegree } variable_order_{variable_order::input};
 
         bool var_exists(const std::string& var) const;
-        std::size_t get_var_index(const std::string& var) const;
-        std::string get_var_name(const std::size_t index) const;
-        std::size_t add_new_variable(const std::string& var);
-        std::size_t get_or_create_variable_index(const std::string& var);
-        std::size_t nr_variables() const;
+        size_t get_var_index(const std::string& var) const;
+        std::string get_var_name(const size_t index) const;
+        size_t add_new_variable(const std::string& var);
+        size_t get_or_create_variable_index(const std::string& var);
+        size_t nr_variables() const;
         void add_to_objective(const double coefficient, const std::string& var);
-        void add_to_objective(const double coefficient, const std::size_t var);
+        void add_to_objective(const double coefficient, const size_t var);
         const std::vector<double>& objective() const { return objective_; };
-        double objective(const std::size_t var) const;
+        double objective(const size_t var) const;
         double objective(const std::string& var) const;
         void begin_new_inequality();
         void set_inequality_type(const inequality_type ineq);
-        void add_to_constraint(const int coefficient, const std::size_t var);
+        void add_to_constraint(const int coefficient, const size_t var);
         void add_to_constraint(const int coefficient, const std::string& var);
         void set_right_hand_side(const int x);
-        std::size_t nr_constraints() const;
+        size_t nr_constraints() const;
         const auto& constraints() const { return linear_constraints_; }
 
         template<typename ITERATOR>
@@ -72,11 +72,11 @@ namespace LPMP {
             std::vector<linear_constraint> linear_constraints_;
             std::vector<double> objective_;
             std::vector<std::string> var_index_to_name_;
-            tsl::robin_map<std::string, std::size_t> var_name_to_index_;
+            tsl::robin_map<std::string, size_t> var_name_to_index_;
 
         private:
-            two_dim_variable_array<std::size_t> variable_adjacency_matrix() const;
-            two_dim_variable_array<std::size_t> bipartite_variable_bdd_adjacency_matrix() const;
+            two_dim_variable_array<size_t> variable_adjacency_matrix() const;
+            two_dim_variable_array<size_t> bipartite_variable_bdd_adjacency_matrix() const;
     };
 
     template<typename ITERATOR>
@@ -118,7 +118,7 @@ namespace LPMP {
                 return std::numeric_limits<double>::infinity();
             assert(std::distance(begin,end) >= objective_.size());
             double cost = 0.0;
-            for(std::size_t i=0; i<objective_.size(); ++i) {
+            for(size_t i=0; i<objective_.size(); ++i) {
                 assert(*(begin+i) == 0 || *(begin+i) == 1);
                 cost += objective_[i] * *(begin+i);
             }
