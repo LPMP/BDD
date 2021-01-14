@@ -568,8 +568,30 @@ namespace LPMP {
 
     inline std::vector<double> bdd_mma_base_vec::total_min_marginals()
     {
+        this->backward_run();
         std::vector<double> total_min_marginals;
+        total_min_marginals.reserve(nr_variables());
+
+        for(size_t var=0; var<this->nr_variables(); ++var)
+        {
+            const size_t _nr_bdds = nr_bdds(var);
+            std::array<float,2> min_marginals[_nr_bdds];
+            std::fill(min_marginals, min_marginals + _nr_bdds, std::array<float,2>{std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity()});
+
+            for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
+                bdd_branch_nodes_[i].min_marginal(min_marginals);
+
+            float total_min_marg = 0.0;
+            for(size_t i=0; i<_nr_bdds; ++i)
+            {
+                assert(std::isfinite(min_marginals[i][0]));
+                assert(std::isfinite(min_marginals[i][1]));
+                total_min_marg += (min_marginals[i][1] - min_marginals[i][0]);
+            }
+            this->forward_step(var);
+
+            total_min_marginals.push_back(total_min_marg); 
+        }
         return total_min_marginals;
-        // TODO implement
-    } 
+    }
 }

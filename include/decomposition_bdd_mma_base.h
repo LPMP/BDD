@@ -18,6 +18,7 @@ namespace LPMP {
         public:
             decomposition_bdd_base(bdd_storage& stor, decomposition_mma_options opt);
 
+            size_t nr_variables() const;
             void set_cost(const double c, const size_t var);
             void backward_run();
             void iteration();

@@ -129,6 +129,7 @@ namespace LPMP {
     {
         this->backward_run();
         std::vector<double> total_min_marginals;
+        total_min_marginals.reserve(this->nr_variables());
         for(std::size_t var=0; var<this->nr_variables(); ++var)
         {
             double total_min_marg = 0;
@@ -138,6 +139,7 @@ namespace LPMP {
                 total_min_marg += (min_marg[1] - min_marg[0]);
                 this->forward_step(var,bdd_index);
             }
+            std::cout << total_min_marg << "\n";
             total_min_marginals.push_back(total_min_marg);
         }
         return total_min_marginals;

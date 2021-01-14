@@ -81,6 +81,11 @@ namespace LPMP {
         }
     }
 
+    size_t decomposition_bdd_base::nr_variables() const
+    {
+        return bdd_bases[0].base.nr_variables();
+    }
+
     void decomposition_bdd_base::set_cost(const double c, const size_t var)
     {
         assert(var < costs.size());
@@ -460,9 +465,24 @@ namespace LPMP {
 
     std::vector<double> decomposition_bdd_base::total_min_marginals()
     {
-        std::vector<double> total_min_marginals;
+        for(size_t i=0; i<intervals.nr_intervals(); ++i)
+        {
+            bdd_bases[i].read_in_Lagrange_multipliers(bdd_bases[i].forward_queue);
+            bdd_bases[i].read_in_Lagrange_multipliers(bdd_bases[i].backward_queue);
+        }
+
+        std::vector<double> total_min_marginals(nr_variables(), 0.0);
+//#pragma omp parallel for
+        for(size_t i=0; i<intervals.nr_intervals(); ++i)
+        {
+            const auto intn_total_min_margs = bdd_bases[i].base.total_min_marginals();
+            assert(intn_total_min_margs.size() == total_min_marginals.size());
+//#pragma barrier
+            for(size_t i=0; i<intn_total_min_margs.size(); ++i)
+                total_min_marginals[i] += intn_total_min_margs[i];
+
+        }
         return total_min_marginals;
-        // TODO implement
     }
 
 }
