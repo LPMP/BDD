@@ -201,7 +201,9 @@ namespace LPMP {
         assert(bdd_1 != nullptr);
 
         const int lb = std::max(bdd_0->lb_, bdd_1->lb_ + coeff);
-        const int ub = std::min(bdd_0->ub_, bdd_1->ub_ + coeff);
+        // prevent integer overflow (coefficient is non-negative)
+        const int ub_1 = (std::numeric_limits<int>::max() - coeff < bdd_1->ub_) ? std::numeric_limits<int>::max() : bdd_1->ub_ + coeff;
+        const int ub = std::max(std::min(bdd_0->ub_, ub_1), lb); // ensure that bound-interval is non-empty
 
         lineq_bdd_node node(lb, ub, bdd_0, bdd_1);
         bdd_.levels[level].push_back(node);

@@ -32,7 +32,7 @@ namespace LPMP {
             botsink(std::numeric_limits<int>::min(), -1, nullptr, nullptr)
         {}
 
-        BDD::node_ref convert_to_bdd(BDD::bdd_mgr & bdd_mgr_) const;
+        BDD::node_ref convert_to_lbdd(BDD::bdd_mgr & bdd_mgr_) const;
 
         lineq_bdd_node* root_node;
 
@@ -43,8 +43,10 @@ namespace LPMP {
         std::vector<std::list<lineq_bdd_node>> levels;
     };
 
-    inline BDD::node_ref lineq_bdd::convert_to_bdd(BDD::bdd_mgr & bdd_mgr_) const
+    inline BDD::node_ref lineq_bdd::convert_to_lbdd(BDD::bdd_mgr & bdd_mgr_) const
     {
+        if (root_node == &topsink)
+            return bdd_mgr_.topsink();
         std::vector<std::vector<BDD::node_ref>> bdd_nodes(levels.size());
         tsl::robin_map<lineq_bdd_node const*,size_t> node_refs; 
         for(std::ptrdiff_t l=levels.size()-1; l>=0; --l)
