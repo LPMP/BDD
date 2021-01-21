@@ -206,14 +206,33 @@ namespace LPMP {
     template<typename BDD_OPT_BASE>
         void bdd_mma_srmp_base<BDD_OPT_BASE>::solve(const size_t max_iter, const double tolerance)
         {
-            std::cout << "initial lower bound = " << this->lower_bound() << "\n";
+            const auto start_time = std::chrono::steady_clock::now();
+            double lb_prev = this->lower_bound();
+            double lb_post = lb_prev;
+            std::cout << "initial lower bound = " << lb_prev;
+            auto time = std::chrono::steady_clock::now();
+            std::cout << ", time = " << (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000 << " s";
+            std::cout << "\n";
             for(size_t iter=0; iter<max_iter-1; ++iter)
             {
                 iteration();
-                std::cout << "iteration " << iter << ", lower bound = " << this->lower_bound() << "\n";
+                lb_prev = lb_post;
+                lb_post = this->lower_bound();
+                std::cout << "iteration " << iter << ", lower bound = " << lb_post;
+                time = std::chrono::steady_clock::now();
+                std::cout << ", time = " << (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000 << " s";
+                std::cout << "\n";
+                if (std::abs(lb_prev-lb_post) < std::abs(tolerance*lb_prev))
+                {
+                    std::cout << "Relative progress less than tolerance (" << tolerance << ")\n";
+                    break;
+                }
             }
             bdd_mma_base<BDD_OPT_BASE>::iteration();
-            std::cout << "iteration " << max_iter-1 << ", lower bound = " << this->lower_bound() << "\n";
+            std::cout << "iteration " << max_iter-1 << ", lower bound = " << this->lower_bound();
+            time = std::chrono::steady_clock::now();
+            std::cout << ", time = " << (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000 << " s";
+            std::cout << "\n";
             std::cout << "(last iteration with default averaging)" << std::endl;
             std::cout << "final lower bound = " << this->lower_bound() << "\n";
 

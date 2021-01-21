@@ -116,7 +116,13 @@ namespace LPMP {
 
     void decomposition_bdd_base::solve(const size_t max_iter, const double tolerance)
     {
-        std::cout << "initial lower bound = " << lower_bound() << "\n";
+        const auto start_time = std::chrono::steady_clock::now();
+        double lb_prev = this->lower_bound();
+        double lb_post = lb_prev;
+        std::cout << "initial lower bound = " << lb_prev;
+        auto time = std::chrono::steady_clock::now();
+        std::cout << ", time = " << (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000 << " s";
+        std::cout << "\n";
         
         /*
         for(size_t i=0; i<max_iter; ++i)
@@ -172,7 +178,17 @@ namespace LPMP {
                 bdd_bases[t].base.compute_lower_bound();
             }
             //if(t == 0)
-            std::cout << "iteration " << i << ", lower bound = " << lower_bound() << "\n";
+            lb_prev = lb_post;
+            lb_post = this->lower_bound();
+            std::cout << "iteration " << i << ", lower bound = " << lb_post;
+            time = std::chrono::steady_clock::now();
+            std::cout << ", time = " << (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000 << " s";
+            std::cout << "\n";
+            if (std::abs(lb_prev-lb_post) < std::abs(tolerance*lb_prev))
+            {
+                std::cout << "Relative progress less than tolerance (" << tolerance << ")\n";
+                break;
+            }
         }
 
         backward_run(); // To flush out the Lagrange multiplier queues and recompute final lower bound
