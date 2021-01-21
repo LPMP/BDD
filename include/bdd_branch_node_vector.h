@@ -592,8 +592,8 @@ namespace LPMP {
             lb += bdd_lb;
         }
 
-        assert(lb.value()*0.5 >= lower_bound_ - 1e-8);
-        lower_bound_ = lb.value()*0.5; // TODO: why?
+        assert(lb.value() >= lower_bound_ - 1e-8);
+        lower_bound_ = lb.value();
     } 
 
     inline void bdd_mma_base_vec::set_cost(const double c, const size_t var)
