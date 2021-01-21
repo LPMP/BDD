@@ -23,7 +23,6 @@ namespace LPMP {
             ~decomposition_bdd_mma();
             void set_cost(const double c, const size_t var);
             void backward_run();
-            void iteration();
             void solve(const size_t max_iter);
             double lower_bound();
             std::vector<double> total_min_marginals();

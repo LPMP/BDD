@@ -42,11 +42,6 @@ namespace LPMP {
         pimpl->solve(max_iter);
     }
 
-    void decomposition_bdd_mma::iteration()
-    {
-        pimpl->iteration();
-    }
-
     double decomposition_bdd_mma::lower_bound()
     {
         return pimpl->lower_bound();
