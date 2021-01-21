@@ -139,7 +139,7 @@ namespace LPMP {
                 total_min_marg += (min_marg[1] - min_marg[0]);
                 this->forward_step(var,bdd_index);
             }
-            std::cout << total_min_marg << "\n";
+            // std::cout << total_min_marg << "\n";
             total_min_marginals.push_back(total_min_marg);
         }
         return total_min_marginals;

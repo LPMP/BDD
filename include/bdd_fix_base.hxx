@@ -76,9 +76,6 @@ namespace LPMP {
         public:
             using bdd_base<bdd_variable_fix, bdd_branch_node_fix>::bdd_base;
 
-            enum variable_order { marginals_absolute = 0, marginals_up = 1, marginals_down = 2, marginals_reduction = 3};
-            enum variable_value { marginal = 0, reduction = 1, one = 2, zero = 3};
-
             bool fix_variables();
 
             bool fix_variables(const std::vector<size_t> & indices, const std::vector<char> & values);
@@ -91,9 +88,8 @@ namespace LPMP {
             void count_backward_run(ptrdiff_t first_var);
 
             void init_pointers();
+            void set_options(bdd_fix_options opts) { options_ = opts; };
             void set_total_min_marginals(const std::vector<double> total_min_marginals) { total_min_marginals_ = total_min_marginals; };
-            void set_var_order(const variable_order var_order) { var_order_ = var_order; };
-            void set_var_value(const variable_value var_value) { var_value_ = var_value; };
 
             void revert_changes(const size_t target_log_size);
 
@@ -108,8 +104,7 @@ namespace LPMP {
             void remove_outgoing_high_arc(bdd_branch_node_fix & bdd_node);
 
             std::vector<double> total_min_marginals_;
-            variable_order var_order_;
-            variable_value var_value_;
+            bdd_fix_options options_;
             std::vector<char> primal_solution_;
             std::stack<log_entry, std::deque<log_entry>> log_;
     };
@@ -556,13 +551,13 @@ namespace LPMP {
             return total_min_marginals_[a] > total_min_marginals_[b];
         };
 
-        if (var_order_ == variable_order::marginals_absolute)
+        if (options_.var_order == bdd_fix_options::variable_order::marginals_absolute)
             std::sort(variables.begin(), variables.end(), order_abs);
-        else if (var_order_ == variable_order::marginals_up)
+        else if (options_.var_order == bdd_fix_options::variable_order::marginals_up)
             std::sort(variables.begin(), variables.end(), order_up);
-        else if (var_order_ == variable_order::marginals_down)
+        else if (options_.var_order == bdd_fix_options::variable_order::marginals_down)
             std::sort(variables.begin(), variables.end(), order_down);
-        else if (var_order_ == variable_order::marginals_reduction)
+        else if (options_.var_order == bdd_fix_options::variable_order::marginals_reduction)
             std::sort(variables.begin(), variables.end(), order_reduction);
         else
             std::sort(variables.begin(), variables.end(), order_up);
@@ -571,13 +566,13 @@ namespace LPMP {
         for (size_t i = 0; i < variables.size(); i++)
         {
             char val;
-            if (var_value_ == variable_value::marginal)
+            if (options_.var_value == bdd_fix_options::variable_value::marginal)
                 val = (total_min_marginals_[variables[i]] < eps) ? 1 : 0;
-            else if (var_value_ == variable_value::reduction)
+            else if (options_.var_value == bdd_fix_options::variable_value::reduction)
                 val = (sign(reduction_coeffs[i]) < 0) ? 1 : 0;
-            else if (var_value_ == variable_value::one)
+            else if (options_.var_value == bdd_fix_options::variable_value::one)
                 val = 1;
-            else if (var_value_ == variable_value::zero)
+            else if (options_.var_value == bdd_fix_options::variable_value::zero)
                 val = 0;
             else
                 val = (total_min_marginals_[variables[i]] < eps) ? 1 : 0;

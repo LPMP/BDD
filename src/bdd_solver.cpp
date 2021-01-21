@@ -57,7 +57,10 @@ namespace LPMP {
             ->transform(CLI::CheckedTransformer(variable_order_map, CLI::ignore_case));
 
 
-        app.add_option("-m, --max_iter", max_iter, "maximal number of iterations, default value = 1000")
+        app.add_option("-m, --max_iter", max_iter, "maximal number of iterations, default value = 10000")
+            ->check(CLI::PositiveNumber);
+
+        app.add_option("-t, --tolerance", tolerance, "lower bound relative progress tolerance, default value = 1e-08")
             ->check(CLI::PositiveNumber);
 
         enum class bdd_solver_impl { mma, mma_srmp, mma_agg, decomposition_mma, anisotropic_mma, mma_vec } bdd_solver_impl_;
@@ -76,18 +79,26 @@ namespace LPMP {
 
         bool primal_rounding = false;
         app.add_flag("-p, --primal", primal_rounding, "primal rounding flag");
-        int fixing_var_order_ = 1;
-        std::unordered_map<std::string, int> fixing_var_order_map{{"marg_abs",0},{"marg_up",1},{"marg_down",2},{"marg_red",3}};
-        int fixing_var_value_ = 0;
-        std::unordered_map<std::string, int> fixing_var_value_map{{"marg",0},{"red",1},{"one",2},{"zero",3}};
-        if (primal_rounding)
-        {
-            // TODO fix adoption of options (current code fails to change default values)
-            app.add_option("--fixing_order", fixing_var_order_, "variable order for primal heuristic, default value = marg_up")
-                ->transform(CLI::CheckedTransformer(fixing_var_order_map, CLI::ignore_case));
-            app.add_option("--fixing_value", fixing_var_value_, "preferred variable value for primal heuristic, default value = marg")
-                ->transform(CLI::CheckedTransformer(fixing_var_value_map, CLI::ignore_case));
-        }
+        bdd_fix_options fixing_options_;
+        using fix_order = bdd_fix_options::variable_order;
+        using fix_value = bdd_fix_options::variable_value;
+        std::unordered_map<std::string, fix_order> fixing_var_order_map{{"marg_abs",fix_order::marginals_absolute},{"marg_up",fix_order::marginals_up},{"marg_down",fix_order::marginals_down},{"marg_red",fix_order::marginals_reduction}};
+        std::unordered_map<std::string, fix_value> fixing_var_value_map{{"marg",fix_value::marginal},{"red",fix_value::reduction},{"one",fix_value::one},{"zero",fix_value::zero}};
+
+        app.callback([&app, &primal_rounding, &fixing_options_, &fixing_var_order_map, &fixing_var_value_map]() {
+            CLI::App solver_app;
+            if (primal_rounding)
+            {
+                fix_order fixing_var_order = fix_order::marginals_up;
+                fix_value fixing_var_value = fix_value::marginal;
+                app.add_option("--fixing_order", fixing_var_order, "variable order for primal heuristic, default value = marg_up")
+                    ->transform(CLI::CheckedTransformer(fixing_var_order_map, CLI::ignore_case));
+                app.add_option("--fixing_value", fixing_var_value, "preferred variable value for primal heuristic, default value = marg")
+                    ->transform(CLI::CheckedTransformer(fixing_var_value_map, CLI::ignore_case));
+                solver_app.parse(app.remaining_for_passthrough());
+                fixing_options_ = bdd_fix_options{fixing_var_order, fixing_var_value};
+            }
+        });
 
         bool statistics = false;
         solver_group->add_flag("--statistics", statistics, "statistics of the problem");
@@ -191,7 +202,7 @@ namespace LPMP {
 
         if (primal_rounding)
         {
-            primal_heuristic = std::move(bdd_fix(stor, fixing_var_order_, fixing_var_value_));
+            primal_heuristic = std::move(bdd_fix(stor, fixing_options_));
             std::cout << "constructed primal heuristic\n";
         }
     }
@@ -222,7 +233,7 @@ namespace LPMP {
     void bdd_solver::solve()
     {
         return std::visit([&](auto&& s) {
-                s.solve(max_iter);
+                s.solve(max_iter, tolerance);
             }, *solver);
     }
 

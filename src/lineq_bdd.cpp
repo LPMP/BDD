@@ -14,7 +14,7 @@ namespace LPMP {
     {
         assert(level < rests.size());
         const int slack = rhs - path_cost;
-        const int rest = rests[level];
+        const long int rest = rests[level];
 
         // check sink conditions
         switch (ineq_type)

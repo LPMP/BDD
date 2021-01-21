@@ -53,10 +53,10 @@ namespace LPMP {
         pimpl->mma.iteration();
     }
 
-    void bdd_mma_anisotropic::solve(const size_t max_iter)
+    void bdd_mma_anisotropic::solve(const size_t max_iter, const double tolerance)
     {
         MEASURE_FUNCTION_EXECUTION_TIME;
-        pimpl->mma.solve(max_iter);
+        pimpl->mma.solve(max_iter, tolerance);
     }
 
     double bdd_mma_anisotropic::lower_bound()

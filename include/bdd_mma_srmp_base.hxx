@@ -17,7 +17,7 @@ namespace LPMP {
             void min_marginal_averaging_forward_SRMP();
             void min_marginal_averaging_backward_SRMP();
             void iteration();
-            void solve(const size_t max_iter);
+            void solve(const size_t max_iter, const double tolerance);
 
         protected: 
             template <typename ITERATOR>
@@ -204,7 +204,7 @@ namespace LPMP {
     }
 
     template<typename BDD_OPT_BASE>
-        void bdd_mma_srmp_base<BDD_OPT_BASE>::solve(const size_t max_iter)
+        void bdd_mma_srmp_base<BDD_OPT_BASE>::solve(const size_t max_iter, const double tolerance)
         {
             std::cout << "initial lower bound = " << this->lower_bound() << "\n";
             for(size_t iter=0; iter<max_iter-1; ++iter)

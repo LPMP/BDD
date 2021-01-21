@@ -16,7 +16,7 @@ namespace LPMP {
             void set_cost(const double c, const size_t var);
             double lower_bound();
             std::vector<double> total_min_marginals();
-            void solve(const size_t max_iter);
+            void solve(const size_t max_iter, const double tolerance);
             void backward_run(); 
         private:
 
