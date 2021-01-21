@@ -14,6 +14,13 @@ namespace LPMP {
                 fix.init_pointers();
             };
 
+            impl(bdd_storage& bdd_storage_, bdd_fix_options opts)
+                : fix(bdd_storage_)
+            {
+                fix.init_pointers();
+                fix.set_options(opts);
+            };
+
             bdd_fix_base_type fix;
     };
 
@@ -23,11 +30,10 @@ namespace LPMP {
         pimpl = std::make_unique<impl>(stor);
     }
 
-    bdd_fix::bdd_fix(bdd_storage& stor, const int var_order, const int var_value) 
-    : bdd_fix(stor)
+    bdd_fix::bdd_fix(bdd_storage& stor, bdd_fix_options opts) 
     {
-        set_var_order(var_order);
-        set_var_value(var_value);
+        MEASURE_FUNCTION_EXECUTION_TIME; 
+        pimpl = std::make_unique<impl>(stor, opts);
     }
 
     bdd_fix::bdd_fix(bdd_fix&& o)
@@ -42,16 +48,6 @@ namespace LPMP {
 
     bdd_fix::~bdd_fix()
     {}
-
-    void bdd_fix::set_var_order(const int var_order)
-    {
-        pimpl->fix.set_var_order(static_cast<bdd_fix_base::variable_order>(var_order)); 
-    }
-
-    void bdd_fix::set_var_value(const int var_value)
-    {
-        pimpl->fix.set_var_value(static_cast<bdd_fix_base::variable_value>(var_value));
-    }
  
     bool bdd_fix::round(const std::vector<double> total_min_marginals)
     {
