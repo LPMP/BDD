@@ -133,6 +133,8 @@ namespace LPMP {
 #pragma omp parallel for
             for(size_t t=0; t<intervals.nr_intervals(); ++t)
             {
+                min_marginal_averaging_forward(t);
+                /*
                 if(i % 2 == 0 && t % 2 == 0)
                     min_marginal_averaging_forward(t);
                 else if(i % 2 == 0 && t % 2 == 1)
@@ -144,10 +146,13 @@ namespace LPMP {
                     assert(i % 2 == 1 && t % 2 == 1);
                     min_marginal_averaging_forward(t);
                 }
+                */
             }
 #pragma omp parallel for
             for(size_t t=0; t<intervals.nr_intervals(); ++t)
             {
+                min_marginal_averaging_backward(t);
+                /*
                 if(i % 2 == 0 && t % 2 == 0)
                     min_marginal_averaging_backward(t);
                 else if(i % 2 == 0 && t % 2 == 1)
@@ -159,6 +164,7 @@ namespace LPMP {
                     assert(i % 2 == 1 && t % 2 == 1);
                     min_marginal_averaging_backward(t);
                 }
+                */
             }
 #pragma omp parallel for
             for(size_t t=0; t<intervals.nr_intervals(); ++t)
