@@ -2,9 +2,11 @@
 
 #include <numeric>
 #include <list>
+#include <stack>
 #include <vector>
 #include <tsl/robin_map.h>
 #include "bdd.h"
+#include "ILP_input.h"
 #include <iostream> // temporary
 
 namespace LPMP {
@@ -17,69 +19,143 @@ namespace LPMP {
         {}
 
         int lb_;
-        int ub_;
+        int ub_; // initially also serves as cost of path from root
 
         lineq_bdd_node* zero_kid_;
         lineq_bdd_node* one_kid_;
     };
 
-    struct lineq_bdd {
+    // Implementation of BDD construction from a linear inequality/equation (Behle, 2007)
+    class lineq_bdd {
+        public:
 
-        lineq_bdd() {}
-        lineq_bdd(lineq_bdd & other) = delete;
-        lineq_bdd(const size_t dim) : inverted(dim), levels(dim),
-            topsink(0, std::numeric_limits<int>::max(), nullptr, nullptr), 
-            botsink(std::numeric_limits<int>::min(), -1, nullptr, nullptr)
-        {}
+            lineq_bdd() : topsink(0, std::numeric_limits<int>::max(), nullptr, nullptr), 
+                botsink(std::numeric_limits<int>::min(), -1, nullptr, nullptr)
+            {}
+            lineq_bdd(lineq_bdd & other) = delete;
 
-        BDD::node_ref convert_to_bdd(BDD::bdd_mgr & bdd_mgr_) const;
+            void build_from_inequality(const std::vector<int> coefficients, const ILP_input::inequality_type ineq_type, const int right_hand_side);
+            template<typename LEFT_HAND_SIDE_ITERATOR>
+                void build_from_inequality(LEFT_HAND_SIDE_ITERATOR begin, LEFT_HAND_SIDE_ITERATOR end, const ILP_input::inequality_type ineq, const int right_hand_side);
+            BDD::node_ref convert_to_lbdd(BDD::bdd_mgr & bdd_mgr_) const;
 
-        lineq_bdd_node* root_node;
+            template<typename COEFF_ITERATOR>
+                static std::tuple< std::vector<int>, ILP_input::inequality_type >
+                normal_form(COEFF_ITERATOR begin, COEFF_ITERATOR end, const ILP_input::inequality_type ineq, const int right_hand_side);
 
-        std::vector<char> inverted; // flags inverted variables
+        private:
 
-        lineq_bdd_node topsink;
-        lineq_bdd_node botsink;
-        std::vector<std::list<lineq_bdd_node>> levels;
+            lineq_bdd_node* build_bdd_node(const int path_cost, const unsigned int level, const ILP_input::inequality_type ineq_type);
+
+            std::vector<char> inverted; // flags inverted variables
+            std::vector<int> coefficients;
+            std::vector<int> rests;
+            int rhs;
+
+            lineq_bdd_node* root_node;
+            std::vector<std::list<lineq_bdd_node>> levels;
+            lineq_bdd_node topsink;
+            lineq_bdd_node botsink;
     };
 
-    inline BDD::node_ref lineq_bdd::convert_to_bdd(BDD::bdd_mgr & bdd_mgr_) const
-    {
-        std::vector<std::vector<BDD::node_ref>> bdd_nodes(levels.size());
-        tsl::robin_map<lineq_bdd_node const*,size_t> node_refs; 
-        for(std::ptrdiff_t l=levels.size()-1; l>=0; --l)
+
+    template<typename COEFF_ITERATOR>
+        std::tuple< std::vector<int>, ILP_input::inequality_type >
+        lineq_bdd::normal_form(COEFF_ITERATOR begin, COEFF_ITERATOR end, const ILP_input::inequality_type ineq, const int right_hand_side)
         {
-            for(auto it = levels[l].begin(); it != levels[l].end(); it++)
+            assert(std::distance(begin,end) >= 1);
+            int d = std::gcd(right_hand_side, *begin);
+            for(auto it = begin+1; it != end; ++it)
+                if(*it != 0)
+                    d = std::gcd(d, *it);
+
+            std::vector<int> c;
+            c.reserve(std::distance(begin, end) + 1);
+            c.push_back(right_hand_side/d);
+            for(auto it = begin; it != end; ++it)
+                c.push_back(*it/d);
+
+            if(ineq == ILP_input::inequality_type::greater_equal)
+                for(auto& x : c)
+                    x *= -1.0;
+
+            return {c, ineq != ILP_input::inequality_type::greater_equal ? ineq : ILP_input::inequality_type::smaller_equal};
+        }
+
+
+    template<typename LEFT_HAND_SIDE_ITERATOR>
+        void lineq_bdd::build_from_inequality(LEFT_HAND_SIDE_ITERATOR begin, LEFT_HAND_SIDE_ITERATOR end, const ILP_input::inequality_type ineq, const int right_hand_side)
+        {
+            auto [nf, ineq_nf] = normal_form(begin, end, ineq, right_hand_side);
+
+            const size_t dim = nf.size() - 1;
+            inverted = std::vector<char>(dim);
+            levels = std::vector<std::list<lineq_bdd_node>>(dim);
+
+            rhs = nf[0];
+            coefficients = std::vector<int>(nf.begin()+1, nf.end());
+
+            // transform to nonnegative coefficients
+            for (size_t i = 0; i < dim; i++)
             {
-                auto& lbdd = *it;
-                auto get_node = [&](lineq_bdd_node const* ptr) {
-                    if(ptr == &botsink)
-                        return bdd_mgr_.botsink();
-                    else if(ptr == &topsink)
-                        return bdd_mgr_.topsink();
-                    else
-                    {
-                        auto ref = node_refs.find(ptr);
-                        if (ref != node_refs.end())
-                        {
-                            assert(ref->second < bdd_nodes[l+1].size());
-                            return bdd_nodes[l+1][ref->second];
-                        }
-                        else
-                            throw std::runtime_error("node reference not found");
-                    }
-                };
-                BDD::node_ref zero_bdd_node = get_node(lbdd.zero_kid_);
-                BDD::node_ref one_bdd_node = get_node(lbdd.one_kid_);
-                if (inverted[l])
-                    bdd_nodes[l].push_back(bdd_mgr_.ite_rec(bdd_mgr_.projection(l), one_bdd_node, zero_bdd_node));
-                else
-                    bdd_nodes[l].push_back(bdd_mgr_.ite_rec(bdd_mgr_.projection(l), zero_bdd_node, one_bdd_node));
-                node_refs.insert(std::make_pair(&lbdd, bdd_nodes[l].size()-1));
+                if (coefficients[i] < 0)
+                {
+                    rhs -= coefficients[i];
+                    coefficients[i] = -coefficients[i];
+                    inverted[i] = 1;
+                }
+            }
+
+            rests = std::vector<int>(dim+1);
+            rests[0] = std::accumulate(coefficients.begin(), coefficients.end(), 0);
+            for (size_t i = 0; i < coefficients.size(); i++)
+                rests[i+1] = rests[i] - coefficients[i];
+
+            unsigned int level = 0;
+            root_node = build_bdd_node(0, level, ineq_nf);
+            if (root_node == &topsink || root_node == &botsink)
+                return;
+            
+            std::stack<lineq_bdd_node*> node_stack;
+            node_stack.push(root_node);
+
+            while (!node_stack.empty())
+            {
+                lineq_bdd_node* current_node = node_stack.top();
+                assert(level < dim);
+                const int coeff = coefficients[level];
+
+                if (current_node->zero_kid_ == nullptr) // build zero child
+                {
+                    current_node->zero_kid_ = build_bdd_node(current_node->ub_ + 0, level+1, ineq_nf);
+                    if (current_node->zero_kid_ == &botsink || current_node->zero_kid_ == &topsink)
+                        continue;
+                    node_stack.push(current_node->zero_kid_);
+                    level++;
+                }
+                else if (current_node->one_kid_ == nullptr) // build one child
+                {
+                    current_node->one_kid_ = build_bdd_node(current_node->ub_ + coeff, level+1, ineq_nf);
+                    if (current_node->one_kid_ == &botsink || current_node->one_kid_ == &topsink)
+                        continue;
+                    node_stack.push(current_node->one_kid_);
+                    level++;
+                }
+                else // set bounds and go to parent
+                {
+                    auto* bdd_0 = current_node->zero_kid_;
+                    auto* bdd_1 = current_node->one_kid_;
+                    const int lb = std::max(bdd_0->lb_, bdd_1->lb_ + coeff);
+                    // prevent integer overflow (coefficient is non-negative)
+                    const int ub_1 = (std::numeric_limits<int>::max() - coeff < bdd_1->ub_) ? std::numeric_limits<int>::max() : bdd_1->ub_ + coeff;
+                    const int ub = std::max(std::min(bdd_0->ub_, ub_1), lb); // ensure that bound-interval is non-empty
+                    current_node->lb_ = lb;
+                    current_node->ub_ = ub;
+                    node_stack.pop();
+                    level--;
+                }
             }
         }
-        assert(bdd_nodes[0].size() == 1);
-        return bdd_nodes[0][0];
-    }
+
 
 }
