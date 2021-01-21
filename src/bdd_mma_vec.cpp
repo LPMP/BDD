@@ -44,10 +44,10 @@ namespace LPMP {
         pimpl->mma.backward_run();
     }
 
-    void bdd_mma_vec::solve(const size_t max_iter)
+    void bdd_mma_vec::solve(const size_t max_iter, const double tolerance)
     {
         MEASURE_FUNCTION_EXECUTION_TIME;
-        pimpl->mma.solve(max_iter);
+        pimpl->mma.solve(max_iter, tolerance);
     }
 
     double bdd_mma_vec::lower_bound()

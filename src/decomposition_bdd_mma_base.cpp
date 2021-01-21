@@ -114,7 +114,7 @@ namespace LPMP {
         }
     }
 
-    void decomposition_bdd_base::solve(const size_t max_iter)
+    void decomposition_bdd_base::solve(const size_t max_iter, const double tolerance)
     {
         std::cout << "initial lower bound = " << lower_bound() << "\n";
         

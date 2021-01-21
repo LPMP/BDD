@@ -49,7 +49,7 @@ namespace LPMP {
 
             std::vector<char> inverted; // flags inverted variables
             std::vector<int> coefficients;
-            std::vector<int> rests;
+            std::vector<long int> rests;
             int rhs;
 
             lineq_bdd_node* root_node;
@@ -106,7 +106,7 @@ namespace LPMP {
                 }
             }
 
-            rests = std::vector<int>(dim+1);
+            rests = std::vector<long int>(dim+1);
             rests[0] = std::accumulate(coefficients.begin(), coefficients.end(), 0);
             for (size_t i = 0; i < coefficients.size(); i++)
                 rests[i+1] = rests[i] - coefficients[i];

@@ -217,7 +217,7 @@ namespace LPMP {
             void compute_lower_bound_after_backward_pass(); 
 
             std::vector<double> total_min_marginals();
-            void solve(const size_t max_iter); 
+            void solve(const size_t max_iter, const double tolerance); 
             double lower_bound() const { return lower_bound_; }
             void set_cost(const double c, const size_t var);
             template<typename ITERATOR>
@@ -507,7 +507,7 @@ namespace LPMP {
         message_passing_state_ = message_passing_state::after_backward_pass;
     }
 
-    inline void bdd_mma_base_vec::solve(const size_t max_iter)
+    inline void bdd_mma_base_vec::solve(const size_t max_iter, const double tolerance)
     {
         std::cout << "initial lower bound = " << lower_bound() << "\n";
         for(size_t iter=0; iter<max_iter; ++iter)

@@ -146,7 +146,7 @@ namespace LPMP {
             void iteration();
             void backward_run();
             void compute_lower_bound(); 
-            void solve(const size_t max_iter); 
+            void solve(const size_t max_iter, const double tolerance); 
             double lower_bound() const { return lower_bound_; }
             void set_cost(const double c, const size_t var);
 
@@ -397,7 +397,7 @@ namespace LPMP {
             min_marginal_averaging_step_backward(i);
     }
 
-    inline void bdd_mma_base_8f::solve(const size_t max_iter)
+    inline void bdd_mma_base_8f::solve(const size_t max_iter, const double tolerance)
     {
         std::cout << "initial lower bound = " << lower_bound() << "\n";
         for(size_t iter=0; iter<max_iter; ++iter)

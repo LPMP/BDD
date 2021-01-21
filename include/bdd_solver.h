@@ -43,7 +43,8 @@ namespace LPMP {
 
             using solver_type = std::variant<bdd_mma, bdd_mma_srmp, bdd_mma_agg, decomposition_bdd_mma, bdd_mma_anisotropic, bdd_mma_vec>;
             std::optional<solver_type> solver;
-            size_t max_iter = 1000;
+            size_t max_iter = 10000;
+            double tolerance = 1e-08;
             std::vector<double> costs;
             std::optional<bdd_fix> primal_heuristic;
     };

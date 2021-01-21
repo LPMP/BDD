@@ -57,8 +57,11 @@ namespace LPMP {
             ->transform(CLI::CheckedTransformer(variable_order_map, CLI::ignore_case));
 
 
-        app.add_option("-m, --max_iter", max_iter, "maximal number of iterations, default value = 1000")
+        app.add_option("-m, --max_iter", max_iter, "maximal number of iterations, default value = 10000")
             ->check(CLI::PositiveNumber);
+
+        app.add_option("-t, --tolerance", tolerance, "lower bound relative progress tolerance, default value = 1e-08")
+            ->check(CLI::NonNegativeNumber);
 
         enum class bdd_solver_impl { mma, mma_srmp, mma_agg, decomposition_mma, anisotropic_mma, mma_vec } bdd_solver_impl_;
         std::unordered_map<std::string, bdd_solver_impl> bdd_solver_impl_map{
@@ -222,7 +225,7 @@ namespace LPMP {
     void bdd_solver::solve()
     {
         return std::visit([&](auto&& s) {
-                s.solve(max_iter);
+                s.solve(max_iter, tolerance);
             }, *solver);
     }
 

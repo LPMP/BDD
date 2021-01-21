@@ -25,7 +25,7 @@ namespace LPMP {
             void set_cost(const double c, const size_t var);
             void backward_run();
             void iteration();
-            void solve(const size_t max_iter);
+            void solve(const size_t max_iter, const double tolerance);
             double lower_bound();
             std::vector<double> total_min_marginals();
 
@@ -241,7 +241,7 @@ namespace LPMP {
         }
     }
 
-    void decomposition_bdd_base::solve(const size_t max_iter)
+    void decomposition_bdd_base::solve(const size_t max_iter, const double tolerance)
     {
         std::cout << "initial lower bound = " << lower_bound() << "\n";
         
