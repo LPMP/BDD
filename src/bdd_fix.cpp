@@ -51,7 +51,6 @@ namespace LPMP {
  
     bool bdd_fix::round(const std::vector<double> total_min_marginals)
     {
-        MEASURE_FUNCTION_EXECUTION_TIME;
         pimpl->fix.set_total_min_marginals(total_min_marginals);
         return pimpl->fix.fix_variables(); 
     }

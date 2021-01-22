@@ -213,7 +213,8 @@ namespace LPMP {
             auto time = std::chrono::steady_clock::now();
             std::cout << ", time = " << (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000 << " s";
             std::cout << "\n";
-            for(size_t iter=0; iter<max_iter-1; ++iter)
+            size_t iter;
+            for(iter=0; iter<max_iter-1; ++iter)
             {
                 iteration();
                 lb_prev = lb_post;
@@ -229,7 +230,7 @@ namespace LPMP {
                 }
             }
             bdd_mma_base<BDD_OPT_BASE>::iteration();
-            std::cout << "iteration " << max_iter-1 << ", lower bound = " << this->lower_bound();
+            std::cout << "iteration " << iter+1 << ", lower bound = " << this->lower_bound();
             time = std::chrono::steady_clock::now();
             std::cout << ", time = " << (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000 << " s";
             std::cout << "\n";

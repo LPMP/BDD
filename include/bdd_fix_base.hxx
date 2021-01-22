@@ -383,7 +383,7 @@ namespace LPMP {
         size_t max_fixes = this->nr_variables();
         // size_t max_fixes = std::numeric_limits<size_t>::max();
         std::cout << "Search tree node budget: " << max_fixes << std::endl;
-        std::cout << "Searching for feasible solution..." << std::endl;
+        std::cout << "Searching for primal solution..." << std::endl;
 
         while (!variable_fixes.empty())
         {

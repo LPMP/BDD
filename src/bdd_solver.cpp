@@ -60,7 +60,7 @@ namespace LPMP {
         app.add_option("-m, --max_iter", max_iter, "maximal number of iterations, default value = 10000")
             ->check(CLI::PositiveNumber);
 
-        app.add_option("-t, --tolerance", tolerance, "lower bound relative progress tolerance, default value = 1e-08")
+        app.add_option("-t, --tolerance", tolerance, "lower bound relative progress tolerance, default value = 1e-06")
             ->check(CLI::PositiveNumber);
 
         enum class bdd_solver_impl { mma, mma_srmp, mma_agg, decomposition_mma, anisotropic_mma, mma_vec } bdd_solver_impl_;
@@ -145,6 +145,8 @@ namespace LPMP {
             return;
         }
 
+        const auto start_time = std::chrono::steady_clock::now();
+
         // ilp.write(std::cout);
 
         ilp.reorder(variable_order_);
@@ -205,6 +207,10 @@ namespace LPMP {
             primal_heuristic = std::move(bdd_fix(stor, fixing_options_));
             std::cout << "constructed primal heuristic\n";
         }
+
+        auto time = std::chrono::steady_clock::now();
+        std::cout << "setup time = " << (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000 << " s";
+        std::cout << "\n";
     }
 
     bdd_solver::bdd_solver(const std::vector<std::string>& args)
@@ -239,6 +245,7 @@ namespace LPMP {
 
     void bdd_solver::round()
     {
+        MEASURE_FUNCTION_EXECUTION_TIME;
         if (!primal_heuristic)
             return;
 
@@ -250,7 +257,7 @@ namespace LPMP {
 
         std::vector<char> primal_solution = primal_heuristic->primal_solution();
         double upper_bound = std::inner_product(primal_solution.begin(), primal_solution.end(), costs.begin(), 0.0);
-        std::cout << "Upper bound = " << upper_bound << std::endl;
+        std::cout << "Primal solution value: " << upper_bound << std::endl;
     } 
 
     double bdd_solver::lower_bound()

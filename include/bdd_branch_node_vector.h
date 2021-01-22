@@ -509,12 +509,29 @@ namespace LPMP {
 
     inline void bdd_mma_base_vec::solve(const size_t max_iter, const double tolerance)
     {
-        std::cout << "initial lower bound = " << lower_bound() << "\n";
+        const auto start_time = std::chrono::steady_clock::now();
+        double lb_prev = this->lower_bound();
+        double lb_post = lb_prev;
+        std::cout << "initial lower bound = " << lb_prev;
+        auto time = std::chrono::steady_clock::now();
+        std::cout << ", time = " << (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000 << " s";
+        std::cout << "\n";
         for(size_t iter=0; iter<max_iter; ++iter)
         {
             iteration();
-            std::cout << "iteration " << iter << ", lower bound = " << lower_bound() << "\n";
-        } 
+            lb_prev = lb_post;
+            lb_post = this->lower_bound();
+            std::cout << "iteration " << iter << ", lower bound = " << lb_post;
+            time = std::chrono::steady_clock::now();
+            std::cout << ", time = " << (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000 << " s";
+            std::cout << "\n";
+            if (std::abs(lb_prev-lb_post) < std::abs(tolerance*lb_prev))
+            {
+                std::cout << "Relative progress less than tolerance (" << tolerance << ")\n";
+                break;
+            }
+        }
+        std::cout << "final lower bound = " << this->lower_bound() << "\n"; 
     } 
 
     inline void bdd_mma_base_vec::iteration()

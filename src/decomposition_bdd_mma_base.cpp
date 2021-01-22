@@ -103,8 +103,7 @@ namespace LPMP {
 
     void decomposition_bdd_base::backward_run()
     {
-        // TODO: parallelize
- 
+#pragma omp parallel for
         for(std::ptrdiff_t interval_nr=intervals.nr_intervals()-1; interval_nr>=0; --interval_nr)
         {
             bdd_bases[interval_nr].read_in_Lagrange_multipliers(bdd_bases[interval_nr].backward_queue);
@@ -341,6 +340,7 @@ namespace LPMP {
 
     std::vector<double> decomposition_bdd_base::total_min_marginals()
     {
+#pragma omp parallel for
         for(size_t i=0; i<intervals.nr_intervals(); ++i)
         {
             bdd_bases[i].read_in_Lagrange_multipliers(bdd_bases[i].forward_queue);
@@ -348,7 +348,7 @@ namespace LPMP {
         }
 
         std::vector<double> total_min_marginals(nr_variables(), 0.0);
-//#pragma omp parallel for
+// #pragma omp parallel for
         for(size_t i=0; i<intervals.nr_intervals(); ++i)
         {
             const auto intn_total_min_margs = bdd_bases[i].base.total_min_marginals();
