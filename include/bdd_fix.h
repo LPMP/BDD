@@ -8,8 +8,8 @@ namespace LPMP {
     struct bdd_fix_options {
         enum variable_order { marginals_absolute = 0, marginals_up = 1, marginals_down = 2, marginals_reduction = 3};
         enum variable_value { marginal = 0, reduction = 1, one = 2, zero = 3};
-        variable_order var_order;
-        variable_value var_value;
+        variable_order var_order = variable_order::marginals_up;
+        variable_value var_value = variable_value::marginal;
     };
 
     class bdd_fix {

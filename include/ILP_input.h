@@ -129,7 +129,8 @@ namespace LPMP {
         void ILP_input::write(STREAM& s, const linear_constraint & constr) const
         {
             for(const auto term : constr.variables) {
-                    s << (term.coefficient < 0.0 ? "- " : "+ ") <<  std::abs(term.coefficient) << " " << var_index_to_name_[term.var] << " "; 
+                    // s << (term.coefficient < 0.0 ? "- " : "+ ") <<  std::abs(term.coefficient) << " " << var_index_to_name_[term.var] << " "; 
+                    s << (term.coefficient < 0.0 ? "-" : "+") <<  std::abs(term.coefficient) << ", "; 
                 }
 
                 switch(constr.ineq) {

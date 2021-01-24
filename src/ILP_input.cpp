@@ -32,6 +32,8 @@ namespace LPMP {
         var_name_to_index_.insert({var, var_index});
         assert(var_index_to_name_.size() == var_index);
         var_index_to_name_.push_back(var);
+        if(objective_.size() <= var_index) // variables with 0 objective coefficient need not appear in objective line!
+            objective_.resize(var_index+1,0.0);
         return var_index;
     }
 
@@ -55,8 +57,7 @@ namespace LPMP {
 
     void ILP_input::add_to_objective(const double coefficient, const size_t var)
     {
-        if(objective_.size() <= var)
-            objective_.resize(var+1,0.0);
+        assert(var < objective_.size());
         objective_[var] += coefficient;
     }
 

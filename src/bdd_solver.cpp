@@ -249,6 +249,8 @@ namespace LPMP {
         if (!primal_heuristic)
             return;
 
+        std::cout << "Retrieving total min-marginals..." << std::endl;
+
         std::vector<double> total_min_marginals = std::visit([](auto&& s) { return s.total_min_marginals(); }, *solver);
         bool success = primal_heuristic->round(total_min_marginals);
 
@@ -256,6 +258,7 @@ namespace LPMP {
             return;
 
         std::vector<char> primal_solution = primal_heuristic->primal_solution();
+        assert(std::all_of(primal_solution.begin(), primal_solution.end(), [](char x){ return (x >= 0) && (x <= 1);}));
         double upper_bound = std::inner_product(primal_solution.begin(), primal_solution.end(), costs.begin(), 0.0);
         std::cout << "Primal solution value: " << upper_bound << std::endl;
     } 
