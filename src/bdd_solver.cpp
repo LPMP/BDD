@@ -77,29 +77,25 @@ namespace LPMP {
         solver_group->add_option("-s, --solver", bdd_solver_impl_, "the name of solver for the relaxation")
             ->transform(CLI::CheckedTransformer(bdd_solver_impl_map, CLI::ignore_case));
 
+
         bool primal_rounding = false;
-        app.add_flag("-p, --primal", primal_rounding, "primal rounding flag");
+        auto primal_arg = app.add_flag("-p, --primal", primal_rounding, "primal rounding flag");
+
+        auto primal_param_group = app.add_option_group("primal parameters", "parameters for rounding a primal solution");
+        primal_param_group->needs(primal_arg);
+
         bdd_fix_options fixing_options_;
         using fix_order = bdd_fix_options::variable_order;
         using fix_value = bdd_fix_options::variable_value;
+
         std::unordered_map<std::string, fix_order> fixing_var_order_map{{"marg_abs",fix_order::marginals_absolute},{"marg_up",fix_order::marginals_up},{"marg_down",fix_order::marginals_down},{"marg_red",fix_order::marginals_reduction}};
+        primal_param_group->add_option("--fixing_order", fixing_options_.var_order, "variable order for primal heuristic, default value = marg_up")
+            ->transform(CLI::CheckedTransformer(fixing_var_order_map, CLI::ignore_case));
+
         std::unordered_map<std::string, fix_value> fixing_var_value_map{{"marg",fix_value::marginal},{"red",fix_value::reduction},{"one",fix_value::one},{"zero",fix_value::zero}};
-
-        app.callback([&app, &primal_rounding, &fixing_options_, &fixing_var_order_map, &fixing_var_value_map]() {
-            CLI::App solver_app;
-            if (primal_rounding)
-            {
-                fix_order fixing_var_order = fix_order::marginals_up;
-                fix_value fixing_var_value = fix_value::marginal;
-                app.add_option("--fixing_order", fixing_var_order, "variable order for primal heuristic, default value = marg_up")
-                    ->transform(CLI::CheckedTransformer(fixing_var_order_map, CLI::ignore_case));
-                app.add_option("--fixing_value", fixing_var_value, "preferred variable value for primal heuristic, default value = marg")
-                    ->transform(CLI::CheckedTransformer(fixing_var_value_map, CLI::ignore_case));
-                solver_app.parse(app.remaining_for_passthrough());
-                fixing_options_ = bdd_fix_options{fixing_var_order, fixing_var_value};
-            }
-        });
-
+        primal_param_group->add_option("--fixing_value", fixing_options_.var_value, "preferred variable value for primal heuristic, default value = marg")
+            ->transform(CLI::CheckedTransformer(fixing_var_value_map, CLI::ignore_case));
+        
         bool statistics = false;
         solver_group->add_flag("--statistics", statistics, "statistics of the problem");
         solver_group->require_option(1); // either a solver or statistics
@@ -107,6 +103,7 @@ namespace LPMP {
         decomposition_mma_options decomposition_mma_options_;
         app.callback([&app, &bdd_solver_impl_, &decomposition_mma_options_]() {
                 CLI::App solver_app;
+                std::cout << "decomposition_mma callback\n";
 
                 if(bdd_solver_impl_ == bdd_solver_impl::decomposition_mma)
                 {
@@ -204,6 +201,7 @@ namespace LPMP {
 
         if (primal_rounding)
         {
+            std::cout << fixing_options_.var_order << ", " << fixing_options_.var_value << "\n";
             primal_heuristic = std::move(bdd_fix(stor, fixing_options_));
             std::cout << "constructed primal heuristic\n";
         }
