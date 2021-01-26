@@ -1,4 +1,5 @@
 #include "decomposition_bdd_mma_base.h"
+#include "omp.h"
 
 namespace LPMP {
 
@@ -15,9 +16,21 @@ namespace LPMP {
     ////////////////////////////
 
     decomposition_bdd_base::decomposition_bdd_base(bdd_storage& bdd_storage_, decomposition_mma_options opt)
-        : intervals(bdd_storage_.compute_intervals(opt.nr_threads)),
+        : intervals(bdd_storage_.compute_intervals(opt.nr_threads, opt.min_nr_bdd_nodes * (1-opt.force_thread_nr))),
         intra_interval_message_passing_weight(opt.parallel_message_passing_weight)
     {
+        costs.clear();
+        costs.resize(bdd_storage_.nr_variables(), 0.0);
+
+        if(intervals.nr_intervals() == 1)
+        {
+            // use base class alone without decomposition
+            std::cout << "not using decomposition, solve directly.\n";
+            bdd_bases = std::make_unique<bdd_sub_base[]>(1);
+            bdd_bases[0].base.init(bdd_storage_);
+            return; 
+        }
+
         intra_interval_message_passing_weight = 0.5;
         //std::cout << "decomposing BDDs into " << intervals.nr_intervals() << " intervals: ";
         //for(size_t i=0; i<intervals.nr_intervals(); ++i)
@@ -26,7 +39,7 @@ namespace LPMP {
 
         assert(intra_interval_message_passing_weight >= 0 && intra_interval_message_passing_weight <= 1.0);
         const size_t nr_intervals = opt.nr_threads;
-        auto [bdd_storages, duplicated_bdd_variables] = bdd_storage_.split_bdd_nodes(nr_intervals);
+        auto [bdd_storages, duplicated_bdd_variables] = bdd_storage_.split_bdd_nodes(intervals);
 
         //std::cout << "Allocate " << nr_intervals << " bdd bases\n";
         bdd_bases = std::make_unique<bdd_sub_base[]>(nr_intervals);
@@ -70,9 +83,6 @@ namespace LPMP {
             std::sort(bdd_bases[i].forward_endpoints.begin(), bdd_bases[i].forward_endpoints.end(), endpoint_order);
             std::sort(bdd_bases[i].backward_endpoints.begin(), bdd_bases[i].backward_endpoints.end(), endpoint_order);
         }
-
-        costs.clear();
-        costs.resize(bdd_storage_.nr_variables(), 0.0);
     }
 
     size_t decomposition_bdd_base::nr_variables() const

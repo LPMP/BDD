@@ -1,5 +1,6 @@
 #include "bdd_solver.h"
 #include "ILP_parser.h"
+#include <omp.h>
 #include <iomanip>
 #include <memory>
 #include <CLI/CLI.hpp>
@@ -108,17 +109,17 @@ namespace LPMP {
                 if(bdd_solver_impl_ == bdd_solver_impl::decomposition_mma)
                 {
                     std::cout << "use decomposition mma solver\n";
-                    size_t nr_threads = 0;
-                    solver_app.add_option("--nr_threads", nr_threads, "number of threads for simultaneous optimization of the Lagrange decomposition")
+                    solver_app.add_option("--nr_threads", decomposition_mma_options_.nr_threads, "number of threads (up to available nr of available units) for simultaneous optimization of the Lagrange decomposition")
                         ->required()
-                        ->check(CLI::PositiveNumber);
+                        ->check(CLI::Range(2, omp_get_max_threads()));
 
-                    double mp_weight = 1.0;;
-                    solver_app.add_option("--parallel_message_passing_weight", mp_weight , "weight for passing messages between threads")
+                    solver_app.add_flag("--force_thread_nr", decomposition_mma_options_.force_thread_nr , "force the number of threads be as specified, do not choose lower thread number even if subproblems become small");
+
+                    solver_app.add_option("--parallel_message_passing_weight", decomposition_mma_options_.parallel_message_passing_weight, "weight for passing messages between threads")
                         ->check(CLI::Range(0.0,1.0));
 
+
                     solver_app.parse(app.remaining_for_passthrough());
-                    decomposition_mma_options_ = decomposition_mma_options{nr_threads, mp_weight};
                 } 
         });
 
