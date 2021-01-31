@@ -257,6 +257,7 @@ namespace LPMP {
 
         std::vector<char> primal_solution = primal_heuristic->primal_solution();
         assert(std::all_of(primal_solution.begin(), primal_solution.end(), [](char x){ return (x >= 0) && (x <= 1);}));
+        assert(primal_solution.size() == costs.size());
         double upper_bound = std::inner_product(primal_solution.begin(), primal_solution.end(), costs.begin(), 0.0);
         std::cout << "Primal solution value: " << upper_bound << std::endl;
     } 
