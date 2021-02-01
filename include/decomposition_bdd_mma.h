@@ -7,7 +7,9 @@ namespace LPMP {
 
     struct decomposition_mma_options {
         size_t nr_threads; 
-        double parallel_message_passing_weight;
+        bool force_thread_nr = false; // otherwise a smaller number of threads might be used
+        constexpr static size_t min_nr_bdd_nodes = 10000; // TODO: measure good value
+        double parallel_message_passing_weight = 0.5;
     };
 
     class decomposition_bdd_mma {

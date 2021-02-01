@@ -129,25 +129,28 @@ namespace LPMP {
         void ILP_input::write(STREAM& s, const linear_constraint & constr) const
         {
             for(const auto term : constr.variables) {
-                    // s << (term.coefficient < 0.0 ? "- " : "+ ") <<  std::abs(term.coefficient) << " " << var_index_to_name_[term.var] << " "; 
-                    s << (term.coefficient < 0.0 ? "-" : "+") <<  std::abs(term.coefficient) << ", "; 
+                if(term.coefficient != 0.0)
+                {
+                    assert(term.var < var_index_to_name_.size());
+                    s << (term.coefficient < 0.0 ? "- " : "+ ") <<  std::abs(term.coefficient) << " " << var_index_to_name_[term.var] << " "; 
                 }
+            }
 
-                switch(constr.ineq) {
-                    case inequality_type::smaller_equal:
-                        s << " <= ";
-                        break;
-                    case inequality_type::greater_equal:
-                        s << " >= ";
-                        break;
-                    case inequality_type::equal:
-                        s << " = ";
-                        break;
-                    default:
-                        throw std::runtime_error("inequality type not supported");
-                        break;
-                }
-                s << constr.right_hand_side << "\n";   
+            switch(constr.ineq) {
+                case inequality_type::smaller_equal:
+                    s << " <= ";
+                    break;
+                case inequality_type::greater_equal:
+                    s << " >= ";
+                    break;
+                case inequality_type::equal:
+                    s << " = ";
+                    break;
+                default:
+                    throw std::runtime_error("inequality type not supported");
+                    break;
+            }
+            s << constr.right_hand_side << "\n";   
         }
 
     template<typename STREAM>

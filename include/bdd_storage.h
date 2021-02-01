@@ -77,7 +77,7 @@ namespace LPMP {
             size_t interval(const size_t var) const;
             size_t nr_intervals() const; 
         };
-        intervals compute_intervals(const size_t nr_intervals);
+        intervals compute_intervals(const size_t nr_intervals, const size_t min_nr_bdd_nodes = 0);
 
     public:
         // TODO: add hash function
@@ -100,7 +100,7 @@ return interval_1 == o.interval_1 && bdd_index_1 == o.bdd_index_1 && interval_2 
             }
         };
 
-        std::tuple<std::vector<bdd_storage>, tsl::robin_set<duplicate_variable, duplicate_variable_hash>> split_bdd_nodes(const size_t nr_intervals);
+        std::tuple<std::vector<bdd_storage>, tsl::robin_set<duplicate_variable, duplicate_variable_hash>> split_bdd_nodes(const intervals& intn);
 
         // assuming BDDs are laid out in interleaved fashion, give out vector of first and last variables and bdd indices.
         struct bdd_endpoints_ {

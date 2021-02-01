@@ -1,5 +1,6 @@
 #include "bdd_solver.h"
 #include "ILP_parser.h"
+#include <omp.h>
 #include <iomanip>
 #include <memory>
 #include <CLI/CLI.hpp>
@@ -31,6 +32,8 @@ namespace LPMP {
 
     bdd_solver::bdd_solver(int argc, char** argv)
     {
+        MEASURE_FUNCTION_EXECUTION_TIME;
+
         // setup command line arguemnts
         CLI::App app("LPMP BDD solver");
         app.allow_extras();
@@ -111,17 +114,17 @@ namespace LPMP {
                 if(bdd_solver_impl_ == bdd_solver_impl::decomposition_mma)
                 {
                     std::cout << "use decomposition mma solver\n";
-                    size_t nr_threads = 0;
-                    solver_app.add_option("--nr_threads", nr_threads, "number of threads for simultaneous optimization of the Lagrange decomposition")
+                    solver_app.add_option("--nr_threads", decomposition_mma_options_.nr_threads, "number of threads (up to available nr of available units) for simultaneous optimization of the Lagrange decomposition")
                         ->required()
-                        ->check(CLI::PositiveNumber);
+                        ->check(CLI::Range(2, omp_get_max_threads()));
 
-                    double mp_weight = 1.0;;
-                    solver_app.add_option("--parallel_message_passing_weight", mp_weight , "weight for passing messages between threads")
+                    solver_app.add_flag("--force_thread_nr", decomposition_mma_options_.force_thread_nr , "force the number of threads be as specified, do not choose lower thread number even if subproblems become small");
+
+                    solver_app.add_option("--parallel_message_passing_weight", decomposition_mma_options_.parallel_message_passing_weight, "weight for passing messages between threads")
                         ->check(CLI::Range(0.0,1.0));
 
+
                     solver_app.parse(app.remaining_for_passthrough());
-                    decomposition_mma_options_ = decomposition_mma_options{nr_threads, mp_weight};
                 } 
         });
 
@@ -146,8 +149,6 @@ namespace LPMP {
         }
 
         const auto start_time = std::chrono::steady_clock::now();
-
-        // ilp.write(std::cout);
 
         ilp.reorder(variable_order_);
         costs = ilp.objective();
@@ -209,7 +210,7 @@ namespace LPMP {
             std::cout << "constructed primal heuristic\n";
         }
 
-        auto setup_time = (double) std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_time).count() / 1000
+        auto setup_time = (double) std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_time).count() / 1000;
         std::cout << "setup time = " << setup_time << " s";
         std::cout << "\n";
         time_limit -= setup_time;
@@ -245,9 +246,9 @@ namespace LPMP {
             std::cout << "Time limit exceeded." << std::endl;
             return;
         }
-        return std::visit([&](auto&& s) {
+        std::visit([&](auto&& s) {
                 s.solve(max_iter, tolerance);
-            }, *solver);
+                }, *solver);
     }
 
     void bdd_solver::round()

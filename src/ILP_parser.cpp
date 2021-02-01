@@ -193,6 +193,7 @@ namespace LPMP {
         ILP_input parse_string(const std::string& input_string)
         {
             MEASURE_FUNCTION_EXECUTION_TIME;
+            std::cout << input_string << "\n";
             ILP_input ilp;
             tmp_storage tmp;
             tao::pegtl::string_input input(input_string, "ILP input");

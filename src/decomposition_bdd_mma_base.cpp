@@ -1,4 +1,5 @@
 #include "decomposition_bdd_mma_base.h"
+#include "omp.h"
 
 namespace LPMP {
 
@@ -15,10 +16,22 @@ namespace LPMP {
     ////////////////////////////
 
     decomposition_bdd_base::decomposition_bdd_base(bdd_storage& bdd_storage_, decomposition_mma_options opt)
-        : intervals(bdd_storage_.compute_intervals(opt.nr_threads)),
+        : intervals(bdd_storage_.compute_intervals(opt.nr_threads, opt.min_nr_bdd_nodes * (1-opt.force_thread_nr))),
         intra_interval_message_passing_weight(opt.parallel_message_passing_weight)
     {
-        intra_interval_message_passing_weight = 0.5;
+        costs.clear();
+        costs.resize(bdd_storage_.nr_variables(), 0.0);
+
+        if(intervals.nr_intervals() == 1)
+        {
+            // use base class alone without decomposition
+            std::cout << "not using decomposition, solve directly.\n";
+            bdd_bases = std::make_unique<bdd_sub_base[]>(1);
+            bdd_bases[0].base.init(bdd_storage_);
+            return; 
+        }
+
+        //intra_interval_message_passing_weight = 0.5;
         //std::cout << "decomposing BDDs into " << intervals.nr_intervals() << " intervals: ";
         //for(size_t i=0; i<intervals.nr_intervals(); ++i)
         //    std::cout << "[" << intervals.interval_boundaries[i] << "," << intervals.interval_boundaries[i+1] << "), ";
@@ -26,7 +39,7 @@ namespace LPMP {
 
         assert(intra_interval_message_passing_weight >= 0 && intra_interval_message_passing_weight <= 1.0);
         const size_t nr_intervals = opt.nr_threads;
-        auto [bdd_storages, duplicated_bdd_variables] = bdd_storage_.split_bdd_nodes(nr_intervals);
+        auto [bdd_storages, duplicated_bdd_variables] = bdd_storage_.split_bdd_nodes(intervals);
 
         //std::cout << "Allocate " << nr_intervals << " bdd bases\n";
         bdd_bases = std::make_unique<bdd_sub_base[]>(nr_intervals);
@@ -70,9 +83,6 @@ namespace LPMP {
             std::sort(bdd_bases[i].forward_endpoints.begin(), bdd_bases[i].forward_endpoints.end(), endpoint_order);
             std::sort(bdd_bases[i].backward_endpoints.begin(), bdd_bases[i].backward_endpoints.end(), endpoint_order);
         }
-
-        costs.clear();
-        costs.resize(bdd_storage_.nr_variables(), 0.0);
     }
 
     size_t decomposition_bdd_base::nr_variables() const
@@ -122,67 +132,39 @@ namespace LPMP {
         auto time = std::chrono::steady_clock::now();
         std::cout << ", time = " << (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000 << " s";
         std::cout << "\n";
-        
-        /*
-        for(size_t i=0; i<max_iter; ++i)
-        {
-            for(size_t t=0; t<intervals.nr_intervals(); ++t)
-            {
-                this->min_marginal_averaging_forward(t);
-                this->min_marginal_averaging_backward(t);
-            }
-        }
-        */
+        // version where forward and backward passes are executed at
         for(size_t i=0; i<max_iter; ++i)
         {
 #pragma omp parallel for
             for(size_t t=0; t<intervals.nr_intervals(); ++t)
             {
-                min_marginal_averaging_forward(t);
-                /*
-                if(i % 2 == 0 && t % 2 == 0)
+                //min_marginal_averaging_forward(t);
+                if(t % 2 == 0)
                     min_marginal_averaging_forward(t);
-                else if(i % 2 == 0 && t % 2 == 1)
+                else 
                     min_marginal_averaging_backward(t);
-                else if(i % 2 == 1 && t % 2 == 0)
-                    min_marginal_averaging_backward(t);
-                else
-                { 
-                    assert(i % 2 == 1 && t % 2 == 1);
-                    min_marginal_averaging_forward(t);
-                }
-                */
             }
 #pragma omp parallel for
             for(size_t t=0; t<intervals.nr_intervals(); ++t)
             {
-                min_marginal_averaging_backward(t);
-                /*
-                if(i % 2 == 0 && t % 2 == 0)
+                //min_marginal_averaging_backward(t);
+                if(t % 2 == 0)
                     min_marginal_averaging_backward(t);
-                else if(i % 2 == 0 && t % 2 == 1)
-                    min_marginal_averaging_forward(t);
-                else if(i % 2 == 1 && t % 2 == 0)
-                    min_marginal_averaging_forward(t);
                 else
-                { 
-                    assert(i % 2 == 1 && t % 2 == 1);
-                    min_marginal_averaging_backward(t);
-                }
-                */
+                    min_marginal_averaging_forward(t);
             }
 #pragma omp parallel for
             for(size_t t=0; t<intervals.nr_intervals(); ++t)
             {
                 bdd_bases[t].base.compute_lower_bound();
             }
-            //if(t == 0)
             lb_prev = lb_post;
             lb_post = this->lower_bound();
             std::cout << "iteration " << i << ", lower bound = " << lb_post;
             time = std::chrono::steady_clock::now();
             std::cout << ", time = " << (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000 << " s";
             std::cout << "\n";
+            // std::cout << "intra interval weight = " << intra_interval_message_passing_weight << "\n";
             if (std::abs(lb_prev-lb_post) < std::abs(tolerance*lb_prev))
             {
                 std::cout << "Relative progress less than tolerance (" << tolerance << ")\n";
@@ -268,18 +250,26 @@ namespace LPMP {
                 last_interval_nr = e.opposite_interval_nr;
             }
             bdd_bases[interval_nr].base.get_arc_marginals(e.first_node, e.last_node, arc_marginals);
+            for(const auto x : arc_marginals)
+                assert(std::isfinite(x) || x == std::numeric_limits<float>::infinity());
             const double min_arc_cost = *std::min_element(arc_marginals.begin(), arc_marginals.end());
             for(auto& x : arc_marginals)
             {
-                x -= min_arc_cost;
-                x *= -intra_interval_message_passing_weight;
-                assert(x <= 0.0);
+                if(x != std::numeric_limits<float>::infinity())
+                {
+                    x -= min_arc_cost;
+                    assert(x >= 0.0);
+                    x *= -intra_interval_message_passing_weight;
+                }
             }
-            assert(*std::max_element(arc_marginals.begin(), arc_marginals.end()) == 0.0);
             bdd_bases[interval_nr].base.update_arc_costs(e.first_node, arc_marginals.begin(), arc_marginals.end());
 
             for(auto& x : arc_marginals)
-                x *= -1.0;
+            {
+                if(x != std::numeric_limits<float>::infinity())
+                    x *= -1.0;
+                assert(x >= 0.0);
+            }
 
             bdd_bases[e.opposite_interval_nr].forward_queue.write_to_queue(e.first_node_opposite_interval, arc_marginals.begin(), arc_marginals.end());
         }
@@ -314,15 +304,21 @@ namespace LPMP {
             const double min_arc_cost = *std::min_element(arc_marginals.begin(), arc_marginals.end());
             for(auto& x : arc_marginals)
             {
-                x -= min_arc_cost;
-                x *= -intra_interval_message_passing_weight;
-                assert(x <= 0.0);
+                if(x != std::numeric_limits<float>::infinity())
+                {
+                    x -= min_arc_cost;
+                    x *= -intra_interval_message_passing_weight;
+                    assert(x <= 0.0);
+                }
             }
-            assert(*std::max_element(arc_marginals.begin(), arc_marginals.end()) == 0.0);
             bdd_bases[interval_nr].base.update_arc_costs(e.first_node, arc_marginals.begin(), arc_marginals.end());
 
             for(auto& x : arc_marginals)
-                x *= -1.0;
+            {
+                if(x != std::numeric_limits<float>::infinity())
+                    x *= -1.0;
+                assert(x >= 0.0);
+            }
 
             bdd_bases[e.opposite_interval_nr].backward_queue.write_to_queue(e.first_node_opposite_interval, arc_marginals.begin(), arc_marginals.end());
         }

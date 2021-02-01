@@ -107,8 +107,22 @@ namespace LPMP {
     // for BDD decomposition //
     ///////////////////////////
 
-    bdd_storage::intervals bdd_storage::compute_intervals(const size_t nr_intervals)
+    bdd_storage::intervals bdd_storage::compute_intervals(const size_t nr_intervals_, const size_t min_nr_bdd_nodes)
     {
+        // if number of intervals would lead to subproblems that have fewer than min_nr_bdd_nodes, decrease the number of intervals
+        const size_t nr_intervals = [&]() -> size_t {
+            if(bdd_nodes_.size() <= min_nr_bdd_nodes)
+                return 1;
+            else if(min_nr_bdd_nodes * nr_intervals_ >= bdd_nodes_.size())
+                return bdd_nodes_.size() / min_nr_bdd_nodes;
+            return std::min(nr_intervals_, nr_variables());
+        }();
+        assert(nr_intervals > 0 && nr_intervals <= nr_intervals_);
+        std::cout << "nr intervals = " << nr_intervals << ", requested nr intervals = " << nr_intervals_ << ", min nr bdd nodes per interval = " << min_nr_bdd_nodes << "\n";
+
+        if(nr_intervals == 1)
+            return intervals{{}, {}}; 
+
         // partition into intervals with equal number of bdd nodes
         assert(nr_intervals > 1);
         std::vector<size_t> interval_boundaries;
@@ -143,10 +157,10 @@ namespace LPMP {
 
     size_t bdd_storage::intervals::interval(const size_t variable) const
     {
-        assert(variable < this->variable_interval.size());
         assert(interval_boundaries.size() > 2 || interval_boundaries.size() == 0);
         if(interval_boundaries.size() == 0)
             return 0;
+        assert(variable < this->variable_interval.size());
         return variable_interval[variable];
     }
 
@@ -160,15 +174,13 @@ namespace LPMP {
 
     // given bdd storage, split up bdds into nr_intervals sub-bdd_storages. Record where splitting of BDDs is done in second return structure.
     // TODO: do not use nr_bdd_nodes_per_interval in second part, i.e. filling in bdd nodes. bdd_nodes_.size() is enough
-    std::tuple<std::vector<bdd_storage>, tsl::robin_set<bdd_storage::duplicate_variable, bdd_storage::duplicate_variable_hash>> bdd_storage::split_bdd_nodes(const size_t nr_intervals)
+    std::tuple<std::vector<bdd_storage>, tsl::robin_set<bdd_storage::duplicate_variable, bdd_storage::duplicate_variable_hash>> bdd_storage::split_bdd_nodes(const intervals& intn)
     {
         MEASURE_FUNCTION_EXECUTION_TIME;
-        assert(nr_intervals > 1);
-        intervals intn = compute_intervals(nr_intervals);
-        assert(nr_intervals == intn.nr_intervals());
+        assert(intn.nr_intervals() > 1);
 
-        std::vector<size_t> nr_bdd_nodes_per_interval(nr_intervals, 0);
-        std::vector<size_t> nr_bdds_per_interval(nr_intervals, 1);
+        std::vector<size_t> nr_bdd_nodes_per_interval(intn.nr_intervals(), 0);
+        std::vector<size_t> nr_bdds_per_interval(intn.nr_intervals(), 1);
         //std::unordered_set<size_t> active_intervals;
         tsl::robin_set<size_t> active_intervals;
 
@@ -267,8 +279,8 @@ namespace LPMP {
         }
 
         // allocate structures for holding bdd nodes
-        std::vector<bdd_storage> bdd_storages(nr_intervals);
-        for(size_t i=0; i<nr_intervals; ++i)
+        std::vector<bdd_storage> bdd_storages(intn.nr_intervals());
+        for(size_t i=0; i<intn.nr_intervals(); ++i)
         {
             bdd_storages[i].bdd_nodes_.reserve(nr_bdd_nodes_per_interval[i]);
             bdd_storages[i].bdd_delimiters_.reserve(nr_bdds_per_interval[i]);

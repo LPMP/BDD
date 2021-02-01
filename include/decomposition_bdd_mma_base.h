@@ -85,14 +85,10 @@ namespace LPMP {
                 std::vector<endpoint> backward_endpoints;
                 Lagrange_multiplier_queue forward_queue;
                 Lagrange_multiplier_queue backward_queue;
-
             };
 
             std::unique_ptr<bdd_sub_base[]> bdd_bases;
             double intra_interval_message_passing_weight;
-
-            //void flush_cache_forward(const size_t interval_nr);
-            //void flush_cache_backward(const size_t interval_nr);
     };
 
 }

@@ -1,5 +1,3 @@
-#pragma once
-
 #include "lineq_bdd.h"
 
 namespace LPMP {
