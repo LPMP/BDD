@@ -367,7 +367,9 @@ namespace LPMP {
                 stored_bdd_index_to_bdd_offset[stored_bdd_node_index] = &bdd_branch_nodes_[bdd_branch_index];
             }
 
+            assert(cur_first_bdd_node_indices.size() > 0);
             first_bdd_node_indices_.push_back(cur_first_bdd_node_indices.begin(), cur_first_bdd_node_indices.end()); 
+            assert(cur_last_bdd_node_indices.size() > 0);
             last_bdd_node_indices_.push_back(cur_last_bdd_node_indices.begin(), cur_last_bdd_node_indices.end()); 
         }
 
@@ -558,8 +560,12 @@ namespace LPMP {
         MEASURE_FUNCTION_EXECUTION_TIME;
         // TODO: if we already have done a forward_run, we do not need to do it again. Check state!
         message_passing_state_ = message_passing_state::none;
-        for(size_t i=0; i<bdd_branch_nodes_.size(); ++i)
-            bdd_branch_nodes_[i].forward_step();
+        for(size_t bdd_index=0; bdd_index<first_bdd_node_indices_.size(); ++bdd_index)
+            for(size_t j=0; j<first_bdd_node_indices_.size(bdd_index); ++j)
+                bdd_branch_nodes_[first_bdd_node_indices_(bdd_index,j)].m = 0.0;
+
+        for(size_t i=0; i<nr_variables(); ++i)
+            forward_step(i);
         message_passing_state_ = message_passing_state::after_forward_pass;
         compute_lower_bound();
     }
@@ -611,7 +617,7 @@ namespace LPMP {
 
         assert(lb.value() >= lower_bound_ - 1e-8);
         lower_bound_ = lb.value();
-    } 
+    }
 
     inline void bdd_mma_base_vec::set_cost(const double c, const size_t var)
     {

@@ -42,7 +42,7 @@ void test_ILP(const std::string ilp, const double expected_lb, const permutation
                 "--nr_threads", "2",
                 "--force_thread_nr",
                 "--max_iter", "20",
-                "--parallel_message_passing_weight", "1.0"
+                "--parallel_message_passing_weight", "0.5"
                 });
 
         solver.solve();

@@ -32,6 +32,8 @@ namespace LPMP {
 
     bdd_solver::bdd_solver(int argc, char** argv)
     {
+        MEASURE_FUNCTION_EXECUTION_TIME;
+
         // setup command line arguemnts
         CLI::App app("LPMP BDD solver");
         app.allow_extras();
@@ -145,8 +147,6 @@ namespace LPMP {
 
         const auto start_time = std::chrono::steady_clock::now();
 
-        // ilp.write(std::cout);
-
         ilp.reorder(variable_order_);
         costs = ilp.objective();
 
@@ -206,10 +206,6 @@ namespace LPMP {
             primal_heuristic = std::move(bdd_fix(stor, fixing_options_));
             std::cout << "constructed primal heuristic\n";
         }
-
-        auto time = std::chrono::steady_clock::now();
-        std::cout << "setup time = " << (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000 << " s";
-        std::cout << "\n";
     }
 
     bdd_solver::bdd_solver(const std::vector<std::string>& args)
@@ -237,9 +233,9 @@ namespace LPMP {
 
     void bdd_solver::solve()
     {
-        return std::visit([&](auto&& s) {
+        std::visit([&](auto&& s) {
                 s.solve(max_iter, tolerance);
-            }, *solver);
+                }, *solver);
     }
 
     void bdd_solver::round()

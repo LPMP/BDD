@@ -31,7 +31,7 @@ namespace LPMP {
             return; 
         }
 
-        intra_interval_message_passing_weight = 0.5;
+        //intra_interval_message_passing_weight = 0.5;
         //std::cout << "decomposing BDDs into " << intervals.nr_intervals() << " intervals: ";
         //for(size_t i=0; i<intervals.nr_intervals(); ++i)
         //    std::cout << "[" << intervals.interval_boundaries[i] << "," << intervals.interval_boundaries[i+1] << "), ";
@@ -113,7 +113,7 @@ namespace LPMP {
 
     void decomposition_bdd_base::backward_run()
     {
-#pragma omp parallel for
+//#pragma omp parallel for
         for(std::ptrdiff_t interval_nr=intervals.nr_intervals()-1; interval_nr>=0; --interval_nr)
         {
             bdd_bases[interval_nr].read_in_Lagrange_multipliers(bdd_bases[interval_nr].backward_queue);
@@ -125,74 +125,41 @@ namespace LPMP {
 
     void decomposition_bdd_base::solve(const size_t max_iter, const double tolerance)
     {
+        MEASURE_FUNCTION_EXECUTION_TIME;
         const auto start_time = std::chrono::steady_clock::now();
         double lb_prev = this->lower_bound();
         double lb_post = lb_prev;
         std::cout << "initial lower bound = " << lb_prev;
-        auto time = std::chrono::steady_clock::now();
-        std::cout << ", time = " << (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000 << " s";
-        std::cout << "\n";
         
-        /*
+        // version where forward and backward passes are executed at
         for(size_t i=0; i<max_iter; ++i)
         {
+//#pragma omp parallel for
             for(size_t t=0; t<intervals.nr_intervals(); ++t)
             {
-                this->min_marginal_averaging_forward(t);
-                this->min_marginal_averaging_backward(t);
-            }
-        }
-        */
-        for(size_t i=0; i<max_iter; ++i)
-        {
-#pragma omp parallel for
-            for(size_t t=0; t<intervals.nr_intervals(); ++t)
-            {
-                min_marginal_averaging_forward(t);
-                /*
-                if(i % 2 == 0 && t % 2 == 0)
+                //min_marginal_averaging_forward(t);
+                if(t % 2 == 0)
                     min_marginal_averaging_forward(t);
-                else if(i % 2 == 0 && t % 2 == 1)
+                else 
                     min_marginal_averaging_backward(t);
-                else if(i % 2 == 1 && t % 2 == 0)
+            }
+//#pragma omp parallel for
+            for(size_t t=0; t<intervals.nr_intervals(); ++t)
+            {
+                //min_marginal_averaging_backward(t);
+                if(t % 2 == 0)
                     min_marginal_averaging_backward(t);
                 else
-                { 
-                    assert(i % 2 == 1 && t % 2 == 1);
                     min_marginal_averaging_forward(t);
-                }
-                */
             }
-#pragma omp parallel for
-            for(size_t t=0; t<intervals.nr_intervals(); ++t)
-            {
-                min_marginal_averaging_backward(t);
-                /*
-                if(i % 2 == 0 && t % 2 == 0)
-                    min_marginal_averaging_backward(t);
-                else if(i % 2 == 0 && t % 2 == 1)
-                    min_marginal_averaging_forward(t);
-                else if(i % 2 == 1 && t % 2 == 0)
-                    min_marginal_averaging_forward(t);
-                else
-                { 
-                    assert(i % 2 == 1 && t % 2 == 1);
-                    min_marginal_averaging_backward(t);
-                }
-                */
-            }
-#pragma omp parallel for
+//#pragma omp parallel for
             for(size_t t=0; t<intervals.nr_intervals(); ++t)
             {
                 bdd_bases[t].base.compute_lower_bound();
             }
-            //if(t == 0)
             lb_prev = lb_post;
             lb_post = this->lower_bound();
-            std::cout << "iteration " << i << ", lower bound = " << lb_post;
-            time = std::chrono::steady_clock::now();
-            std::cout << ", time = " << (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000 << " s";
-            std::cout << "\n";
+            std::cout << "iteration " << i << ", lower bound = " << lb_post<< "intra interval weight = " << intra_interval_message_passing_weight << "\n";
             if (std::abs(lb_prev-lb_post) < std::abs(tolerance*lb_prev))
             {
                 std::cout << "Relative progress less than tolerance (" << tolerance << ")\n";
@@ -278,18 +245,26 @@ namespace LPMP {
                 last_interval_nr = e.opposite_interval_nr;
             }
             bdd_bases[interval_nr].base.get_arc_marginals(e.first_node, e.last_node, arc_marginals);
+            for(const auto x : arc_marginals)
+                assert(std::isfinite(x) || x == std::numeric_limits<float>::infinity());
             const double min_arc_cost = *std::min_element(arc_marginals.begin(), arc_marginals.end());
             for(auto& x : arc_marginals)
             {
-                x -= min_arc_cost;
-                x *= -intra_interval_message_passing_weight;
-                assert(x <= 0.0);
+                if(x != std::numeric_limits<float>::infinity())
+                {
+                    x -= min_arc_cost;
+                    assert(x >= 0.0);
+                    x *= -intra_interval_message_passing_weight;
+                }
             }
-            assert(*std::max_element(arc_marginals.begin(), arc_marginals.end()) == 0.0);
             bdd_bases[interval_nr].base.update_arc_costs(e.first_node, arc_marginals.begin(), arc_marginals.end());
 
             for(auto& x : arc_marginals)
-                x *= -1.0;
+            {
+                if(x != std::numeric_limits<float>::infinity())
+                    x *= -1.0;
+                assert(x >= 0.0);
+            }
 
             bdd_bases[e.opposite_interval_nr].forward_queue.write_to_queue(e.first_node_opposite_interval, arc_marginals.begin(), arc_marginals.end());
         }
@@ -324,15 +299,21 @@ namespace LPMP {
             const double min_arc_cost = *std::min_element(arc_marginals.begin(), arc_marginals.end());
             for(auto& x : arc_marginals)
             {
-                x -= min_arc_cost;
-                x *= -intra_interval_message_passing_weight;
-                assert(x <= 0.0);
+                if(x != std::numeric_limits<float>::infinity())
+                {
+                    x -= min_arc_cost;
+                    x *= -intra_interval_message_passing_weight;
+                    assert(x <= 0.0);
+                }
             }
-            assert(*std::max_element(arc_marginals.begin(), arc_marginals.end()) == 0.0);
             bdd_bases[interval_nr].base.update_arc_costs(e.first_node, arc_marginals.begin(), arc_marginals.end());
 
             for(auto& x : arc_marginals)
-                x *= -1.0;
+            {
+                if(x != std::numeric_limits<float>::infinity())
+                    x *= -1.0;
+                assert(x >= 0.0);
+            }
 
             bdd_bases[e.opposite_interval_nr].backward_queue.write_to_queue(e.first_node_opposite_interval, arc_marginals.begin(), arc_marginals.end());
         }

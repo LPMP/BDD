@@ -113,7 +113,7 @@ namespace LPMP {
         const size_t nr_intervals = [&]() -> size_t {
             if(bdd_nodes_.size() <= min_nr_bdd_nodes)
                 return 1;
-            else if(min_nr_bdd_nodes * nr_intervals >= bdd_nodes_.size())
+            else if(min_nr_bdd_nodes * nr_intervals_ >= bdd_nodes_.size())
                 return bdd_nodes_.size() / min_nr_bdd_nodes;
             return std::min(nr_intervals_, nr_variables());
         }();
