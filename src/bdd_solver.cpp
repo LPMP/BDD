@@ -63,6 +63,9 @@ namespace LPMP {
         app.add_option("-t, --tolerance", tolerance, "lower bound relative progress tolerance, default value = 1e-06")
             ->check(CLI::PositiveNumber);
 
+        app.add_option("-l, --time_limit", time_limit, "time limit in seconds, default value = 3600")
+            ->check(CLI::PositiveNumber);
+
         enum class bdd_solver_impl { mma, mma_srmp, mma_agg, decomposition_mma, anisotropic_mma, mma_vec } bdd_solver_impl_;
         std::unordered_map<std::string, bdd_solver_impl> bdd_solver_impl_map{
             {"mma",bdd_solver_impl::mma},
@@ -206,9 +209,10 @@ namespace LPMP {
             std::cout << "constructed primal heuristic\n";
         }
 
-        auto time = std::chrono::steady_clock::now();
-        std::cout << "setup time = " << (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000 << " s";
+        auto setup_time = (double) std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_time).count() / 1000
+        std::cout << "setup time = " << setup_time << " s";
         std::cout << "\n";
+        time_limit -= setup_time;
     }
 
     bdd_solver::bdd_solver(const std::vector<std::string>& args)
@@ -236,6 +240,11 @@ namespace LPMP {
 
     void bdd_solver::solve()
     {
+        if (time_limit < 0)
+        {
+            std::cout << "Time limit exceeded." << std::endl;
+            return;
+        }
         return std::visit([&](auto&& s) {
                 s.solve(max_iter, tolerance);
             }, *solver);
@@ -244,6 +253,13 @@ namespace LPMP {
     void bdd_solver::round()
     {
         MEASURE_FUNCTION_EXECUTION_TIME;
+
+        if (time_limit < 0)
+        {
+            std::cout << "Time limit exceeded." << std::endl;
+            return;
+        }
+
         if (!primal_heuristic)
             return;
 
