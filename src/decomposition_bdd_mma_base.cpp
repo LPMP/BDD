@@ -134,32 +134,24 @@ namespace LPMP {
         // version where forward and backward passes are executed at
         for(size_t i=0; i<max_iter; ++i)
         {
-//#pragma omp parallel for
+#pragma omp parallel for
             for(size_t t=0; t<intervals.nr_intervals(); ++t)
             {
-                //min_marginal_averaging_forward(t);
-                if(t % 2 == 0)
-                    min_marginal_averaging_forward(t);
-                else 
-                    min_marginal_averaging_backward(t);
+                min_marginal_averaging_forward(t);
             }
-//#pragma omp parallel for
+#pragma omp parallel for
             for(size_t t=0; t<intervals.nr_intervals(); ++t)
             {
-                //min_marginal_averaging_backward(t);
-                if(t % 2 == 0)
-                    min_marginal_averaging_backward(t);
-                else
-                    min_marginal_averaging_forward(t);
+                min_marginal_averaging_backward(t);
             }
-//#pragma omp parallel for
+#pragma omp parallel for
             for(size_t t=0; t<intervals.nr_intervals(); ++t)
             {
                 bdd_bases[t].base.compute_lower_bound();
             }
             lb_prev = lb_post;
             lb_post = this->lower_bound();
-            std::cout << "iteration " << i << ", lower bound = " << lb_post<< "intra interval weight = " << intra_interval_message_passing_weight << "\n";
+            std::cout << "iteration " << i << ", lower bound = " << lb_post<< "\n";
             if (std::abs(lb_prev-lb_post) < std::abs(tolerance*lb_prev))
             {
                 std::cout << "Relative progress less than tolerance (" << tolerance << ")\n";
