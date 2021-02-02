@@ -247,7 +247,7 @@ namespace LPMP {
             return;
         }
         std::visit([&](auto&& s) {
-                s.solve(max_iter, tolerance);
+                s.solve(max_iter, tolerance, time_limit);
                 }, *solver);
     }
 

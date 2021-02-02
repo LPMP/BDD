@@ -123,7 +123,7 @@ namespace LPMP {
         }
     }
 
-    void decomposition_bdd_base::solve(const size_t max_iter, const double tolerance)
+    void decomposition_bdd_base::solve(const size_t max_iter, const double tolerance, const double time_limit)
     {
         const auto start_time = std::chrono::steady_clock::now();
         double lb_prev = this->lower_bound();
@@ -138,20 +138,12 @@ namespace LPMP {
 #pragma omp parallel for
             for(size_t t=0; t<intervals.nr_intervals(); ++t)
             {
-                //min_marginal_averaging_forward(t);
-                if(t % 2 == 0)
-                    min_marginal_averaging_forward(t);
-                else 
-                    min_marginal_averaging_backward(t);
+                min_marginal_averaging_forward(t);
             }
 #pragma omp parallel for
             for(size_t t=0; t<intervals.nr_intervals(); ++t)
             {
-                //min_marginal_averaging_backward(t);
-                if(t % 2 == 0)
-                    min_marginal_averaging_backward(t);
-                else
-                    min_marginal_averaging_forward(t);
+                min_marginal_averaging_backward(t);
             }
 #pragma omp parallel for
             for(size_t t=0; t<intervals.nr_intervals(); ++t)
@@ -162,9 +154,14 @@ namespace LPMP {
             lb_post = this->lower_bound();
             std::cout << "iteration " << i << ", lower bound = " << lb_post;
             time = std::chrono::steady_clock::now();
-            std::cout << ", time = " << (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000 << " s";
+            double time_spent = (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000;
+            std::cout << ", time = " << time_spent << " s";
             std::cout << "\n";
-            // std::cout << "intra interval weight = " << intra_interval_message_passing_weight << "\n";
+            if (time_spent > time_limit)
+            {
+                std::cout << "Time limit reached." << std::endl;
+                break;
+            }
             if (std::abs(lb_prev-lb_post) < std::abs(tolerance*lb_prev))
             {
                 std::cout << "Relative progress less than tolerance (" << tolerance << ")\n";

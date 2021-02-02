@@ -12,7 +12,7 @@ namespace LPMP {
                 void min_marginal_averaging_forward();
                 void min_marginal_averaging_backward();
                 void iteration();
-                void solve(const size_t max_iter, const double tolerance); 
+                void solve(const size_t max_iter, const double tolerance, const double time_limit); 
         };
 
     ////////////////////
@@ -131,7 +131,7 @@ namespace LPMP {
         }
 
     template<typename BDD_OPT_BASE>
-        void bdd_mma_anisotropic_base<BDD_OPT_BASE>::solve(const size_t max_iter, const double tolerance)
+        void bdd_mma_anisotropic_base<BDD_OPT_BASE>::solve(const size_t max_iter, const double tolerance, const double time_limit)
         {
             for(size_t iter=0; iter<max_iter; ++iter)
             {

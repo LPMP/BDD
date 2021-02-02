@@ -17,7 +17,7 @@ namespace LPMP {
             void restricted_min_marginal_averaging_forward_SRMP(const bool active);
             void restricted_min_marginal_averaging_backward_SRMP(const bool active);
             void restricted_iteration(const bool active);
-            void solve(const size_t max_iter, const double tolerance);
+            void solve(const size_t max_iter, const double tolerance, const double time_limit);
 
         protected: 
 
@@ -133,7 +133,7 @@ namespace LPMP {
     }
 
     template<typename BDD_OPT_BASE>
-        void bdd_mma_srmp_rest_base<BDD_OPT_BASE>::solve(const size_t max_iter, const double tolerance)
+        void bdd_mma_srmp_rest_base<BDD_OPT_BASE>::solve(const size_t max_iter, const double tolerance, const double time_limit)
         {
             stats_.resize(this->nr_variables(), 1);
             nr_improving_vars_ = this->nr_variables();
