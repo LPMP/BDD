@@ -14,8 +14,6 @@ namespace LPMP {
         const int slack = rhs - path_cost;
         const long int rest = rests[level];
 
-        // std::cout << "level = " << level << ", slack = " << slack << ", rest = " << rest << std::endl;
-
         // check sink conditions
         switch (ineq_type)
         {
@@ -54,31 +52,18 @@ namespace LPMP {
         assert(level < levels.size());
 
         // check for equivalent nodes
-
-        for (auto it = levels[level].begin(); it != levels[level].end(); it++)
+        lineq_bdd_node * ptr = levels[level].find(slack);
+        if (ptr != nullptr)
         {
-            if (slack >= it->lb_ && slack <= it->ub_)
-            {
-                node_ptr = &(*it);
-                return false;
-            }
+            node_ptr = ptr;
+            return false;
         }
-
-        // lineq_bdd_node * ptr = levels[level].find(slack);
-        // if (ptr != nullptr)
-        // {
-        //     node_ptr = ptr;
-        //     return false;
-        // }
 
         // otherwise create new node
         lineq_bdd_node node;
         node.ub_ = path_cost;
-        levels[level].push_back(node);
-        lineq_bdd_node * ptr = &levels[level].back();
-        // ptr = levels[level].create_node(node);
-        assert(ptr != nullptr);
-        node_ptr = ptr;
+        node_ptr = levels[level].create_node(node);
+        assert(node_ptr != nullptr);
         return true;
     }
 
@@ -94,12 +79,10 @@ namespace LPMP {
         tsl::robin_map<lineq_bdd_node const*,size_t> node_refs;
         for(std::ptrdiff_t l=levels.size()-1; l>=0; --l)
         {
-            // auto& nodes = levels[l].get_avl_nodes();
-            auto& nodes = levels[l];
+            auto& nodes = levels[l].get_avl_nodes();
             for(auto it = nodes.begin(); it != nodes.end(); it++)
             {
-                // auto& lbdd = it->data;
-                auto& lbdd = *it;
+                auto& lbdd = it->data;
                 auto get_node = [&](lineq_bdd_node const* ptr) {
                     if(ptr == &botsink)
                         return bdd_mgr_.botsink();

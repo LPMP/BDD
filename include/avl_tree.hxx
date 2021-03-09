@@ -79,21 +79,24 @@ int avl_tree<T>::balance_factor(avl_node<T> * ptr)
 {
     assert(ptr != nullptr);
     if (ptr->left && ptr->right)
-        return ptr->left->height - ptr->right->height; 
+        return ptr->left->height - (ptr->right->height); 
     else if (ptr->left && ptr->right == nullptr)
         return ptr->left->height; 
     else if (ptr->left == nullptr && ptr->right)
         return -(ptr->right->height);
+    else
+        return 0;
 }
 
 template<typename T>
 avl_node<T> * avl_tree<T>::rotate_left_left(avl_node<T> * ptr)
 {
+    assert(ptr != nullptr);
     avl_node<T> * temp;
     avl_node<T> * child;
     temp = ptr;
     child = temp->left;
-
+    assert(child != nullptr);
     temp->left = child->right;
     child->right = temp;
 
@@ -103,13 +106,15 @@ avl_node<T> * avl_tree<T>::rotate_left_left(avl_node<T> * ptr)
 template<typename T>
 avl_node<T> * avl_tree<T>::rotate_left_right(avl_node<T> * ptr)
 {
+    assert(ptr != nullptr);
     avl_node<T> * temp;
     avl_node<T> * child;
     avl_node<T> * grandchild;
     temp = ptr;
     child = temp->left;
+    assert(child != nullptr);
     grandchild = temp->left->right;
-
+    assert(grandchild != nullptr);
     temp->left = grandchild->right;
     child->right = grandchild->left;
     grandchild->right = temp;
@@ -121,13 +126,15 @@ avl_node<T> * avl_tree<T>::rotate_left_right(avl_node<T> * ptr)
 template<typename T>
 avl_node<T> * avl_tree<T>::rotate_right_left(avl_node<T> * ptr)
 {
+    assert(ptr != nullptr);
     avl_node<T> * temp;
     avl_node<T> * child;
     avl_node<T> * grandchild;
     temp = ptr;
     child = temp->right;
+    assert(child != nullptr);
     grandchild = temp->right->left;
-
+    assert(grandchild != nullptr);
     temp->right = grandchild->left;
     child->left = grandchild->right;
     grandchild->left = temp;
@@ -139,11 +146,12 @@ avl_node<T> * avl_tree<T>::rotate_right_left(avl_node<T> * ptr)
 template<typename T>
 avl_node<T> * avl_tree<T>::rotate_right_right(avl_node<T> * ptr)
 {
+    assert(ptr != nullptr);
     avl_node<T> * temp;
     avl_node<T> * child;
     temp = ptr;
     child = temp->right;
-
+    assert(child != nullptr);
     temp->right = child->left;
     child->left = temp;
 
@@ -154,6 +162,7 @@ avl_node<T> * avl_tree<T>::rotate_right_right(avl_node<T> * ptr)
 template<typename T>
 avl_node<T> * avl_tree<T>::insert(avl_node<T> * ptr, avl_node<T> * node_ptr)
 {
+    assert(node_ptr != nullptr);
     // recursive insertion
     if (ptr == nullptr)
     {
@@ -177,14 +186,20 @@ avl_node<T> * avl_tree<T>::insert(avl_node<T> * ptr, avl_node<T> * node_ptr)
 
     // rebalancing
     ptr->height = height(ptr);
-    if (balance_factor(ptr) == 2 && balance_factor(ptr->left) == 1)
-        ptr = rotate_left_left(ptr);
-    else if (balance_factor(ptr) == -2 && balance_factor(ptr->right) == -1)
-        ptr = rotate_right_right(ptr);
-    else if (balance_factor(ptr) == -2 && balance_factor(ptr->right) == 1)
-        ptr = rotate_right_left(ptr);
-    else if (balance_factor(ptr) == 2 && balance_factor(ptr->left) == -1)
-        ptr = rotate_left_right(ptr);
+    if (balance_factor(ptr) == 2)
+    {
+        if (balance_factor(ptr->left) == 1)
+            ptr = rotate_left_left(ptr);
+        else if (balance_factor(ptr->left) == -1)
+            ptr = rotate_left_right(ptr);
+    }
+    else if (balance_factor(ptr) == -2)
+    {
+        if (balance_factor(ptr->right) == 1)
+            ptr = rotate_right_left(ptr);
+        else if (balance_factor(ptr->right) == -1)
+            ptr = rotate_right_right(ptr);
+    }
 
     return ptr;
 }
@@ -192,7 +207,6 @@ avl_node<T> * avl_tree<T>::insert(avl_node<T> * ptr, avl_node<T> * node_ptr)
 template<typename T>
 void avl_tree<T>::insert(avl_node<T> * node_ptr)
 {
-    // write();
     root = insert(root, node_ptr);
 }
 

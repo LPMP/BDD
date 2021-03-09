@@ -1,7 +1,6 @@
 #pragma once
 
 #include <numeric>
-#include <list>
 #include <stack>
 #include <vector>
 #include <tsl/robin_map.h>
@@ -55,8 +54,7 @@ namespace LPMP {
             int rhs;
 
             lineq_bdd_node* root_node;
-            // std::vector<avl_tree<lineq_bdd_node>> levels;
-            std::vector<std::list<lineq_bdd_node>> levels;
+            std::vector<avl_tree<lineq_bdd_node>> levels;
             lineq_bdd_node topsink;
             lineq_bdd_node botsink;
     };
@@ -93,8 +91,7 @@ namespace LPMP {
 
             const size_t dim = nf.size() - 1;
             inverted = std::vector<char>(dim);
-            // levels = std::vector<avl_tree<lineq_bdd_node>>(dim);
-            levels = std::vector<std::list<lineq_bdd_node>>(dim);
+            levels = std::vector<avl_tree<lineq_bdd_node>>(dim);
 
             rhs = nf[0];
             coefficients = std::vector<int>(nf.begin()+1, nf.end());
@@ -158,8 +155,7 @@ namespace LPMP {
                     const int ub = std::max(std::min(bdd_0->ub_, ub_1), lb); // ensure that bound-interval is non-empty
                     current_node->lb_ = lb;
                     current_node->ub_ = ub;
-                    // std::cout << "Insert into AVL tree: level = " << level << ", range = [" << lb << "," << ub << "]" << std::endl;
-                    // levels[level].insert(current_node->wrapper_); // when bounds are determined, insert into AVL tree
+                    levels[level].insert(current_node->wrapper_); // when bounds are determined, insert into AVL tree
                     node_stack.pop();
                     level--;
                 }
