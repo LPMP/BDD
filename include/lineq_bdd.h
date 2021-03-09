@@ -7,6 +7,7 @@
 #include <tsl/robin_map.h>
 #include "bdd.h"
 #include "ILP_input.h"
+#include "avl_tree.hxx"
 #include <iostream> // temporary
 
 namespace LPMP {
@@ -23,9 +24,10 @@ namespace LPMP {
 
         lineq_bdd_node* zero_kid_;
         lineq_bdd_node* one_kid_;
+        avl_node<lineq_bdd_node>* wrapper_; // wrapper node in the AVL tree
     };
 
-    // Implementation of BDD construction from a linear inequality/equation (Behle, 2007)
+    // Implementation of BDD construction from a linear inequality/equation (cf. Behle, 2007)
     class lineq_bdd {
         public:
 
@@ -45,7 +47,7 @@ namespace LPMP {
 
         private:
 
-            lineq_bdd_node* build_bdd_node(const int path_cost, const unsigned int level, const ILP_input::inequality_type ineq_type);
+            bool build_bdd_node(lineq_bdd_node* &node_ptr, const int path_cost, const unsigned int level, const ILP_input::inequality_type ineq_type);
 
             std::vector<char> inverted; // flags inverted variables
             std::vector<int> coefficients;
@@ -53,6 +55,7 @@ namespace LPMP {
             int rhs;
 
             lineq_bdd_node* root_node;
+            // std::vector<avl_tree<lineq_bdd_node>> levels;
             std::vector<std::list<lineq_bdd_node>> levels;
             lineq_bdd_node topsink;
             lineq_bdd_node botsink;
@@ -90,6 +93,7 @@ namespace LPMP {
 
             const size_t dim = nf.size() - 1;
             inverted = std::vector<char>(dim);
+            // levels = std::vector<avl_tree<lineq_bdd_node>>(dim);
             levels = std::vector<std::list<lineq_bdd_node>>(dim);
 
             rhs = nf[0];
@@ -112,7 +116,7 @@ namespace LPMP {
                 rests[i+1] = rests[i] - coefficients[i];
 
             unsigned int level = 0;
-            root_node = build_bdd_node(0, level, ineq_nf);
+            build_bdd_node(root_node, 0, level, ineq_nf);
             if (root_node == &topsink || root_node == &botsink)
                 return;
             
@@ -127,16 +131,16 @@ namespace LPMP {
 
                 if (current_node->zero_kid_ == nullptr) // build zero child
                 {
-                    current_node->zero_kid_ = build_bdd_node(current_node->ub_ + 0, level+1, ineq_nf);
-                    if (current_node->zero_kid_ == &botsink || current_node->zero_kid_ == &topsink)
+                    bool is_new = build_bdd_node(current_node->zero_kid_, current_node->ub_ + 0, level+1, ineq_nf);
+                    if (!is_new)
                         continue;
                     node_stack.push(current_node->zero_kid_);
                     level++;
                 }
                 else if (current_node->one_kid_ == nullptr) // build one child
                 {
-                    current_node->one_kid_ = build_bdd_node(current_node->ub_ + coeff, level+1, ineq_nf);
-                    if (current_node->one_kid_ == &botsink || current_node->one_kid_ == &topsink)
+                    bool is_new = build_bdd_node(current_node->one_kid_, current_node->ub_ + coeff, level+1, ineq_nf);
+                    if (!is_new)
                         continue;
                     node_stack.push(current_node->one_kid_);
                     level++;
@@ -145,12 +149,17 @@ namespace LPMP {
                 {
                     auto* bdd_0 = current_node->zero_kid_;
                     auto* bdd_1 = current_node->one_kid_;
-                    const int lb = std::max(bdd_0->lb_, bdd_1->lb_ + coeff);
+                    // lower bound of topsink needs to be changed if it is a shortcut
+                    const int lb_0 = (bdd_0 == &topsink) ? rests[level+1] : bdd_0->lb_;
+                    const int lb_1 = (bdd_1 == &topsink) ? rests[level+1] + coeff : bdd_1->lb_ + coeff;
+                    const int lb = std::max(lb_0, lb_1);
                     // prevent integer overflow (coefficient is non-negative)
                     const int ub_1 = (std::numeric_limits<int>::max() - coeff < bdd_1->ub_) ? std::numeric_limits<int>::max() : bdd_1->ub_ + coeff;
                     const int ub = std::max(std::min(bdd_0->ub_, ub_1), lb); // ensure that bound-interval is non-empty
                     current_node->lb_ = lb;
                     current_node->ub_ = ub;
+                    // std::cout << "Insert into AVL tree: level = " << level << ", range = [" << lb << "," << ub << "]" << std::endl;
+                    // levels[level].insert(current_node->wrapper_); // when bounds are determined, insert into AVL tree
                     node_stack.pop();
                     level--;
                 }

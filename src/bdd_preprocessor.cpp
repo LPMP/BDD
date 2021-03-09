@@ -27,9 +27,10 @@ namespace LPMP {
             }
             assert(std::is_sorted(variables.begin(), variables.end()));
             
-            BDD::node_ref bdd = converter.convert_to_bdd(coefficients, constraint.ineq, constraint.right_hand_side);
-            // converter.build_bdd(coefficients, constraint.ineq, constraint.right_hand_side);
-            // BDD::node_ref bdd = converter.get_bdd().convert_to_bdd(bdd_mgr);
+            // BDD::node_ref bdd = converter.convert_to_bdd(coefficients, constraint.ineq, constraint.right_hand_side);
+            lineq_bdd leqbdd;
+            leqbdd.build_from_inequality(coefficients, constraint.ineq, constraint.right_hand_side);
+            BDD::node_ref bdd = leqbdd.convert_to_lbdd(bdd_mgr);
             add_bdd(bdd, variables.begin(), variables.end());
         }
 

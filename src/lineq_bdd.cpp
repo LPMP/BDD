@@ -8,26 +8,40 @@ namespace LPMP {
     }
 
 
-    lineq_bdd_node* lineq_bdd::build_bdd_node(const int path_cost, const unsigned int level, const ILP_input::inequality_type ineq_type)
+    bool lineq_bdd::build_bdd_node(lineq_bdd_node * &node_ptr, const int path_cost, const unsigned int level, const ILP_input::inequality_type ineq_type)
     {
         assert(level < rests.size());
         const int slack = rhs - path_cost;
         const long int rest = rests[level];
+
+        // std::cout << "level = " << level << ", slack = " << slack << ", rest = " << rest << std::endl;
 
         // check sink conditions
         switch (ineq_type)
         {
             case ILP_input::inequality_type::equal:
                 if (slack < 0 || slack > rest)
-                    return &botsink;
+                {
+                    node_ptr = &botsink;
+                    return false;
+                }
                 if (slack == 0 && slack == rest)
-                    return &topsink;
+                {
+                    node_ptr = &topsink;
+                    return false;
+                }
                 break;
             case ILP_input::inequality_type::smaller_equal:
                 if (slack < 0)
-                    return &botsink;
+                {
+                    node_ptr = &botsink;
+                    return false;
+                }
                 if (slack >= rest)
-                    return &topsink;
+                {
+                    node_ptr = &topsink;
+                    return false;
+                }
                 break;
             case ILP_input::inequality_type::greater_equal:
                 throw std::runtime_error("greater equal constraint not in normal form");
@@ -40,18 +54,32 @@ namespace LPMP {
         assert(level < levels.size());
 
         // check for equivalent nodes
-        // TODO: implement binary search over nodes at current level
+
         for (auto it = levels[level].begin(); it != levels[level].end(); it++)
         {
             if (slack >= it->lb_ && slack <= it->ub_)
-                return &(*it);
+            {
+                node_ptr = &(*it);
+                return false;
+            }
         }
+
+        // lineq_bdd_node * ptr = levels[level].find(slack);
+        // if (ptr != nullptr)
+        // {
+        //     node_ptr = ptr;
+        //     return false;
+        // }
 
         // otherwise create new node
         lineq_bdd_node node;
         node.ub_ = path_cost;
         levels[level].push_back(node);
-        return &levels[level].back();
+        lineq_bdd_node * ptr = &levels[level].back();
+        // ptr = levels[level].create_node(node);
+        assert(ptr != nullptr);
+        node_ptr = ptr;
+        return true;
     }
 
 
@@ -66,8 +94,11 @@ namespace LPMP {
         tsl::robin_map<lineq_bdd_node const*,size_t> node_refs;
         for(std::ptrdiff_t l=levels.size()-1; l>=0; --l)
         {
-            for(auto it = levels[l].begin(); it != levels[l].end(); it++)
+            // auto& nodes = levels[l].get_avl_nodes();
+            auto& nodes = levels[l];
+            for(auto it = nodes.begin(); it != nodes.end(); it++)
             {
+                // auto& lbdd = it->data;
                 auto& lbdd = *it;
                 auto get_node = [&](lineq_bdd_node const* ptr) {
                     if(ptr == &botsink)
