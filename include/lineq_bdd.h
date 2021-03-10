@@ -145,7 +145,10 @@ namespace LPMP {
                 {
                     auto* bdd_0 = current_node->zero_kid_;
                     auto* bdd_1 = current_node->one_kid_;
-                    const int lb = std::max(bdd_0->lb_, bdd_1->lb_ + coeff);
+                    // lower bound of topsink needs to be changed if it is a shortcut
+                    const int lb_0 = (bdd_0 == &topsink) ? rests[level+1] : bdd_0->lb_;
+                    const int lb_1 = (bdd_1 == &topsink) ? rests[level+1] + coeff : bdd_1->lb_ + coeff;
+                    const int lb = std::max(lb_0, lb_1);
                     // prevent integer overflow (coefficient is non-negative)
                     const int ub_1 = (std::numeric_limits<int>::max() - coeff < bdd_1->ub_) ? std::numeric_limits<int>::max() : bdd_1->ub_ + coeff;
                     const int ub = std::max(std::min(bdd_0->ub_, ub_1), lb); // ensure that bound-interval is non-empty
