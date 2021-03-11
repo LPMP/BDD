@@ -120,10 +120,9 @@ int main(int argc, char** argv)
     BDD::bdd_mgr bdd_mgr;
     bdd_converter converter(bdd_mgr);
 
-
-    // test_mrf(bdd_mgr, converter);
+    test_mrf(bdd_mgr, converter);
     // test_simplex(bdd_mgr, converter);
     test_cardinality(bdd_mgr, converter);
-    // test_miplib(bdd_mgr, converter);
+    test_miplib(bdd_mgr, converter);
 
 }
