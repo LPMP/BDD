@@ -1,3 +1,7 @@
+add_executable(test_avl_tree test_avl_tree.cpp)
+target_link_libraries(test_avl_tree lineq_bdd LPMP-BDD)
+add_test(test_avl_tree test_avl_tree)
+
 add_executable(test_ILP_parser test_ILP_parser.cpp)
 target_link_libraries(test_ILP_parser ILP_parser LPMP-BDD)
 add_test(test_ILP_parser test_ILP_parser)
@@ -18,9 +22,9 @@ add_executable(test_bdd_bipartite_matching_problem test_bdd_bipartite_matching_p
 target_link_libraries(test_bdd_bipartite_matching_problem LPMP-BDD)
 add_test(test_bdd_bipartite_matching_problem test_bdd_bipartite_matching_problem)
 
-#add_executable(test_bdd_chain_graph test_bdd_chain_graph.cpp)
-#target_link_libraries(test_bdd_chain_graph LPMP bdd ILP_parser)
-#add_test(test_bdd_chain_graph test_bdd_chain_graph)
+add_executable(test_bdd_small_binary_mrfs test_bdd_small_binary_mrfs.cpp)
+target_link_libraries(test_bdd_small_binary_mrfs LPMP-BDD)
+add_test(test_bdd_small_binary_mrfs test_bdd_small_binary_mrfs)
 
 #add_executable(test_bdd_grid_graph test_bdd_grid_graph.cpp)
 #target_link_libraries(test_bdd_grid_graph LPMP bdd ILP_parser)
