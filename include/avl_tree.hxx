@@ -6,7 +6,10 @@
 
 namespace LPMP {
 
-// T : data type that must have the following fields : int lb_, int ub_, avl_node<T> wrapper_
+// bit length needs to cover sum of all inequality coefficients
+using integer = long long int;
+
+// T : data type that must have the following fields : integer lb_, integer ub_, avl_node<T> wrapper_
 //
 template<typename T>
 struct avl_node {
@@ -16,8 +19,8 @@ struct avl_node {
     struct avl_node<T> * right;
     int height; // if height == 0, then AVL node is not part of the tree
 
-    int lb() { return data.lb_; }
-    int ub() { return data.ub_; }
+    integer lb() { return data.lb_; }
+    integer ub() { return data.ub_; }
 };
 
 
@@ -35,7 +38,7 @@ class avl_tree {
 
         T * create_node(T data); // create new AVL node for data
         void insert(avl_node<T> * node_ptr);// insert AVL node into tree (key range must be set prior)
-        T * find(int key);
+        T * find(integer key);
         void write(); // for inspection
 
         const std::list<avl_node<T>> & get_avl_nodes() const { return nodes; }
@@ -227,7 +230,7 @@ T * avl_tree<T>::create_node(T data)
 
 
 template<typename T>
-T * avl_tree<T>::find(int key)
+T * avl_tree<T>::find(integer key)
 {
     avl_node<T> * ptr = root;
     while (ptr != nullptr)

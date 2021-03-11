@@ -11,15 +11,18 @@
 
 namespace LPMP {
 
+// bit length needs to cover sum of all coefficients
+using integer = long long int;
+
     struct lineq_bdd_node {
 
         lineq_bdd_node() {}
-        lineq_bdd_node(int lb, int ub, lineq_bdd_node* zero_kid, lineq_bdd_node* one_kid)
+        lineq_bdd_node(integer lb, integer ub, lineq_bdd_node* zero_kid, lineq_bdd_node* one_kid)
         : lb_(lb), ub_(ub), zero_kid_(zero_kid), one_kid_(one_kid)
         {}
 
-        int lb_;
-        int ub_; // initially also serves as cost of path from root
+        integer lb_;
+        integer ub_; // initially also serves as cost of path from root
 
         lineq_bdd_node* zero_kid_;
         lineq_bdd_node* one_kid_;
@@ -30,8 +33,8 @@ namespace LPMP {
     class lineq_bdd {
         public:
 
-            lineq_bdd() : topsink(0, std::numeric_limits<int>::max(), nullptr, nullptr), 
-                botsink(std::numeric_limits<int>::min(), -1, nullptr, nullptr)
+            lineq_bdd() : topsink(0, std::numeric_limits<integer>::max(), nullptr, nullptr), 
+                botsink(std::numeric_limits<integer>::min(), -1, nullptr, nullptr)
             {}
             lineq_bdd(lineq_bdd & other) = delete;
 
@@ -46,11 +49,11 @@ namespace LPMP {
 
         private:
 
-            bool build_bdd_node(lineq_bdd_node* &node_ptr, const int path_cost, const unsigned int level, const ILP_input::inequality_type ineq_type);
+            bool build_bdd_node(lineq_bdd_node* &node_ptr, const integer path_cost, const unsigned int level, const ILP_input::inequality_type ineq_type);
 
             std::vector<char> inverted; // flags inverted variables
             std::vector<int> coefficients;
-            std::vector<long int> rests;
+            std::vector<integer> rests;
             int rhs;
 
             lineq_bdd_node* root_node;
@@ -107,7 +110,7 @@ namespace LPMP {
                 }
             }
 
-            rests = std::vector<long int>(dim+1);
+            rests = std::vector<integer>(dim+1);
             rests[0] = std::accumulate(coefficients.begin(), coefficients.end(), 0);
             for (size_t i = 0; i < coefficients.size(); i++)
                 rests[i+1] = rests[i] - coefficients[i];
@@ -146,13 +149,11 @@ namespace LPMP {
                 {
                     auto* bdd_0 = current_node->zero_kid_;
                     auto* bdd_1 = current_node->one_kid_;
-                    // lower bound of topsink needs to be changed if it is a shortcut
-                    const int lb_0 = (bdd_0 == &topsink) ? rests[level+1] : bdd_0->lb_;
-                    const int lb_1 = (bdd_1 == &topsink) ? rests[level+1] + coeff : bdd_1->lb_ + coeff;
-                    const int lb = std::max(lb_0, lb_1);
-                    // prevent integer overflow (coefficient is non-negative)
-                    const int ub_1 = (std::numeric_limits<int>::max() - coeff < bdd_1->ub_) ? std::numeric_limits<int>::max() : bdd_1->ub_ + coeff;
-                    const int ub = std::max(std::min(bdd_0->ub_, ub_1), lb); // ensure that bound-interval is non-empty
+                    // lower bound of topsink needs to be adjusted if it is a shortcut
+                    const integer lb_0 = (bdd_0 == &topsink) ? rests[level+1] : bdd_0->lb_;
+                    const integer lb_1 = (bdd_1 == &topsink) ? rests[level+1] + coeff : bdd_1->lb_ + coeff;
+                    const integer lb = std::max(lb_0, lb_1);
+                    const integer ub = std::max(std::min(bdd_0->ub_, bdd_1->ub_ + coeff), lb); // ensure that bound-interval is non-empty
                     current_node->lb_ = lb;
                     current_node->ub_ = ub;
                     levels[level].insert(current_node->wrapper_); // when bounds are determined, insert into AVL tree

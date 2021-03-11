@@ -8,11 +8,11 @@ namespace LPMP {
     }
 
 
-    bool lineq_bdd::build_bdd_node(lineq_bdd_node * &node_ptr, const int path_cost, const unsigned int level, const ILP_input::inequality_type ineq_type)
+    bool lineq_bdd::build_bdd_node(lineq_bdd_node * &node_ptr, const integer path_cost, const unsigned int level, const ILP_input::inequality_type ineq_type)
     {
         assert(level < rests.size());
-        const int slack = rhs - path_cost;
-        const long int rest = rests[level];
+        const integer slack = rhs - path_cost;
+        const integer rest = rests[level];
 
         // check sink conditions
         switch (ineq_type)
