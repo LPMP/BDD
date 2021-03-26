@@ -50,7 +50,7 @@ namespace LPMP {
         for(size_t i=0; i<nr_intervals; ++i)
         {
             bdd_bases[i].base.init(bdd_storages[i]); 
-            //std::cout << "BDD base " << i << " has " << bdd_bases[i].base.nr_variables() << " variables\n";
+            std::cout << "BDD base for interval " << i << " has " << bdd_bases[i].base.nr_bdd_nodes() << " bdd nodes\n";
             bdd_endpoints[i] = bdd_storages[i].bdd_endpoints();
         }
 

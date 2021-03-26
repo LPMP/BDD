@@ -80,6 +80,18 @@ namespace LPMP {
         linear_constraints_.push_back({});
     }
 
+    void ILP_input::set_inequality_identifier(const std::string& identifier)
+    {
+        assert(linear_constraints_.size() > 0);
+        assert(linear_constraints_.back().identifier == "");
+        if(identifier == "")
+            return;
+        linear_constraints_.back().identifier = identifier;
+        if(inequality_identifier_to_index_.count(identifier) > 0)
+            throw std::runtime_error("Duplicate inequality identifier " + identifier);
+        inequality_identifier_to_index_.insert({identifier, linear_constraints_.size()-1});
+    }
+
     void ILP_input::set_inequality_type(const inequality_type ineq)
     {
         assert(linear_constraints_.size() > 0);
@@ -376,5 +388,17 @@ namespace LPMP {
         reorder(order);
         return order;
     }
+
+    size_t ILP_input::nr_coalesce_sets() const
+    {
+        return coalesce_sets_.size(); 
+    }
+
+    std::tuple<const size_t*, const size_t*> ILP_input::coalesce_set(const size_t i) const
+    {
+        assert(i < nr_coalesce_sets());
+        return std::make_tuple(coalesce_sets_[i].begin(), coalesce_sets_[i].end());
+    }
+
 
 }

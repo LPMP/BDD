@@ -1,6 +1,8 @@
 #pragma once
 
 // TODO: rename file and classes
+// TODO: allow float and double via templates
+// TODO: templatize to allow for different bdd branch nodes
 
 #include <tsl/robin_map.h>
 #include <vector>
@@ -10,6 +12,8 @@
 #include "two_dimensional_variable_array.hxx"
 #include "time_measure_util.h"
 #include "kahan_summation.hxx"
+#include "bdd_filtration.hxx"
+#include "bdd.h"
 #include <iostream>
 
 namespace LPMP {
@@ -145,6 +149,7 @@ namespace LPMP {
             const auto high_branch_node = address(offset_high);
             mm[1] = m + high_cost + high_branch_node->m;
         }
+
         assert(std::isfinite(std::min(mm[0],mm[1])));
         return mm;
     }
@@ -197,6 +202,7 @@ namespace LPMP {
             size_t nr_variable_groups() const;
             size_t nr_bdd_vectors(const size_t var_group) const;
             size_t nr_bdds(const size_t var) const { assert(var < nr_variables()); return nr_bdds_[var]; }
+            size_t nr_bdd_nodes() const { return bdd_branch_nodes_.size(); }
 
             void forward_step(const size_t var_group);
             void min_marginal_averaging_forward();
@@ -240,6 +246,12 @@ namespace LPMP {
                 after_backward_pass,
                 none 
             } message_passing_state_ = message_passing_state::none;
+
+        private:
+            std::vector<size_t> bdd_node_variables() const;
+            void tighten_bdd(const float eps);
+            std::vector<float> min_marginal_differences(const float eps);
+            two_dim_variable_array<size_t> tighten_bdd_groups(const std::vector<char>& tighten_variables);
     };
 
 
@@ -527,14 +539,20 @@ namespace LPMP {
             time = std::chrono::steady_clock::now();
             std::cout << ", time = " << (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000 << " s";
             std::cout << "\n";
-            if (std::abs(lb_prev-lb_post) < std::abs(tolerance*lb_prev))
+            if (std::abs(lb_prev-lb_post) < std::abs(0.001*tolerance*lb_prev))
             {
                 std::cout << "Relative progress less than tolerance (" << tolerance << ")\n";
                 break;
             }
         }
         std::cout << "final lower bound = " << this->lower_bound() << "\n"; 
-    } 
+        const auto mmd = min_marginal_differences(0.001);
+        std::vector<char> tighten_variables(nr_variables(), false);
+        for(size_t i=0; i<mmd.size(); ++i)
+            if(std::abs(mmd[i]) < 1e-3)
+                tighten_variables[i] = true;
+        tighten_bdd_groups(tighten_variables);
+    }
 
     inline void bdd_mma_base_vec::iteration()
     {
@@ -682,6 +700,11 @@ namespace LPMP {
     inline std::vector<double> bdd_mma_base_vec::total_min_marginals()
     {
         this->backward_run();
+        // prepare forward run
+        for(size_t bdd_index=0; bdd_index<first_bdd_node_indices_.size(); ++bdd_index)
+            for(size_t j=0; j<first_bdd_node_indices_.size(bdd_index); ++j)
+                bdd_branch_nodes_[first_bdd_node_indices_(bdd_index,j)].m = 0.0;
+
         std::vector<double> total_min_marginals;
         total_min_marginals.reserve(nr_variables());
 
@@ -707,4 +730,391 @@ namespace LPMP {
         }
         return total_min_marginals;
     }
+
+    inline std::vector<size_t> bdd_mma_base_vec::bdd_node_variables() const
+    {
+        std::vector<size_t> vars;
+        vars.reserve(bdd_branch_nodes_.size());
+        for(size_t var=0; var<nr_variables(); ++var)
+            for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
+                vars.push_back(var);
+        return vars;
+    }
+
+    inline void bdd_mma_base_vec::tighten_bdd(const float epsilon)
+    {
+        backward_run();
+        for(size_t bdd_index=0; bdd_index<first_bdd_node_indices_.size(); ++bdd_index)
+            for(size_t j=0; j<first_bdd_node_indices_.size(bdd_index); ++j)
+                bdd_branch_nodes_[first_bdd_node_indices_(bdd_index,j)].m = 0.0;
+
+        assert(epsilon >= 0.0);
+        const std::vector<size_t> vars = bdd_node_variables();
+        std::vector<char> visited(bdd_branch_nodes_.size(), false);
+        std::vector<size_t> bdd_offset_map(bdd_branch_nodes_.size(), std::numeric_limits<size_t>::max()); // maps offsets from bdd_branch_nodes_ onto offsets used for storing a single bdd in a vector
+
+        BDD::bdd_mgr bdd_mgr;
+        BDD::bdd_collection bdd_collection;
+
+        // Currently only works for single root BDDs
+        for(size_t bdd_index=0; bdd_index<first_bdd_node_indices_.size(); ++bdd_index)
+            assert(first_bdd_node_indices_.size(bdd_index) == 1);
+
+        for(size_t bdd_index=0; bdd_index<first_bdd_node_indices_.size(); ++bdd_index)
+        {
+            // first compute optimal value of current BDD
+            const float bdd_lb = [&]() {
+                float lb = std::numeric_limits<float>::infinity();
+                for(size_t j=0; j<first_bdd_node_indices_.size(bdd_index); ++j)
+                {
+                    const auto mm = bdd_branch_nodes_[first_bdd_node_indices_(bdd_index, j)].min_marginals(); 
+                    lb = std::min({mm[0], mm[1], lb});
+                }
+                return lb; 
+            }();
+            std::cout << "bdd lb = " << bdd_lb << "\n";
+            size_t prev_var = vars[first_bdd_node_indices_(bdd_index, 0)];
+
+            // TODO: move out to top
+            std::vector<bdd_node> cur_bdd;
+            std::unordered_map<size_t,size_t> var_to_index_map; // from original variables to consecutive index
+            var_to_index_map.insert({prev_var, 0});
+            std::vector<size_t> index_to_var_map = {prev_var};  // from consecutive indices to original variables
+            std::deque<size_t> dq;
+            std::vector<size_t> last_var_bdd_nodes;
+            size_t nr_redirected_arcs = 0;
+            assert(first_bdd_node_indices_.size(bdd_index) == 1);
+            for(size_t j=0; j<first_bdd_node_indices_.size(bdd_index); ++j)
+                dq.push_back(first_bdd_node_indices_(bdd_index, j));
+            while(!dq.empty())
+            {
+                const size_t i = dq.front();
+                dq.pop_front();
+                if(visited[i] == true)
+                    continue;
+                const size_t var = vars[i];
+                if(prev_var != var)
+                {
+                    // tmp: check if lower bound correct.
+                    float check_lb = std::numeric_limits<float>::infinity();
+                    for(const size_t i : last_var_bdd_nodes)
+                    {
+                        const auto mm = bdd_branch_nodes_[i].min_marginals();
+                        check_lb = std::min({mm[0], mm[1], check_lb});
+                    }
+                    assert(std::abs(check_lb - bdd_lb) <= 1e-3);
+                    // TODO: remove above again!
+                    for(const size_t i : last_var_bdd_nodes)
+                        bdd_branch_nodes_[i].prepare_forward_step();
+                    for(const size_t i : last_var_bdd_nodes)
+                        bdd_branch_nodes_[i].forward_step();
+                    last_var_bdd_nodes.clear();
+                    var_to_index_map.insert({var, var_to_index_map.size()});
+                    index_to_var_map.push_back(var);
+                    prev_var = var;
+                }
+                last_var_bdd_nodes.push_back(i);
+                visited[i] = true;
+                auto& bdd = bdd_branch_nodes_[i];
+                const auto mm = bdd.min_marginals();
+                bdd_node n;
+                n.var = var;
+
+                auto calculate_offset = [&](const float min_marg, const size_t offset) {
+                    assert(min_marg >= bdd_lb - 1e-3);
+                    // check if low resp. high arc min-marginal is within epsilon of lower bound
+                    if(min_marg <= bdd_lb + epsilon || offset == bdd_branch_node_vec::terminal_0_offset) // leave arc as is
+                    {
+                        if(offset == bdd_branch_node_vec::terminal_0_offset)
+                            return bdd_node::terminal_0;
+                        else if(offset == bdd_branch_node_vec::terminal_1_offset)
+                            return bdd_node::terminal_1;
+                        else
+                        {
+                            const size_t translated_offset = std::distance(&bdd_branch_nodes_[0], bdd.address(offset)); 
+                            dq.push_back(translated_offset);
+                            return translated_offset;
+                        }
+                    }
+                    else // reroute arc to true terminal if it is not a pointer to false terminal
+                    {
+                        if(offset == bdd_branch_node_vec::terminal_0_offset)
+                        {
+                            assert(false);
+                            return bdd_node::terminal_0;
+                        }
+                        else
+                        {
+                            ++nr_redirected_arcs;
+                            return bdd_node::terminal_1; 
+                        }
+                    }
+                };
+
+                n.low = calculate_offset(mm[0], bdd.offset_low);
+                n.high = calculate_offset(mm[1], bdd.offset_high);
+                cur_bdd.push_back(n);
+                bdd_offset_map[i] = cur_bdd.size()-1; 
+            }
+
+            // map bdd offsets
+            for(size_t i=0; i<cur_bdd.size(); ++i)
+            {
+                auto& n = cur_bdd[i];
+                assert(var_to_index_map.count(n.var) > 0);
+                n.var = var_to_index_map.find(n.var)->second;
+                if(n.low != bdd_node::terminal_0 && n.low != bdd_node::terminal_1)
+                {
+                    assert(bdd_offset_map[n.low] != std::numeric_limits<size_t>::max());
+                    assert(bdd_offset_map[n.low] > i);
+                    n.low = bdd_offset_map[n.low];
+                }
+                if(n.high != bdd_node::terminal_0 && n.high != bdd_node::terminal_1)
+                {
+                    assert(bdd_offset_map[n.high] != std::numeric_limits<size_t>::max());
+                    assert(bdd_offset_map[n.high] > i);
+                    n.high = bdd_offset_map[n.high];
+                } 
+            }
+
+            // add bdd to the bdd base. This reduces the BDD
+            // TODO: this only works with single root BDDs
+            assert(first_bdd_node_indices_.size(bdd_index) == 1);
+            std::vector<BDD::node_ref> node_refs(cur_bdd.size());
+            for(std::ptrdiff_t i=cur_bdd.size()-1; i>=0; --i)
+            {
+                const auto& n = cur_bdd[i];
+                auto get_node_ref = [&](const size_t offset) -> BDD::node_ref {
+                    if(offset == bdd_node::terminal_0)
+                        return bdd_mgr.botsink();
+                    if(offset == bdd_node::terminal_1)
+                        return bdd_mgr.topsink();
+                    assert(offset < node_refs.size() && offset > i);
+                    return node_refs[offset];
+                };
+                BDD::node_ref low = get_node_ref(n.low);
+                BDD::node_ref high = get_node_ref(n.high);
+                BDD::node_ref bdd_var = bdd_mgr.projection(n.var);
+                node_refs[i] = bdd_mgr.ite_rec(bdd_var, low, high);
+            }
+
+            std::cout << "Original bdd of size = " << cur_bdd.size() << ", # redirected arcs = " << nr_redirected_arcs << ", after reduction size = " << node_refs[0].nr_nodes() << "\n";
+
+            if(node_refs[0].is_terminal())
+            {
+                assert(node_refs[0].is_topsink());
+                continue;
+            }
+            // check number of solutions. If there is exactly one solution, forget about BDD (the relevant information should be present in other BDDs as well
+            if(node_refs[0].exactly_one_solution())
+            {
+                std::cout << "reduced BDD has only one solution, discard\n";
+                assert(false); // This never seems to happen!
+                continue; 
+            }
+
+            const size_t bdd_nr = bdd_collection.add_bdd(node_refs[0]);
+            bdd_collection.rebase(bdd_nr, index_to_var_map.begin(), index_to_var_map.end());
+        }
+
+        std::vector<size_t> bdd_indices(bdd_collection.nr_bdds());
+        std::iota(bdd_indices.begin(), bdd_indices.end(), 0);
+        std::cout << "nr bdds in tightening = " << bdd_indices.size() << "\n";
+        const size_t new_bdd_nr = bdd_collection.bdd_and(bdd_indices.begin(), bdd_indices.end());
+        std::cout << "new bdd size = " << bdd_collection.nr_bdd_nodes(new_bdd_nr) << "\n";
+    }
+
+    inline std::vector<float> bdd_mma_base_vec::min_marginal_differences(const float eps)
+    {
+        // go over all variables and see where min-marginal difference
+        this->backward_run();
+        // prepare forward run
+        for(size_t bdd_index=0; bdd_index<first_bdd_node_indices_.size(); ++bdd_index)
+            for(size_t j=0; j<first_bdd_node_indices_.size(bdd_index); ++j)
+                bdd_branch_nodes_[first_bdd_node_indices_(bdd_index,j)].m = 0.0;
+
+        std::vector<float> min_marg_diffs;
+        min_marg_diffs.reserve(nr_variables());
+
+        for(size_t var=0; var<this->nr_variables(); ++var)
+        {
+            const size_t _nr_bdds = nr_bdds(var);
+            std::array<float,2> min_marginals[_nr_bdds];
+            std::fill(min_marginals, min_marginals + _nr_bdds, std::array<float,2>{std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity()});
+            for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
+                bdd_branch_nodes_[i].min_marginal(min_marginals);
+
+            float min_diff = 0.0; //std::numeric_limits<float>::infinity(); 
+            bool negative = true;
+            bool positive = true;
+            for(size_t i=0; i<_nr_bdds; ++i)
+            {
+                min_diff += std::abs(min_marginals[i][1] - min_marginals[i][0]);
+                assert(std::isfinite(min_marginals[i][0]));
+                assert(std::isfinite(min_marginals[i][1]));
+                if(min_marginals[i][1] - min_marginals[i][0] >= eps)
+                {
+                    negative = false; 
+                }
+                else if(min_marginals[i][1] - min_marginals[i][0] <= -eps)
+                {
+                    positive = false;
+                }
+                else
+                {
+                    negative = false;
+                    positive = false; 
+                }
+            }
+            assert(_nr_bdds == 0 || (!(positive == true && negative == true)));
+            if(negative)
+                min_marg_diffs.push_back(-min_diff);
+            else if(positive)
+                min_marg_diffs.push_back(min_diff);
+            else
+                min_marg_diffs.push_back(0.0);
+
+            this->forward_step(var);
+        }
+
+        const size_t nr_positive_min_marg_differences = std::count_if(min_marg_diffs.begin(), min_marg_diffs.end(), [&](const float x) { return x > eps; });
+        const size_t nr_negative_min_marg_differences = std::count_if(min_marg_diffs.begin(), min_marg_diffs.end(), [&](const float x) { return x < -eps; });
+        const size_t nr_zero_min_marg_differences = min_marg_diffs.size() - nr_positive_min_marg_differences - nr_negative_min_marg_differences;
+        std::cout << "%zero min margs = " << 100.0 * double(nr_zero_min_marg_differences) / double(min_marg_diffs.size()) << "\n";
+        std::cout << "#zero min margs = " << nr_zero_min_marg_differences << "\n";
+        std::cout << "%positive min margs = " << 100.0 * double(nr_positive_min_marg_differences) / double(min_marg_diffs.size()) << "\n";
+        std::cout << "#positive min margs = " << nr_positive_min_marg_differences << "\n";
+        std::cout << "%negative min margs = " << 100.0 * double(nr_negative_min_marg_differences) / double(min_marg_diffs.size()) << "\n";
+        std::cout << "#negative min margs = " << nr_negative_min_marg_differences << "\n";
+
+        //for(float x : min_marg_diffs)
+        //    std::cout << x << " ";
+        //std::cout << "\n";
+        
+        return min_marg_diffs;
+    }
+
+    inline two_dim_variable_array<size_t> bdd_mma_base_vec::tighten_bdd_groups(const std::vector<char>& tighten_variables)
+    {
+        // (i) collect all BDDs that have support on at least one of the variables to participate in tightening.
+        std::vector<size_t> tighten_bdds;
+        std::vector<size_t> bdd_node_vars = bdd_node_variables();
+        std::vector<char> visited(bdd_branch_nodes_.size(), false);
+        for(size_t bdd_idx=0; bdd_idx<first_bdd_node_indices_.size(); ++bdd_idx)
+        {
+            assert(first_bdd_node_indices_.size(bdd_idx) == 1);
+            std::deque<size_t> dq;
+            for(size_t j=0; j<first_bdd_node_indices_.size(bdd_idx); ++j)
+                dq.push_back(first_bdd_node_indices_(bdd_idx, j));
+            while(!dq.empty())
+            {
+                const size_t i = dq.front();
+                dq.pop_front();
+                if(visited[i] == true)
+                    continue;
+                visited[i] = true;
+                const size_t var = bdd_node_vars[i];
+                if(tighten_variables[var])
+                    tighten_bdds.push_back(bdd_idx);
+                auto& bdd_node = bdd_branch_nodes_[i];
+                if(bdd_node.offset_low != bdd_branch_node_vec::terminal_0_offset && bdd_node.offset_low != bdd_branch_node_vec::terminal_1_offset)
+                {
+                    const size_t low_offset = std::distance(&bdd_branch_nodes_[0], bdd_node.address(bdd_node.offset_low)); 
+                    dq.push_back(low_offset);
+                }
+                if(bdd_node.offset_high != bdd_branch_node_vec::terminal_0_offset && bdd_node.offset_high != bdd_branch_node_vec::terminal_1_offset)
+                {
+                    const size_t high_offset = std::distance(&bdd_branch_nodes_[0], bdd_node.address(bdd_node.offset_high)); 
+                    dq.push_back(high_offset);
+                }
+            }
+        }
+
+        // (ii) partition BDDs into groups defined by disconnected components in the variable/BDD adjacency graph.
+        // first build up var bdd adjacency matrix
+        std::vector<std::array<size_t,2>> var_bdd_adjacencies;
+        std::vector<size_t> var_bdd_adjacencies_size(tighten_bdds.size() + nr_variables(), 0);
+        std::fill(visited.begin(), visited.end(), false);
+        for(size_t c=0; c<tighten_bdds.size(); ++c)
+        {
+            const size_t bdd_idx = tighten_bdds[c];
+            assert(first_bdd_node_indices_.size(bdd_idx) == 1);
+            std::deque<size_t> dq;
+            for(size_t j=0; j<first_bdd_node_indices_.size(bdd_idx); ++j)
+                dq.push_back(first_bdd_node_indices_(bdd_idx, j));
+            while(!dq.empty())
+            {
+                const size_t i = dq.front();
+                dq.pop_front();
+                if(visited[i] == true)
+                    continue;
+                visited[i] = true;
+                const size_t var = bdd_node_vars[i];
+                var_bdd_adjacencies.push_back({c, tighten_bdds.size() + var});
+                ++var_bdd_adjacencies_size[c];
+                ++var_bdd_adjacencies_size[tighten_bdds.size() + var];
+                auto& bdd_node = bdd_branch_nodes_[i];
+                if(bdd_node.offset_low != bdd_branch_node_vec::terminal_0_offset && bdd_node.offset_low != bdd_branch_node_vec::terminal_1_offset)
+                {
+                    const size_t low_offset = std::distance(&bdd_branch_nodes_[0], bdd_node.address(bdd_node.offset_low)); 
+                    dq.push_back(low_offset);
+                }
+                if(bdd_node.offset_high != bdd_branch_node_vec::terminal_0_offset && bdd_node.offset_high != bdd_branch_node_vec::terminal_1_offset)
+                {
+                    const size_t high_offset = std::distance(&bdd_branch_nodes_[0], bdd_node.address(bdd_node.offset_high)); 
+                    dq.push_back(high_offset); 
+                }
+            } 
+        }
+
+        // build var bdd adjacency graph
+        two_dim_variable_array<size_t> g(var_bdd_adjacencies_size);
+        std::fill(var_bdd_adjacencies_size.begin(), var_bdd_adjacencies_size.end(), 0);
+        for(const auto [x,y] : var_bdd_adjacencies)
+        {
+            g(x, var_bdd_adjacencies_size[x]++) = y;
+            g(y, var_bdd_adjacencies_size[y]++) = x; 
+        }
+
+        // determine connected components
+        visited.resize(nr_variables() + tighten_bdds.size());
+        std::fill(visited.begin(), visited.end(), false);
+        two_dim_variable_array<size_t> ccs;
+        for(size_t i=0; i<visited.size(); ++i)
+        {
+            if(visited[i])
+                continue;
+            std::stack<size_t> s;
+            std::vector<size_t> cc_indices;
+            s.push(i);
+            while(!s.empty())
+            {
+                const size_t i = s.top();
+                s.pop();
+                if(visited[i])
+                    continue;
+                visited[i] = true;
+                if(i < tighten_bdds.size())
+                    cc_indices.push_back(i);
+                for(const size_t j : g[i])
+                    s.push(j); 
+            }
+            if(cc_indices.size() > 0)
+                ccs.push_back(cc_indices.begin(), cc_indices.end());
+        }
+
+        std::cout << "#bdd groups = " << ccs.size() << "\n";
+        size_t nr_bdds = 0;
+        size_t max_group_size = 0;
+        for(size_t c=0; c<ccs.size(); ++c)
+        {
+            nr_bdds += ccs.size(c);
+            max_group_size = std::max(max_group_size, ccs.size(c)); 
+        }
+        std::cout << "#bdds = " << nr_bdds << "\n";
+        std::cout << "max bdd group size = " << max_group_size << "\n";
+
+        return ccs;
+    }
+
 }

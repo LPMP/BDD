@@ -202,6 +202,7 @@ return interval_1 == o.interval_1 && bdd_index_1 == o.bdd_index_1 && interval_2 
                             assert(i >= 0 && i < var_to_bdd_node_terminal_1.size());
                             if(var_to_bdd_node_terminal_1[i] == pointer_to_terminal_1_not_set) {
                                 const size_t v_intermed = *(bdd_vars_begin + i+1);
+                                nr_variables_ = std::max(v_intermed+1, nr_variables_);
                                 bdd_nodes_.push_back({var_to_bdd_node_terminal_1[i+1], var_to_bdd_node_terminal_1[i+1], v_intermed}); 
                                 check_node_valid(bdd_nodes_.back());
                                 var_to_bdd_node_terminal_1[i] = bdd_nodes_.size()-1;

@@ -20,6 +20,7 @@ namespace LPMP {
                 void add_bdd(BDD::node_ref bdd, VARIABLE_ITERATOR var_begin, VARIABLE_ITERATOR var_end);
 
             void add_bdd(BDD::node_ref bdd);
+            void add_bdd(BDD::bdd_collection_entry bdd);
 
             BDD::bdd_collection& get_bdd_collection() { return bdd_collection; }
 

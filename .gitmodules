@@ -16,3 +16,6 @@
 [submodule "external/vectorclass"]
 	path = external/vectorclass
 	url = https://github.com/vectorclass/version2.git
+[submodule "external/pybind11"]
+	path = external/pybind11
+	url = https://github.com/pybind/pybind11.git
