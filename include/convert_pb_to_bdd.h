@@ -16,24 +16,18 @@ namespace LPMP {
     class bdd_converter {
         public:
             bdd_converter(BDD::bdd_mgr& bdd_mgr) : bdd_mgr_(bdd_mgr) 
-        {}
+            {
+                bdd_ = lineq_bdd();
+            }
 
             template<typename LEFT_HAND_SIDE_ITERATOR>
-                BDD::node_ref convert_to_bdd(LEFT_HAND_SIDE_ITERATOR begin, LEFT_HAND_SIDE_ITERATOR end, const ILP_input::inequality_type ineq, const int right_hand_side);
+                BDD::node_ref convert_to_bdd(LEFT_HAND_SIDE_ITERATOR begin, LEFT_HAND_SIDE_ITERATOR end, const ILP_input::inequality_type ineq_type, const int right_hand_side);
 
-            BDD::node_ref convert_to_bdd(const std::vector<int> coefficients, const ILP_input::inequality_type ineq, const int right_hand_side);
+            BDD::node_ref convert_to_bdd(const std::vector<int> coefficients, const ILP_input::inequality_type ineq_type, const int right_hand_side);
 
         private:
-            mutable size_t tmp_rec_calls = 0;
-            // returned vector has as its first element the right hand side, then follow the coefficients
-
-            // implemenation with global subinequality cache
-            bool is_always_true(const int min_val, const int max_val, const std::vector<int>& nf, const ILP_input::inequality_type ineq) const;
-            bool is_always_false(const int min_val, const int max_val, const std::vector<int>& nf, const ILP_input::inequality_type ineq) const;
-            BDD::node_ref convert_to_bdd_impl(std::vector<int>& nf, const ILP_input::inequality_type ineq, const int min_val, const int max_val);
    
             BDD::bdd_mgr& bdd_mgr_;
-            //using constraint_cache_type = std::unordered_map<std::vector<int>,BDD::node_ref>;
             using constraint_cache_type = tsl::robin_map<std::vector<int>,BDD::node_ref>;
             constraint_cache_type equality_cache;
             constraint_cache_type lower_equal_cache;
@@ -44,17 +38,52 @@ namespace LPMP {
     template<typename LEFT_HAND_SIDE_ITERATOR>
         BDD::node_ref bdd_converter::convert_to_bdd(LEFT_HAND_SIDE_ITERATOR begin, LEFT_HAND_SIDE_ITERATOR end, const ILP_input::inequality_type ineq, const int right_hand_side)
         {
-            auto [nf, ineq_nf] = bdd_.normal_form(begin, end, ineq, right_hand_side);
+            auto [nf, ineq_type] = bdd_.normal_form(begin, end, ineq, right_hand_side);
 
-            int min_val = 0;
-            int max_val = 0;
-            for(size_t i=1; i<nf.size(); ++i)
-            {
-                min_val += std::min(0, nf[i]);
-                max_val += std::max(0, nf[i]);
+            // check cache for inequality type
+            switch(ineq_type) {
+                case ILP_input::inequality_type::equal: 
+                    {
+                        auto cached = equality_cache.find(nf);
+                        if(cached != equality_cache.end())
+                            return cached->second;
+                    }
+                    break;
+                case ILP_input::inequality_type::smaller_equal:
+                    {
+                        auto cached = lower_equal_cache.find(nf);
+                        if(cached != lower_equal_cache.end())
+                            return cached->second;
+                    }
+                    break;
+                case ILP_input::inequality_type::greater_equal:
+                    throw std::runtime_error("greater equal constraint not in normal form");
+                    break;
+                default:
+                    throw std::runtime_error("inequality type not supported");
+                    break;
             }
 
-            tmp_rec_calls = 0;
-            return convert_to_bdd_impl(nf, ineq_nf, min_val, max_val); 
+            // otherwise build BDD
+            bdd_.build_from_inequality(nf, ineq_type);
+            BDD::node_ref bdd_ref = bdd_.convert_to_lbdd(bdd_mgr_);
+
+            // store in cache
+            switch(ineq_type) {
+                case ILP_input::inequality_type::equal: 
+                    equality_cache.insert(std::make_pair(nf,bdd_ref));
+                    break;
+                case ILP_input::inequality_type::smaller_equal:
+                    lower_equal_cache.insert(std::make_pair(nf,bdd_ref));
+                    break;
+                case ILP_input::inequality_type::greater_equal:
+                    throw std::runtime_error("greater equal constraint not in normal form");
+                    break;
+                default:
+                    throw std::runtime_error("inequality type not supported");
+                    break;
+            }
+
+            return bdd_ref;
         }
 }

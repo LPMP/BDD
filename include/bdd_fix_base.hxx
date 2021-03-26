@@ -79,7 +79,7 @@ namespace LPMP {
             bool fix_variables();
 
             bool fix_variables(const std::vector<size_t> & indices, const std::vector<char> & values);
-            bool fix_variable(const size_t var, const char value);
+            bool fix_next_variable(std::stack<std::pair<size_t, char>> & local_fixes);
             bool is_fixed(const size_t var) const;
 
             std::vector<double> search_space_reduction_coeffs();
@@ -153,8 +153,12 @@ namespace LPMP {
         std::fill(primal_solution_.begin(), primal_solution_.end(), 2);
     }
 
-    bool bdd_fix_base::fix_variable(const std::size_t var, const char value)
+    bool bdd_fix_base::fix_next_variable(std::stack<std::pair<size_t, char>> & local_fixes)
     {
+        const size_t var = local_fixes.top().first;
+        const char value = local_fixes.top().second;
+        local_fixes.pop();
+
         assert(0 <= value && value <= 1);
         assert(primal_solution_.size() == this->nr_variables());
         assert(var < primal_solution_.size());
@@ -169,7 +173,6 @@ namespace LPMP {
         primal_solution_[var] = value;
         const log_entry entry(&primal_solution_[var]);
         log_.push(entry);
-        std::vector<std::pair<size_t, char>> restrictions;
 
         for (size_t bdd_index = 0; bdd_index < this->nr_bdds(var); bdd_index++)
         {
@@ -205,9 +208,9 @@ namespace LPMP {
                     continue;
                 }
                 if (cur->nr_feasible_low_arcs == 0)
-                    restrictions.emplace_back(cur->variable_index, 1);
+                    local_fixes.emplace(cur->variable_index, 1);
                 if (cur->nr_feasible_high_arcs == 0)
-                    restrictions.emplace_back(cur->variable_index, 0);
+                    local_fixes.emplace(cur->variable_index, 0);
                 cur = cur->prev;
             }
             cur = bdd_var.next;
@@ -219,18 +222,11 @@ namespace LPMP {
                     continue;
                 }
                 if (cur->nr_feasible_low_arcs == 0)
-                    restrictions.emplace_back(cur->variable_index, 1);
+                    local_fixes.emplace(cur->variable_index, 1);
                 if (cur->nr_feasible_high_arcs == 0)
-                    restrictions.emplace_back(cur->variable_index, 0);
+                    local_fixes.emplace(cur->variable_index, 0);
                 cur = cur->next;
             }
-        }
-
-        // fix implied restrictions
-        for (auto & restriction : restrictions)
-        {
-            if (!fix_variable(restriction.first, restriction.second))
-                return false;
         }
 
         return true;
@@ -399,7 +395,11 @@ namespace LPMP {
             size_t index = fix.index_;
 
             revert_changes(fix.log_size_);
-            bool feasible = fix_variable(variables[index], fix.val_);
+            std::stack<std::pair<size_t, char>> local_fixes;
+            local_fixes.emplace(variables[index], fix.val_);
+            bool feasible = true;
+            while (!local_fixes.empty() && feasible)
+                feasible = fix_next_variable(local_fixes);
 
             if (!feasible)
                 continue;

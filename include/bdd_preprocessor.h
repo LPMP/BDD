@@ -4,6 +4,7 @@
 #include "bdd_collection.h"
 #include "ILP_input.h"
 #include "convert_pb_to_bdd.h"
+#include "lineq_bdd.h"
 #include "two_dimensional_variable_array.hxx"
 //#include "edge_cover.h"
 //#include "graph.hxx"

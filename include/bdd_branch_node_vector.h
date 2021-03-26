@@ -223,7 +223,7 @@ namespace LPMP {
             void compute_lower_bound_after_backward_pass(); 
 
             std::vector<double> total_min_marginals();
-            void solve(const size_t max_iter, const double tolerance); 
+            void solve(const size_t max_iter, const double tolerance, const double time_limit); 
             double lower_bound() const { return lower_bound_; }
             void set_cost(const double c, const size_t var);
             template<typename ITERATOR>
@@ -521,7 +521,7 @@ namespace LPMP {
         message_passing_state_ = message_passing_state::after_backward_pass;
     }
 
-    inline void bdd_mma_base_vec::solve(const size_t max_iter, const double tolerance)
+    inline void bdd_mma_base_vec::solve(const size_t max_iter, const double tolerance, const double time_limit)
     {
         const auto start_time = std::chrono::steady_clock::now();
         double lb_prev = this->lower_bound();
@@ -537,9 +537,15 @@ namespace LPMP {
             lb_post = this->lower_bound();
             std::cout << "iteration " << iter << ", lower bound = " << lb_post;
             time = std::chrono::steady_clock::now();
-            std::cout << ", time = " << (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000 << " s";
+            double time_spent = (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000;
+            std::cout << ", time = " << time_spent << " s";
             std::cout << "\n";
-            if (std::abs(lb_prev-lb_post) < std::abs(0.001*tolerance*lb_prev))
+            if (time_spent > time_limit)
+            {
+                std::cout << "Time limit reached." << std::endl;
+                break;
+            }
+            if (std::abs(lb_prev-lb_post) < std::abs(tolerance*lb_prev))
             {
                 std::cout << "Relative progress less than tolerance (" << tolerance << ")\n";
                 break;

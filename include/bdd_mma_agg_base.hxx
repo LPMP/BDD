@@ -1,6 +1,6 @@
 #pragma once
 
-#include "bdd_opt_base.hxx"
+#include "bdd_mma_base.hxx"
 #include "time_measure_util.h"
 #include <vector>
 #include <array>
@@ -10,14 +10,14 @@ namespace LPMP {
 
     // base class for min marginal averaging with aggressive distribution of excess costs
     template<typename BDD_OPT_BASE>
-        class bdd_mma_agg_base : public BDD_OPT_BASE {
+        class bdd_mma_agg_base : public bdd_mma_base<BDD_OPT_BASE> {
         public:
-            using BDD_OPT_BASE::BDD_OPT_BASE;
+            using bdd_mma_base<BDD_OPT_BASE>::bdd_mma_base;
 
             void min_marginal_averaging_forward_aggressive();
             void min_marginal_averaging_backward_aggressive();
             void iteration();
-            void solve(const size_t max_iter, const double tolerance);
+            void solve(const size_t max_iter, const double tolerance, const double time_limit);
 
         protected: 
             template <typename ITERATOR>
@@ -42,7 +42,8 @@ namespace LPMP {
         assert(std::isfinite(marginal_diff));
         assert(std::isfinite(marginal_diff_target_in));
         assert(std::isfinite(marginal_diff_target_out));
-        if(this->bdd_variables_(var,bdd_index).last_var_index == min_last_var_index) {
+        // if(this->bdd_variables_(var,bdd_index).last_var_index == min_last_var_index) {
+        if(this->last_variable_of_bdd(var, bdd_index)) {
             this->update_cost(var, bdd_index, -marginal_diff + marginal_diff_target_in);
         } else {
             assert(std::isfinite(marginal_diff_target_out));
@@ -59,7 +60,8 @@ namespace LPMP {
         assert(std::isfinite(marginal_diff));
         assert(std::isfinite(marginal_diff_target_in));
         assert(std::isfinite(marginal_diff_target_out));
-        if(this->bdd_variables_(var,bdd_index).first_var_index == max_first_var_index) {
+        // if(this->bdd_variables_(var,bdd_index).first_var_index == max_first_var_index) {
+        if(this->first_variable_of_bdd(var, bdd_index)) {
             this->update_cost(var, bdd_index, -marginal_diff + marginal_diff_target_in);
         } else {
             this->update_cost(var, bdd_index, -marginal_diff + marginal_diff_target_out);
@@ -72,16 +74,17 @@ namespace LPMP {
         {
             assert(this->nr_bdds(var) == std::distance(marginals_begin, marginals_end));
             std::array<double,2> avg_marg_out = {0.0, 0.0};
-            size_t divisor_out = 0;
+            int divisor_out = 0;
             for(size_t bdd_index=0; bdd_index<this->nr_bdds(var); ++bdd_index) {
                     avg_marg_out[0] += (*(marginals_begin+bdd_index))[0];
                     avg_marg_out[1] += (*(marginals_begin+bdd_index))[1];
-                if(this->bdd_variables_(var,bdd_index).last_var_index > min_last_var_index)
+                // if(this->bdd_variables_(var,bdd_index).last_var_index > min_last_var_index)
+                if(!this->last_variable_of_bdd(var, bdd_index))
                     ++divisor_out;
             }
             std::array<double,2> avg_marg_in = avg_marg_out;
-            size_t divisor_in = this->nr_bdds(var) - divisor_out;
-            size_t max_divisor = std::max(divisor_in, divisor_out);
+            int divisor_in = this->nr_bdds(var) - divisor_out;
+            int max_divisor = std::max(divisor_in, divisor_out);
             if (divisor_out == 0)
             {
                 avg_marg_out[0] = 0;
@@ -94,10 +97,8 @@ namespace LPMP {
             {
                 avg_marg_out[0] /= double(max_divisor);
                 avg_marg_out[1] /= double(max_divisor);
-                avg_marg_in[0] -= avg_marg_out[0] * divisor_out;
-                avg_marg_in[0] /= double(divisor_in);
-                avg_marg_in[1] -= avg_marg_out[1] * divisor_out;
-                avg_marg_in[1] /= double(divisor_in);
+                avg_marg_in[0] *= std::max(0, divisor_in - divisor_out) / (double(divisor_in)*double(divisor_in));
+                avg_marg_in[1] *= std::max(0, divisor_in - divisor_out) / (double(divisor_in)*double(divisor_in));
             }
 
             return std::make_pair(avg_marg_in, avg_marg_out);
@@ -109,16 +110,17 @@ namespace LPMP {
         {
             assert(this->nr_bdds(var) == std::distance(marginals_begin, marginals_end));
             std::array<double,2> avg_marg_out = {0.0, 0.0};
-            size_t divisor_out = 0;
+            int divisor_out = 0;
             for(size_t bdd_index=0; bdd_index<this->nr_bdds(var); ++bdd_index) {
                     avg_marg_out[0] += (*(marginals_begin+bdd_index))[0];
                     avg_marg_out[1] += (*(marginals_begin+bdd_index))[1];
-                if(this->bdd_variables_(var,bdd_index).first_var_index < max_first_var_index)
+                // if(this->bdd_variables_(var,bdd_index).first_var_index < max_first_var_index)
+                if(!this->first_variable_of_bdd(var, bdd_index))
                     ++divisor_out;
             }
             std::array<double,2> avg_marg_in = avg_marg_out;
-            size_t divisor_in = this->nr_bdds(var) - divisor_out;
-            size_t max_divisor = std::max(divisor_in, divisor_out);
+            int divisor_in = this->nr_bdds(var) - divisor_out;
+            int max_divisor = std::max(divisor_in, divisor_out);
             if (divisor_out == 0)
             {
                 avg_marg_out[0] = 0;
@@ -131,10 +133,8 @@ namespace LPMP {
             {
                 avg_marg_out[0] /= double(max_divisor);
                 avg_marg_out[1] /= double(max_divisor);
-                avg_marg_in[0] -= avg_marg_out[0] * divisor_out;
-                avg_marg_in[0] /= double(divisor_in);
-                avg_marg_in[1] -= avg_marg_out[1] * divisor_out;
-                avg_marg_in[1] /= double(divisor_in);
+                avg_marg_in[0] *= std::max(0, divisor_in - divisor_out) / (double(divisor_in)*double(divisor_in));
+                avg_marg_in[1] *= std::max(0, divisor_in - divisor_out) / (double(divisor_in)*double(divisor_in));
             }
             return std::make_pair(avg_marg_in, avg_marg_out);
         }
@@ -207,14 +207,37 @@ namespace LPMP {
     }
 
     template<typename BDD_OPT_BASE>
-        void bdd_mma_agg_base<BDD_OPT_BASE>::solve(const size_t max_iter, const double tolerance)
+        void bdd_mma_agg_base<BDD_OPT_BASE>::solve(const size_t max_iter, const double tolerance, const double time_limit)
         {
-            std::cout << "initial lower bound = " << this->lower_bound() << "\n";
-            for(size_t iter=0; iter<max_iter; ++iter)
+            const auto start_time = std::chrono::steady_clock::now();
+            double lb_prev = this->lower_bound();
+            double lb_post = lb_prev;
+            std::cout << "initial lower bound = " << lb_prev;
+            auto time = std::chrono::steady_clock::now();
+            std::cout << ", time = " << (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000 << " s";
+            std::cout << "\n";
+            size_t iter;
+            for(iter=0; iter<max_iter-1; ++iter)
             {
                 iteration();
-                std::cout << "iteration " << iter << ", lower bound = " << this->lower_bound() << "\n";
+                lb_prev = lb_post;
+                lb_post = this->lower_bound();
+                std::cout << "iteration " << iter << ", lower bound = " << lb_post;
+                time = std::chrono::steady_clock::now();
+                std::cout << ", time = " << (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000 << " s";
+                std::cout << "\n";
+                if (std::abs(lb_prev-lb_post) < std::abs(tolerance*lb_prev))
+                {
+                    std::cout << "Relative progress less than tolerance (" << tolerance << ")\n";
+                    break;
+                }
             }
+            bdd_mma_base<BDD_OPT_BASE>::iteration();
+            std::cout << "iteration " << iter+1 << ", lower bound = " << this->lower_bound();
+            time = std::chrono::steady_clock::now();
+            std::cout << ", time = " << (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000 << " s";
+            std::cout << "\n";
+            std::cout << "(last iteration with default averaging)" << std::endl;
             std::cout << "final lower bound = " << this->lower_bound() << "\n";
 
         }

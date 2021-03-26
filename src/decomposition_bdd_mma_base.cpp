@@ -113,7 +113,7 @@ namespace LPMP {
 
     void decomposition_bdd_base::backward_run()
     {
-//#pragma omp parallel for
+#pragma omp parallel for
         for(std::ptrdiff_t interval_nr=intervals.nr_intervals()-1; interval_nr>=0; --interval_nr)
         {
             bdd_bases[interval_nr].read_in_Lagrange_multipliers(bdd_bases[interval_nr].backward_queue);
@@ -123,14 +123,15 @@ namespace LPMP {
         }
     }
 
-    void decomposition_bdd_base::solve(const size_t max_iter, const double tolerance)
+    void decomposition_bdd_base::solve(const size_t max_iter, const double tolerance, const double time_limit)
     {
-        MEASURE_FUNCTION_EXECUTION_TIME;
         const auto start_time = std::chrono::steady_clock::now();
         double lb_prev = this->lower_bound();
         double lb_post = lb_prev;
         std::cout << "initial lower bound = " << lb_prev;
-        
+        auto time = std::chrono::steady_clock::now();
+        std::cout << ", time = " << (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000 << " s";
+        std::cout << "\n";
         // version where forward and backward passes are executed at
         for(size_t i=0; i<max_iter; ++i)
         {
@@ -151,7 +152,16 @@ namespace LPMP {
             }
             lb_prev = lb_post;
             lb_post = this->lower_bound();
-            std::cout << "iteration " << i << ", lower bound = " << lb_post<< "\n";
+            std::cout << "iteration " << i << ", lower bound = " << lb_post;
+            time = std::chrono::steady_clock::now();
+            double time_spent = (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000;
+            std::cout << ", time = " << time_spent << " s";
+            std::cout << "\n";
+            if (time_spent > time_limit)
+            {
+                std::cout << "Time limit reached." << std::endl;
+                break;
+            }
             if (std::abs(lb_prev-lb_post) < std::abs(tolerance*lb_prev))
             {
                 std::cout << "Relative progress less than tolerance (" << tolerance << ")\n";

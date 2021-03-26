@@ -17,7 +17,7 @@ namespace LPMP {
             double lower_bound();
             std::vector<double> total_min_marginals();
             void iteration(); 
-            void solve(const size_t max_iter, const double tolerance);
+            void solve(const size_t max_iter, const double tolerance, const double time_limit);
             void backward_run(); 
         private:
 
