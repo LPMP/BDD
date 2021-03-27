@@ -16,6 +16,7 @@ PYBIND11_MODULE(ILP_instance_py, m) {
         .def("feasible", [](const LPMP::ILP_input& ilp, const std::vector<char>& sol) { 
                 return ilp.feasible(sol.begin(), sol.end());
                 })
+        .def("export_constraints", &LPMP::ILP_input::export_constraints)
         ;
 
     m.def("read_ILP", [](const std::string& filename) -> LPMP::ILP_input { return LPMP::ILP_parser::parse_file(filename); }); 

@@ -8,6 +8,7 @@
 #include "permutation.hxx"
 #include <tsl/robin_map.h>
 #include <tsl/robin_set.h>
+#include <Eigen/SparseCore>
 
 namespace LPMP {
 
@@ -81,6 +82,7 @@ namespace LPMP {
         size_t nr_coalesce_sets() const;
         std::tuple<const size_t*, const size_t*> coalesce_set(const size_t i) const;
 
+        std::tuple<Eigen::SparseMatrix<int>, Eigen::Vector<int,Eigen::Dynamic>, Eigen::SparseMatrix<int>, Eigen::Vector<int,Eigen::Dynamic>> export_constraints() const; 
 
         private:
             std::vector<linear_constraint> linear_constraints_;
