@@ -21,7 +21,7 @@ if(OpenMP_CXX_FOUND)
     target_link_libraries(LPMP-BDD INTERFACE OpenMP::OpenMP_CXX)
 endif()
 
-set(CMAKE_POSITION_INDEPENDETN_CODE ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 add_subdirectory(external/LBDD)
 set(PYBIND11_CPP_STANDARD -std=c++17)
