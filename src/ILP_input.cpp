@@ -422,7 +422,7 @@ namespace LPMP {
                     smaller_equal_coefficients.push_back(T(nr_smaller_equal_constraints, l.var, l.coefficient));
                 ++nr_smaller_equal_constraints;
             }
-            else if(constraints()[c].ineq == inequality_type::smaller_equal)
+            else if(constraints()[c].ineq == inequality_type::greater_equal)
             {
                 for(const auto& l : constraints()[c].variables)
                     smaller_equal_coefficients.push_back(T(nr_smaller_equal_constraints, l.var, -l.coefficient));
