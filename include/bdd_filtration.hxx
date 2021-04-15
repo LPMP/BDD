@@ -1,6 +1,7 @@
 #pragma once
 
 #include <bdd.h>
+#include "bdd_branch_instruction.h"
 
 namespace LPMP {
 

@@ -400,62 +400,45 @@ namespace LPMP {
         return std::make_tuple(coalesce_sets_[i].begin(), coalesce_sets_[i].end());
     }
 
-    std::tuple<Eigen::SparseMatrix<int>, Eigen::Vector<int, Eigen::Dynamic>, Eigen::SparseMatrix<int>, Eigen::Vector<int, Eigen::Dynamic>> ILP_input::export_constraints() const
+    std::tuple<Eigen::SparseMatrix<int>, Eigen::MatrixXi> ILP_input::export_constraints() const
     {
         using T = Eigen::Triplet<int>;
-        std::vector<T> equality_coefficients;
-        std::vector<T> smaller_equal_coefficients;
+        std::vector<T> coefficients;
 
-        size_t nr_equality_constraints = 0;
-        size_t nr_smaller_equal_constraints = 0;
+        for(size_t c=0; c<nr_constraints(); ++c)
+        {
+            for(const auto& l : constraints()[c].variables)
+                coefficients.push_back(T(c, l.var, l.coefficient));
+        }
+
+        Eigen::SparseMatrix<int> A(nr_constraints(), nr_variables());
+        A.setFromTriplets(coefficients.begin(), coefficients.end());
+
+        Eigen::MatrixXi b(nr_constraints(), 2);
         for(size_t c=0; c<nr_constraints(); ++c)
         {
             if(constraints()[c].ineq == inequality_type::equal)
             {
-                for(const auto& l : constraints()[c].variables)
-                    equality_coefficients.push_back(T(nr_equality_constraints, l.var, l.coefficient));
-                ++nr_equality_constraints;
+                b(c,0) = constraints()[c].right_hand_side;
+                b(c,1) = constraints()[c].right_hand_side;
             }
             else if(constraints()[c].ineq == inequality_type::smaller_equal)
             {
-                for(const auto& l : constraints()[c].variables)
-                    smaller_equal_coefficients.push_back(T(nr_smaller_equal_constraints, l.var, l.coefficient));
-                ++nr_smaller_equal_constraints;
+                b(c,0) = std::numeric_limits<int>::min();
+                b(c,1) = constraints()[c].right_hand_side;
             }
             else if(constraints()[c].ineq == inequality_type::smaller_equal)
             {
-                for(const auto& l : constraints()[c].variables)
-                    smaller_equal_coefficients.push_back(T(nr_smaller_equal_constraints, l.var, -l.coefficient));
-                ++nr_smaller_equal_constraints;
+                b(c,0) = constraints()[c].right_hand_side;
+                b(c,1) = std::numeric_limits<int>::max();
             }
             else
+            {
                 assert(false);
+            } 
         }
 
-        Eigen::SparseMatrix<int> A_equality(nr_equality_constraints, nr_variables());
-        A_equality.setFromTriplets(equality_coefficients.begin(), equality_coefficients.end());
-
-        Eigen::SparseMatrix<int> A_smaller_equal(nr_smaller_equal_constraints, nr_variables());
-        A_smaller_equal.setFromTriplets(smaller_equal_coefficients.begin(), smaller_equal_coefficients.end());
-
-        Eigen::Vector<int, Eigen::Dynamic> b_equality(nr_equality_constraints);
-        Eigen::Vector<int, Eigen::Dynamic> b_smaller_equal(nr_smaller_equal_constraints);
-        nr_equality_constraints = 0;
-        nr_smaller_equal_constraints = 0;
-        for(size_t c=0; c<nr_constraints(); ++c)
-        {
-            if(constraints()[c].ineq == inequality_type::equal)
-                b_equality[nr_equality_constraints++] = constraints()[c].right_hand_side;
-            else if(constraints()[c].ineq == inequality_type::smaller_equal)
-                b_smaller_equal[nr_smaller_equal_constraints++] = constraints()[c].right_hand_side;
-            else if(constraints()[c].ineq == inequality_type::smaller_equal)
-                b_smaller_equal[nr_smaller_equal_constraints++] = -constraints()[c].right_hand_side;
-            else
-                assert(false);
-        }
-
-        return {A_equality,b_equality,A_smaller_equal,b_smaller_equal}; 
+        return {A,b};
     }
-
 
 }

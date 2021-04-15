@@ -203,6 +203,7 @@ namespace LPMP {
             size_t nr_bdd_vectors(const size_t var_group) const;
             size_t nr_bdds(const size_t var) const { assert(var < nr_variables()); return nr_bdds_[var]; }
             size_t nr_bdd_nodes() const { return bdd_branch_nodes_.size(); }
+            size_t nr_bdds() const { return first_bdd_node_indices_.size(); }
 
             void forward_step(const size_t var_group);
             void min_marginal_averaging_forward();
@@ -231,6 +232,7 @@ namespace LPMP {
             void get_arc_marginals(const size_t first_node, const size_t last_node, std::vector<double>& arc_marginals);
 
             std::array<size_t,2> bdd_branch_node_offset(const size_t var, const size_t bdd_index) const;
+            size_t variable(const size_t bdd_offset) const;
 
         protected:
             std::vector<bdd_branch_node_vec> bdd_branch_nodes_;
@@ -248,10 +250,22 @@ namespace LPMP {
             } message_passing_state_ = message_passing_state::none;
 
         private:
-            std::vector<size_t> bdd_node_variables() const;
+            std::vector<size_t> compute_bdd_branch_instruction_variables() const;
             void tighten_bdd(const float eps);
-            std::vector<float> min_marginal_differences(const float eps);
             two_dim_variable_array<size_t> tighten_bdd_groups(const std::vector<char>& tighten_variables);
+            mutable std::vector<size_t> bdd_branch_instruction_variables_;
+
+            // for BDD tightening
+        public:
+            std::vector<float> min_marginal_differences(const float eps);
+            two_dim_variable_array<std::array<float,2>> min_marginals();
+            // export BDDs that cover the given variables
+            // TODO: unify with init?
+            //void add_bdds(bdd_storage& stor);
+
+            std::vector<size_t> bdd_vars(const size_t bdd_idx);
+            std::vector<bdd_branch_instruction<float>> export_bdd(const size_t bdd_idx);
+
     };
 
 
@@ -703,6 +717,15 @@ namespace LPMP {
         return offsets;
     }
 
+    inline size_t bdd_mma_base_vec::variable(const size_t bdd_offset) const
+    {
+        assert(bdd_offset < bdd_branch_nodes_.size());
+        if(bdd_branch_instruction_variables_.size() != bdd_branch_nodes_.size())
+            bdd_branch_instruction_variables_ = compute_bdd_branch_instruction_variables();
+        assert(bdd_branch_instruction_variables_.size() != bdd_branch_nodes_.size());
+        return bdd_branch_instruction_variables_[bdd_offset]; 
+    }
+
     inline std::vector<double> bdd_mma_base_vec::total_min_marginals()
     {
         this->backward_run();
@@ -737,7 +760,7 @@ namespace LPMP {
         return total_min_marginals;
     }
 
-    inline std::vector<size_t> bdd_mma_base_vec::bdd_node_variables() const
+    inline std::vector<size_t> bdd_mma_base_vec::compute_bdd_branch_instruction_variables() const
     {
         std::vector<size_t> vars;
         vars.reserve(bdd_branch_nodes_.size());
@@ -755,7 +778,7 @@ namespace LPMP {
                 bdd_branch_nodes_[first_bdd_node_indices_(bdd_index,j)].m = 0.0;
 
         assert(epsilon >= 0.0);
-        const std::vector<size_t> vars = bdd_node_variables();
+        const std::vector<size_t> vars = compute_bdd_branch_instruction_variables();
         std::vector<char> visited(bdd_branch_nodes_.size(), false);
         std::vector<size_t> bdd_offset_map(bdd_branch_nodes_.size(), std::numeric_limits<size_t>::max()); // maps offsets from bdd_branch_nodes_ onto offsets used for storing a single bdd in a vector
 
@@ -783,7 +806,7 @@ namespace LPMP {
 
             // TODO: move out to top
             std::vector<bdd_node> cur_bdd;
-            std::unordered_map<size_t,size_t> var_to_index_map; // from original variables to consecutive index
+            tsl::robin_map<size_t,size_t> var_to_index_map; // from original variables to consecutive index
             var_to_index_map.insert({prev_var, 0});
             std::vector<size_t> index_to_var_map = {prev_var};  // from consecutive indices to original variables
             std::deque<size_t> dq;
@@ -1004,7 +1027,7 @@ namespace LPMP {
     {
         // (i) collect all BDDs that have support on at least one of the variables to participate in tightening.
         std::vector<size_t> tighten_bdds;
-        std::vector<size_t> bdd_node_vars = bdd_node_variables();
+        std::vector<size_t> bdd_node_vars = compute_bdd_branch_instruction_variables();
         std::vector<char> visited(bdd_branch_nodes_.size(), false);
         for(size_t bdd_idx=0; bdd_idx<first_bdd_node_indices_.size(); ++bdd_idx)
         {
@@ -1055,7 +1078,7 @@ namespace LPMP {
                 if(visited[i] == true)
                     continue;
                 visited[i] = true;
-                const size_t var = bdd_node_vars[i];
+                const size_t var = variable(i);
                 var_bdd_adjacencies.push_back({c, tighten_bdds.size() + var});
                 ++var_bdd_adjacencies_size[c];
                 ++var_bdd_adjacencies_size[tighten_bdds.size() + var];
@@ -1121,6 +1144,106 @@ namespace LPMP {
         std::cout << "max bdd group size = " << max_group_size << "\n";
 
         return ccs;
+    }
+
+    inline std::vector<size_t> bdd_mma_base_vec::bdd_vars(const size_t bdd_idx)
+    {
+        assert(bdd_idx < nr_bdds());
+        std::deque<size_t> dq;
+        tsl::robin_set<size_t> visited;
+        tsl::robin_set<size_t> vars;
+        for(size_t j=0; j<first_bdd_node_indices_.size(bdd_idx); ++j)
+            dq.push_back(first_bdd_node_indices_(bdd_idx, j));
+        while(!dq.empty())
+        {
+            const size_t i = dq.front();
+            dq.pop_front();
+            if(visited.count(i) > 0)
+                continue;
+            visited.insert(i);
+            const size_t var = variable(i);
+            vars.insert(var);
+            auto& bdd_node = bdd_branch_nodes_[i];
+            if(bdd_node.offset_low != bdd_branch_node_vec::terminal_0_offset && bdd_node.offset_low != bdd_branch_node_vec::terminal_1_offset)
+            {
+                const size_t low_offset = std::distance(&bdd_branch_nodes_[0], bdd_node.address(bdd_node.offset_low)); 
+                dq.push_back(low_offset);
+            }
+            if(bdd_node.offset_high != bdd_branch_node_vec::terminal_0_offset && bdd_node.offset_high != bdd_branch_node_vec::terminal_1_offset)
+            {
+                const size_t high_offset = std::distance(&bdd_branch_nodes_[0], bdd_node.address(bdd_node.offset_high)); 
+                dq.push_back(high_offset);
+            }
+        } 
+        std::vector<size_t> var_vec(vars.begin(), vars.end());
+        std::sort(var_vec.begin(), var_vec.end());
+        return var_vec;
+    }
+
+    inline std::vector<bdd_branch_instruction<float>> bdd_mma_base_vec::export_bdd(const size_t bdd_idx)
+    {
+        assert(bdd_idx < nr_bdds());
+        std::vector<bdd_branch_instruction<float>> bdds;
+        std::vector<std::array<size_t,2>> bdd_offsets;
+        std::deque<size_t> dq;
+        // TODO: replace visited by using bdd_offset_map
+        tsl::robin_set<size_t> visited;
+        tsl::robin_map<size_t,size_t> bdd_offset_map;
+        for(size_t j=0; j<first_bdd_node_indices_.size(bdd_idx); ++j)
+            dq.push_back(first_bdd_node_indices_(bdd_idx, j));
+        while(!dq.empty())
+        {
+            const size_t i = dq.front();
+            dq.pop_front();
+            if(visited.count(i) > 0)
+                continue;
+            const size_t var = variable(i);
+            visited.insert(i);
+            auto& instr = bdd_branch_nodes_[i];
+
+            auto calculate_offset = [&](auto& bdd, const size_t offset) {
+                // check if low resp. high arc min-marginal is within epsilon of lower bound
+                if(offset == bdd_branch_node_vec::terminal_0_offset)
+                    return bdd_node::terminal_0;
+                else if(offset == bdd_branch_node_vec::terminal_1_offset)
+                    return bdd_node::terminal_1;
+                else
+                {
+                    const size_t translated_offset = std::distance(&bdd_branch_nodes_[0], bdd.address(offset)); 
+                    dq.push_back(translated_offset);
+                    return translated_offset;
+                }
+            };
+
+            bdd_branch_instruction<float> bdd;
+            bdd.low_cost = instr.low_cost;
+            bdd.high_cost = instr.high_cost;
+            bdd.offset_low = instr.offset_low;
+            bdd.offset_high = instr.offset_high;
+            bdds.push_back(bdd);
+            bdd_offsets.push_back({calculate_offset(instr, instr.offset_low), calculate_offset(instr, instr.offset_high)});
+            bdd_offset_map[i] = bdds.size()-1; 
+        }
+
+        // map bdd offsets
+        for(size_t i=0; i<bdds.size(); ++i)
+        {
+            auto& instr = bdds[i];
+            if(instr.offset_low != bdd_node::terminal_0 && instr.offset_low != bdd_node::terminal_1)
+            {
+                assert(bdd_offset_map[instr.offset_low] != std::numeric_limits<size_t>::max());
+                assert(bdd_offset_map[instr.offset_low] > i);
+                instr.offset_low = bdd_offset_map[instr.offset_low];
+            }
+            if(instr.offset_high != bdd_node::terminal_0 && instr.offset_high != bdd_node::terminal_1)
+            {
+                assert(bdd_offset_map[instr.offset_high] != std::numeric_limits<size_t>::max());
+                assert(bdd_offset_map[instr.offset_high] > i);
+                instr.offset_high = bdd_offset_map[instr.offset_high];
+            } 
+        }
+
+        return bdds;
     }
 
 }
