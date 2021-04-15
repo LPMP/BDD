@@ -427,7 +427,7 @@ namespace LPMP {
                 b(c,0) = std::numeric_limits<int>::min();
                 b(c,1) = constraints()[c].right_hand_side;
             }
-            else if(constraints()[c].ineq == inequality_type::smaller_equal)
+            else if(constraints()[c].ineq == inequality_type::greater_equal)
             {
                 b(c,0) = constraints()[c].right_hand_side;
                 b(c,1) = std::numeric_limits<int>::max();
