@@ -78,6 +78,7 @@ PYBIND11_MODULE(ILP_instance_py, m) {
                 return ilp.feasible(sol.begin(), sol.end());
                 })
         .def("export_constraints", &LPMP::ILP_input::export_constraints)
+        .def("objective", &LPMP::ILP_input::objective)
         .def("node_constraint_incidence_matrix", [](const LPMP::ILP_input& ilp) { 
                 return std::make_tuple(
                         node_constraint_incidence_matrix(ilp),
