@@ -71,6 +71,8 @@ PYBIND11_MODULE(ILP_instance_py, m) {
 
     py::class_<LPMP::ILP_input>(m, "ILP_instance")
         .def(py::init<>())
+        .def("nr_constraints",&LPMP::ILP_input::nr_constraints)
+        .def("nr_variables",&LPMP::ILP_input::nr_variables)
         .def("evaluate", [](const LPMP::ILP_input& ilp, const std::vector<char>& sol) { 
                 return ilp.evaluate(sol.begin(), sol.end());
                 })
@@ -78,14 +80,13 @@ PYBIND11_MODULE(ILP_instance_py, m) {
                 return ilp.feasible(sol.begin(), sol.end());
                 })
         .def("export_constraints", &LPMP::ILP_input::export_constraints)
-        .def("objective", &LPMP::ILP_input::objective)
+        .def("objective", [](const LPMP::ILP_input& ilp) { return ilp.objective(); })
         .def("node_constraint_incidence_matrix", [](const LPMP::ILP_input& ilp) { 
                 return std::make_tuple(
                         node_constraint_incidence_matrix(ilp),
                         variable_constraint_bounds(ilp)
                         );
                 })
-        ;
         .def("add_new_variable_with_obj", [](LPMP::ILP_input& ilp, const std::string& var_name, const double coefficient) {
                 auto index = ilp.add_new_variable(var_name);
                 ilp.add_to_objective(coefficient, var_name);
