@@ -7,19 +7,25 @@ namespace LPMP {
     {
         // TODO: parallelize by building up multiple bdd storages and then join them together
         MEASURE_FUNCTION_EXECUTION_TIME;
-        // TODO: this is brittle and better way to notify which bdd source is used should be employed
+
+        // first add BDDs from bdd_sollection
         assert(bdd_pre.get_bdd_collection().nr_bdds() > 0 || bdd_pre.get_bdds().size() > 0);
+
         if(bdd_pre.get_bdd_collection().nr_bdds() > 0)
+        {
+            std::cout << "Add " << bdd_pre.get_bdd_collection().nr_bdds() << " bdds from bdd collection\n";
             for(size_t bdd_nr=0; bdd_nr<bdd_pre.get_bdd_collection().nr_bdds(); ++bdd_nr)
                 add_bdd(bdd_pre.get_bdd_collection()[bdd_nr]);
-        else
-        {
-            const auto bdds = bdd_pre.get_bdds();
-            const auto bdd_variable_indices = bdd_pre.get_bdd_indices();
-            assert(bdds.size() == bdd_variable_indices.size());
-            for(size_t bdd_index=0; bdd_index<bdds.size(); ++bdd_index)
-                add_bdd(bdd_pre.get_bdd_manager(), bdds[bdd_index], bdd_variable_indices[bdd_index].begin(), bdd_variable_indices[bdd_index].end());
         }
+
+
+        // second, add BDDs from BDD manager
+        const auto bdds = bdd_pre.get_bdds();
+        std::cout << "Add " << bdds.size() << " bdds from bdd manager\n";
+        const auto bdd_variable_indices = bdd_pre.get_bdd_indices();
+        assert(bdds.size() == bdd_variable_indices.size());
+        for(size_t bdd_index=0; bdd_index<bdds.size(); ++bdd_index)
+            add_bdd(bdd_pre.get_bdd_manager(), bdds[bdd_index], bdd_variable_indices[bdd_index].begin(), bdd_variable_indices[bdd_index].end());
     }
 
     bdd_storage::bdd_storage()

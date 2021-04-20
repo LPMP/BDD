@@ -1,5 +1,6 @@
 #include "bdd_solver.h"
 #include "ILP_parser.h"
+#include "OPB_parser.h"
 #include <omp.h>
 #include <iomanip>
 #include <memory>
@@ -43,8 +44,11 @@ namespace LPMP {
         auto input_file_arg = input_group->add_option("-i, --input_file", input_file, "ILP input file name")
             ->check(CLI::ExistingPath);
 
-        std::string input_string;
-        auto input_string_arg = input_group->add_option("--input_string", input_string, "ILP input in string");
+        std::string lp_input_string;
+        auto lp_input_string_arg = input_group->add_option("--lp_input_string", lp_input_string, "ILP input in string");
+
+        std::string opb_input_string;
+        auto opb_input_string_arg = input_group->add_option("--opb_input_string", opb_input_string, "OPB input in string");
 
         input_group->require_option(1); // either as string or as filename
 
@@ -58,7 +62,6 @@ namespace LPMP {
         ILP_input::variable_order variable_order_ = ILP_input::variable_order::input;
         app.add_option("-o, --order", variable_order_, "variable order")
             ->transform(CLI::CheckedTransformer(variable_order_map, CLI::ignore_case));
-
 
         app.add_option("-m, --max_iter", max_iter, "maximal number of iterations, default value = 10000")
             ->check(CLI::PositiveNumber);
@@ -132,9 +135,27 @@ namespace LPMP {
 
         ILP_input ilp = [&]() {
             if(!input_file.empty())
-                return ILP_parser::parse_file(input_file);
-            else if(!input_string.empty())
-                return ILP_parser::parse_string(input_string);
+            {
+                if(input_file.substr(input_file.find_last_of(".") + 1) == "opb")
+                {
+                    std::cout << "Parse opb file\n";
+                    return OPB_parser::parse_file(input_file);
+                }
+                else
+                {
+                    std::cout << "Parse lp file\n";
+                    return ILP_parser::parse_file(input_file);
+                }
+            }
+            else if(!lp_input_string.empty())
+            {
+                // Possibly check if file is in lp or opb format
+                return ILP_parser::parse_string(lp_input_string);
+            }
+            else if(!opb_input_string.empty())
+            {
+                return OPB_parser::parse_string(opb_input_string); 
+            }
             else
                 throw std::runtime_error("could not detect ILP input");
         }();

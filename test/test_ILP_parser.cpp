@@ -32,6 +32,6 @@ int main(int argc, char** argv)
     test(input.objective("x4") == -0.5);;
     test(input.objective("x5") == -1.0);;
 
-    input.write(std::cout);
+    input.write_lp(std::cout);
     test(input.nr_constraints() == 1);
 }

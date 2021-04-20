@@ -19,9 +19,9 @@ void test_ILP(const std::string ilp, const double expected_lb, const permutation
 {
     ILP_input ilp_input = ILP_parser::parse_string(ilp);
     ilp_input.reorder(order);
-    ilp_input.write(std::cout);
+    ilp_input.write_lp(std::cout);
     std::stringstream ss;
-    ilp_input.write(ss);
+    ilp_input.write_lp(ss);
     const std::string ilp_string = ss.str();
 
     {
