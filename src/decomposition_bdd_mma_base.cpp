@@ -157,6 +157,12 @@ namespace LPMP {
             double time_spent = (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000;
             std::cout << ", time = " << time_spent << " s";
             std::cout << "\n";
+            assert(lb_post >= lb_prev - std::numeric_limits<double>::epsilon());
+            if (lb_post < lb_prev - std::numeric_limits<double>::epsilon())
+            {
+                std::cout << "Lower bound did not increase (something went wrong). Abort." << std::endl;
+                exit(0);
+            }
             if (time_spent > time_limit)
             {
                 std::cout << "Time limit reached." << std::endl;
