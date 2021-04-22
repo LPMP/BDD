@@ -1,7 +1,6 @@
 #include "avl_tree.hxx"
 #include <string>
 #include "test.h"
-#include <iostream>
 
 using namespace LPMP;
 

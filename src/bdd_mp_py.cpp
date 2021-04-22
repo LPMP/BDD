@@ -21,6 +21,9 @@ PYBIND11_MODULE(bdd_mp_py, m) {
     .def("min_marginals", [](bdd_base_type& base) { return base.min_marginals_stacked(); })
     .def("update_costs", [](bdd_base_type& base, const Eigen::Matrix<float, Eigen::Dynamic, 2>& delta) { return base.update_costs(delta); })
     .def("Lagrange_constraint_matrix", &bdd_base_type::Lagrange_constraint_matrix)
+    .def("lower_bound", &bdd_base_type::lower_bound)
+    .def("nr_bdds", [](const bdd_base_type& base) { return base.nr_bdds(); })
+    .def("nr_variables", [](const bdd_base_type& base) { return base.nr_variables(); })
     ;
 }
 

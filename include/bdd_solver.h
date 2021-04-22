@@ -32,6 +32,7 @@ namespace LPMP {
 
             void solve();
             void round();
+            void tighten();
             double lower_bound();
 
         private:

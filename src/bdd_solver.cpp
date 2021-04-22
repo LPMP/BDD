@@ -1,6 +1,7 @@
 #include "bdd_solver.h"
 #include "ILP_parser.h"
 #include "OPB_parser.h"
+#include "bdd_tightening.h"
 #include <omp.h>
 #include <iomanip>
 #include <memory>
@@ -278,7 +279,7 @@ namespace LPMP {
 
         if (time_limit < 0)
         {
-            std::cout << "Time limit exceeded." << std::endl;
+            std::cout << "Time limit exceeded, aborting rounding." << std::endl;
             return;
         }
 
@@ -299,6 +300,26 @@ namespace LPMP {
         double upper_bound = std::inner_product(primal_solution.begin(), primal_solution.end(), costs.begin(), 0.0);
         std::cout << "Primal solution value: " << upper_bound << std::endl;
     } 
+
+    void bdd_solver::tighten()
+    {
+        MEASURE_FUNCTION_EXECUTION_TIME;
+
+        if(time_limit < 0)
+        {
+            std::cout << "Time limit exceeded, aborting tightening." << std::endl;
+            return;
+        }
+
+        std::cout << "Tighten...\n";
+        throw std::runtime_error("not implemented");
+        /*
+        std::visit(solver,
+        std::visit([](auto&& s) {
+            tighten(s, float(0.1));
+            }, *solver);
+            */
+    }
 
     double bdd_solver::lower_bound()
     {

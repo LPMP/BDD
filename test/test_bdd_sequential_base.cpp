@@ -25,7 +25,7 @@ int main(int argc, char** argv)
     bdd_base_type solver(stor);
     solver.set_costs(ilp.objective().begin(), ilp.objective().end());
     solver.backward_run();
-    const double lb = solver.compute_lower_bound();
+    const double lb = solver.lower_bound();
     test(lb == 1 + 0); 
 
     const auto mm = solver.min_marginals();
