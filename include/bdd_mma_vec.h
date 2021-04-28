@@ -21,6 +21,8 @@ namespace LPMP {
             std::vector<double> total_min_marginals();
             void solve(const size_t max_iter, const double tolerance, const double time_limit);
             void backward_run(); 
+
+            void tighten();
         private:
 
             class impl;

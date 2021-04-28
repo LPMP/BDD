@@ -1,7 +1,6 @@
 #include "bdd_solver.h"
 #include "ILP_parser.h"
 #include "OPB_parser.h"
-#include "bdd_tightening.h"
 #include <omp.h>
 #include <iomanip>
 #include <memory>
@@ -67,7 +66,7 @@ namespace LPMP {
         app.add_option("-m, --max_iter", max_iter, "maximal number of iterations, default value = 10000")
             ->check(CLI::PositiveNumber);
 
-        app.add_option("-t, --tolerance", tolerance, "lower bound relative progress tolerance, default value = 1e-06")
+        app.add_option("--tolerance", tolerance, "lower bound relative progress tolerance, default value = 1e-06")
             ->check(CLI::PositiveNumber);
 
         app.add_option("-l, --time_limit", time_limit, "time limit in seconds, default value = 3600")
@@ -105,6 +104,8 @@ namespace LPMP {
         std::unordered_map<std::string, fix_value> fixing_var_value_map{{"marg",fix_value::marginal},{"red",fix_value::reduction},{"one",fix_value::one},{"zero",fix_value::zero}};
         primal_param_group->add_option("--fixing_value", fixing_options_.var_value, "preferred variable value for primal heuristic, default value = marg")
             ->transform(CLI::CheckedTransformer(fixing_var_value_map, CLI::ignore_case));
+
+        auto tighten_arg = app.add_flag("--tighten", tighten_, "tighten relaxation flag");
         
         bool statistics = false;
         solver_group->add_flag("--statistics", statistics, "statistics of the problem");
@@ -271,6 +272,15 @@ namespace LPMP {
         std::visit([&](auto&& s) {
                 s.solve(max_iter, tolerance, time_limit);
                 }, *solver);
+
+        // TODO: improve, do periodic tightening
+        if(tighten_)
+        {
+            tighten();
+            std::visit([&](auto&& s) {
+                    s.solve(10, tolerance, time_limit);
+                    }, *solver);
+        }
     }
 
     void bdd_solver::round()
@@ -312,13 +322,12 @@ namespace LPMP {
         }
 
         std::cout << "Tighten...\n";
-        throw std::runtime_error("not implemented");
-        /*
-        std::visit(solver,
         std::visit([](auto&& s) {
-            tighten(s, float(0.1));
+            if constexpr(std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_vec>)
+            s.tighten();
+            else
+                throw std::runtime_error("tighten not implemented");
             }, *solver);
-            */
     }
 
     double bdd_solver::lower_bound()

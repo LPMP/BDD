@@ -62,7 +62,7 @@ int main(int argc, char** argv)
 
     {
         std::vector<std::string> solver_input = {
-            "--input_string", test_instance,
+            "--lp_input_string", test_instance,
             "-s", "mma_vec",
             "--max_iter", "1000"
         };
@@ -74,7 +74,21 @@ int main(int argc, char** argv)
 
     {
         std::vector<std::string> solver_input = {
-            "--input_string", test_instance_coalesced,
+            "--lp_input_string", test_instance,
+            "-s", "mma_vec",
+            "--max_iter", "1000",
+            "--tighten"
+        };
+
+        bdd_solver solver(solver_input); 
+        solver.solve();
+        test(std::abs(solver.lower_bound() - 2.0) <= 1e-4);
+    }
+
+
+    {
+        std::vector<std::string> solver_input = {
+            "--lp_input_string", test_instance_coalesced,
             "-s", "mma_vec",
             "--max_iter", "1000"
         };
@@ -86,7 +100,7 @@ int main(int argc, char** argv)
 
     {
         std::vector<std::string> solver_input = {
-            "--input_string", test_instance_tightened,
+            "--lp_input_string", test_instance_tightened,
             "-s", "mma_vec",
             "--max_iter", "1000"
         };

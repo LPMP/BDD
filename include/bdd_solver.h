@@ -49,6 +49,7 @@ namespace LPMP {
             double tolerance = 1e-06;
             std::vector<double> costs;
             std::optional<bdd_fix> primal_heuristic;
+            bool tighten_ = false;
 
     };
 

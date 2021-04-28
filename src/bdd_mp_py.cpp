@@ -1,5 +1,6 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/eigen.h>
+#include <pybind11/stl.h>
 #include "bdd_sequential_base.h"
 #include "bdd_branch_instruction.h"
 #include "ILP_input.h"

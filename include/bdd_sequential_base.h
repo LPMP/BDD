@@ -9,6 +9,7 @@
 namespace LPMP {
 
     // store BDDs one after the other.
+    // allows for efficient computation of min marginals
     template<typename BDD_BRANCH_NODE>
         class bdd_sequential_base {
             public:
@@ -29,7 +30,7 @@ namespace LPMP {
             void backward_run();
             two_dim_variable_array<std::array<float,2>> min_marginals();
             using min_marginal_type = Eigen::Matrix<typename BDD_BRANCH_NODE::value_type, Eigen::Dynamic, 2>;
-            min_marginal_type min_marginals_stacked();
+            std::tuple<min_marginal_type, std::vector<char>> min_marginals_stacked();
 
             template<typename COST_ITERATOR>
                 void set_costs(COST_ITERATOR begin, COST_ITERATOR end);
@@ -387,14 +388,18 @@ namespace LPMP {
                 }
             }
 
+            message_passing_state_ = message_passing_state::after_forward_pass;
+
             return min_margs;
         }
     
     template<typename BDD_BRANCH_NODE>
-        typename bdd_sequential_base<BDD_BRANCH_NODE>::min_marginal_type bdd_sequential_base<BDD_BRANCH_NODE>::min_marginals_stacked()
+        std::tuple<typename bdd_sequential_base<BDD_BRANCH_NODE>::min_marginal_type, std::vector<char>> bdd_sequential_base<BDD_BRANCH_NODE>::min_marginals_stacked()
         {
             backward_run();
             min_marginal_type min_margs(nr_bdd_variables(), 2);
+            std::vector<char> solutions;
+            solutions.reserve(nr_bdd_variables());
 
 //#pragma omp parallel for schedule(guided,128)
             size_t c = 0;
@@ -403,17 +408,61 @@ namespace LPMP {
                 // intialize
                 const auto [first,last] = bdd_index_range(bdd_nr, 0);
                 assert(first + 1 == last);
+                const float bdd_lb = bdd_branch_nodes_[first].m; 
                 bdd_branch_nodes_[first].m = 0.0;
 
+                size_t next_node = first;
                 for(size_t idx=0; idx<nr_variables(bdd_nr); ++idx, ++c)
                 {
                     std::array<float,2> mm = {std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity()};
+
                     const auto [first,last] = bdd_index_range(bdd_nr, idx);
                     for(size_t i=first; i<last; ++i)
                     {
                         const std::array<float,2> cur_mm = bdd_branch_nodes_[i].min_marginals();
                         mm[0] = std::min(mm[0], cur_mm[0]);
                         mm[1] = std::min(mm[1], cur_mm[1]); 
+
+                        // see if active path points to current node;
+                        if(next_node == i)
+                        {
+                            if(mm[0] < mm[1])
+                            {
+                                assert(std::abs(bdd_lb - mm[0]) <= 1e-6);
+                                solutions.push_back(0); 
+                                if(bdd_branch_nodes_[i].offset_low == BDD_BRANCH_NODE::terminal_0_offset)
+                                {
+                                    assert(false); // this cannot happen
+                                }
+                                else if(bdd_branch_nodes_[i].offset_low == BDD_BRANCH_NODE::terminal_1_offset)
+                                {
+                                    // we have arrived at the last variable of the bdd
+                                    assert(idx+1 == nr_variables(bdd_nr));
+                                }
+                                else
+                                {
+                                    next_node = std::distance(&bdd_branch_nodes_[0], bdd_branch_nodes_[i].address(bdd_branch_nodes_[i].offset_low));
+                                }
+                            }
+                            else
+                            {
+                                assert(std::abs(bdd_lb - mm[1]) <= 1e-6);
+                                solutions.push_back(1); 
+                                if(bdd_branch_nodes_[i].offset_high == BDD_BRANCH_NODE::terminal_0_offset)
+                                {
+                                    assert(false); // this cannot happen
+                                }
+                                else if(bdd_branch_nodes_[i].offset_high == BDD_BRANCH_NODE::terminal_1_offset)
+                                {
+                                    // we have arrived at the last variable of the bdd
+                                    assert(idx+1 == nr_variables(bdd_nr));
+                                }
+                                else
+                                {
+                                    next_node = std::distance(&bdd_branch_nodes_[0], bdd_branch_nodes_[i].address(bdd_branch_nodes_[i].offset_high));
+                                }
+                            }
+                        }
                     }
 
                     min_margs(int(c),0) = mm[0];
@@ -426,7 +475,10 @@ namespace LPMP {
                 }
             }
 
-            return min_margs;
+            message_passing_state_ = message_passing_state::after_forward_pass;
+            std::cout << "solutions size " << solutions.size() << "\n";
+
+            return {min_margs, solutions};
         }
 
     template<typename BDD_BRANCH_NODE>
@@ -465,6 +517,7 @@ namespace LPMP {
     template<typename BDD_BRANCH_NODE>
         void bdd_sequential_base<BDD_BRANCH_NODE>::update_costs(const two_dim_variable_array<std::array<float,2>>& delta)
         {
+            message_passing_state_ = message_passing_state::none;
             assert(delta.size() == nr_bdds());
             const auto delta_t = transpose_to_bdd_order(delta);
 #pragma omp parallel for schedule(guided,128)
@@ -485,6 +538,7 @@ namespace LPMP {
     template<typename BDD_BRANCH_NODE>
         void bdd_sequential_base<BDD_BRANCH_NODE>::update_costs(const min_marginal_type& delta)
         {
+            message_passing_state_ = message_passing_state::none;
             assert(delta.rows() == nr_bdd_variables());
             assert(delta.cols() == 2);
 //#pragma omp parallel for schedule(guided,128)
@@ -506,6 +560,8 @@ namespace LPMP {
     template<typename BDD_BRANCH_NODE>
         void bdd_sequential_base<BDD_BRANCH_NODE>::diffusion_step(const two_dim_variable_array<std::array<float,2>>& min_margs, const float damping_step)
         {
+            throw std::runtime_error("not correct yet");
+            message_passing_state_ = message_passing_state::none;
             assert(min_margs.size() == nr_bdds());
             assert(damping_step >= 0.0 && damping_step <= 1.0);
             for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
@@ -524,7 +580,6 @@ namespace LPMP {
                 } 
             } 
         }
-
 
     template<typename BDD_BRANCH_NODE>
         template<typename T>
