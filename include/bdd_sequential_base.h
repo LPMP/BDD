@@ -36,6 +36,9 @@ namespace LPMP {
                 void set_costs(COST_ITERATOR begin, COST_ITERATOR end);
             void update_costs(const two_dim_variable_array<std::array<float,2>>& delta);
             void update_costs(const min_marginal_type& delta);
+            using vector_type = Eigen::Matrix<typename BDD_BRANCH_NODE::value_type, Eigen::Dynamic, 1>;
+            void update_costs(const vector_type& delta);
+
             // make a step that is guaranteed to be non-decreasing in the lower bound.
             void diffusion_step(const two_dim_variable_array<std::array<float,2>>& min_margs, const float damping_step = 1.0);
 
@@ -552,6 +555,27 @@ namespace LPMP {
                     {
                         bdd_branch_nodes_[i].low_cost += delta(c, 0);
                         bdd_branch_nodes_[i].high_cost += delta(c, 1);
+                    }
+                }
+            }
+        }
+
+    template<typename BDD_BRANCH_NODE>
+        void bdd_sequential_base<BDD_BRANCH_NODE>::update_costs(const vector_type& delta)
+        {
+            message_passing_state_ = message_passing_state::none;
+            assert(delta.rows() == nr_bdd_variables());
+            assert(delta.cols() == 1);
+//#pragma omp parallel for schedule(guided,128)
+            size_t c = 0;
+            for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
+            {
+                for(size_t bdd_idx=0; bdd_idx<nr_variables(bdd_nr); ++bdd_idx, ++c)
+                {
+                    const auto [first_node, last_node] = bdd_index_range(bdd_nr, bdd_idx);
+                    for(size_t i=first_node; i<last_node; ++i)
+                    {
+                        bdd_branch_nodes_[i].high_cost += delta(c, 0);
                     }
                 }
             }
