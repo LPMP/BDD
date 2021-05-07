@@ -493,7 +493,7 @@ namespace LPMP {
                         // see if active path points to current node;
                         if(next_node == i)
                         {
-                            if(mm[0] < mm[1])
+                            if(cur_mm[0] < cur_mm[1])
                             {
                                 assert(std::abs(bdd_lb - mm[0]) <= 1e-6);
                                 solutions.push_back(0); 
