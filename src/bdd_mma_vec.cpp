@@ -1,6 +1,7 @@
 #include "bdd_mma_vec.h"
 #include "bdd_branch_node_vector.h"
 #include "bdd_branch_node_vec8f.h"
+#include "bdd_tightening.h"
 #include "time_measure_util.h"
 
 namespace LPMP {
@@ -58,6 +59,11 @@ namespace LPMP {
     std::vector<double> bdd_mma_vec::total_min_marginals()
     {
         return pimpl->mma.total_min_marginals();
+    }
+
+    void bdd_mma_vec::tighten()
+    {
+        return LPMP::tighten(pimpl->mma, 0.1); 
     }
 
 }

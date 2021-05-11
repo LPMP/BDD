@@ -7,7 +7,6 @@
 #include "bdd.h"
 #include "ILP_input.h"
 #include "avl_tree.hxx"
-#include <iostream> // temporary
 
 namespace LPMP {
 
@@ -21,11 +20,11 @@ using integer = long long int;
         : lb_(lb), ub_(ub), zero_kid_(zero_kid), one_kid_(one_kid)
         {}
 
-        integer lb_;
-        integer ub_; // initially also serves as cost of path from root
+        integer lb_ = std::numeric_limits<integer>::min();
+        integer ub_ = std::numeric_limits<integer>::max(); // initially also serves as cost of path from root
 
-        lineq_bdd_node* zero_kid_;
-        lineq_bdd_node* one_kid_;
+        lineq_bdd_node* zero_kid_ = nullptr;
+        lineq_bdd_node* one_kid_ = nullptr;
         avl_node<lineq_bdd_node>* wrapper_; // wrapper node in the AVL tree
     };
 

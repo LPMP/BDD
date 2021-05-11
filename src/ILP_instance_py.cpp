@@ -7,7 +7,7 @@
 namespace py = pybind11;
 
 
-// return a matrix with dim (n+m,n+m), first n entries corresponding to variables, last m entries corresponding to inequalities.
+// return a matrix with dim (n, m), n corresponding to variables, m corresponding to constraints.
 Eigen::SparseMatrix<int> node_constraint_incidence_matrix(const LPMP::ILP_input& ilp)
 {
     using T = Eigen::Triplet<int>;
@@ -17,12 +17,11 @@ Eigen::SparseMatrix<int> node_constraint_incidence_matrix(const LPMP::ILP_input&
     {
         for(const auto& l : ilp.constraints()[c].variables)
         {
-            coefficients.push_back(T(l.var, ilp.nr_variables() + c, l.coefficient));
-            coefficients.push_back(T(ilp.nr_variables() + c, l.var, l.coefficient));
+            coefficients.push_back(T(l.var, c, l.coefficient));
         }
     }
 
-    Eigen::SparseMatrix<int> A(ilp.nr_variables() + ilp.nr_constraints(), ilp.nr_variables() + ilp.nr_constraints());
+    Eigen::SparseMatrix<int> A(ilp.nr_variables(), ilp.nr_constraints());
     A.setFromTriplets(coefficients.begin(), coefficients.end());
 
     return A;
