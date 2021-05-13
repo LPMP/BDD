@@ -21,6 +21,7 @@ struct avl_node {
 
     integer lb() { return data.lb_; }
     integer ub() { return data.ub_; }
+    bool wraps_botsink = false; // flags nodes equivalent to botsink (only applicable for equations)
 };
 
 
@@ -38,7 +39,7 @@ class avl_tree {
 
         T * create_node(T data); // create new AVL node for data
         void insert(avl_node<T> * node_ptr);// insert AVL node into tree (key range must be set prior)
-        T * find(integer key);
+        avl_node<T> * find(integer key);
         void write(); // for inspection
 
         const std::list<avl_node<T>> & get_avl_nodes() const { return nodes; }
@@ -181,7 +182,7 @@ avl_node<T> * avl_tree<T>::insert(avl_node<T> * ptr, avl_node<T> * node_ptr)
         ptr->right = insert(ptr->right, node_ptr);
     else
     {
-        std::cout << "AVL Tree: Key range of inserted data overlaps with existing data (unintended behavior). Abort." << std::endl;
+        std::cout << "AVL Tree: Key range of inserted data overlaps with existing data (unintended usage). Abort." << std::endl;
         std::cout << "key range = [" << node_ptr->lb() << "," << node_ptr->ub() << "]" << std::endl;
         write();
         exit(0);
@@ -230,13 +231,13 @@ T * avl_tree<T>::create_node(T data)
 
 
 template<typename T>
-T * avl_tree<T>::find(integer key)
+avl_node<T> * avl_tree<T>::find(integer key)
 {
     avl_node<T> * ptr = root;
     while (ptr != nullptr)
     {
         if (key >= ptr->lb() && key <= ptr->ub())
-            return &(ptr->data);
+            return ptr;
         else if (key < ptr->lb())
             ptr = ptr->left;
         else if (key > ptr->ub())

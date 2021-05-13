@@ -100,6 +100,14 @@ void test_miplib(bdd_converter & converter)
     std::cout << "# bdd nodes = " << bdd.nodes_postorder().size() << "\n";
 }
 
+void test_subset_sum(bdd_converter & converter)
+{
+    std::vector<int> weights = {+ 1, + 1, + 2};
+    std::cout << "nr coefficients = " << weights.size() << "\n";
+    auto bdd = converter.convert_to_bdd(weights.begin(), weights.end(), ILP_input::inequality_type::equal, 2);
+    std::cout << "# bdd nodes = " << bdd.nodes_postorder().size() << "\n";
+}
+
 int main(int argc, char** argv)
 {
     BDD::bdd_mgr bdd_mgr;
@@ -109,4 +117,5 @@ int main(int argc, char** argv)
     // test_simplex(converter);
     test_cardinality(converter);
     test_miplib(converter);
+    test_subset_sum(converter);
 }
