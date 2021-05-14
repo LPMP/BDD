@@ -46,10 +46,13 @@ namespace LPMP {
         assert(level < levels.size());
 
         // check for equivalent nodes
-        lineq_bdd_node * ptr = levels[level].find(slack);
+        avl_node<lineq_bdd_node> * ptr = levels[level].find(slack);
         if (ptr != nullptr)
         {
-            node_ptr = ptr;
+            if (ptr->wraps_botsink) // check if node is equivalent to botsink (only applicable for equations)
+                node_ptr = &botsink;
+            else
+                node_ptr = &(ptr->data);
             return false;
         }
 
@@ -121,13 +124,40 @@ namespace LPMP {
             {
                 auto* bdd_0 = current_node->zero_kid_;
                 auto* bdd_1 = current_node->one_kid_;
-                // lower bound of topsink needs to be adjusted if it is a shortcut
-                const integer lb_0 = (bdd_0 == &topsink) ? rests[level+1] : bdd_0->lb_;
-                const integer lb_1 = (bdd_1 == &topsink) ? rests[level+1] + coeff : bdd_1->lb_ + coeff;
-                const integer lb = std::max(lb_0, lb_1);
-                const integer ub = std::max(std::min(bdd_0->ub_, bdd_1->ub_ + coeff), lb); // ensure that bound-interval is non-empty
-                current_node->lb_ = lb;
-                current_node->ub_ = ub;
+                switch (ineq_type)
+                {
+                    case ILP_input::inequality_type::equal:
+                    {
+                        // replace children by botsink if they are equivalent
+                        if (bdd_0->wrapper_->wraps_botsink)
+                            bdd_0 = &botsink;
+                        if (bdd_1->wrapper_->wraps_botsink)
+                            bdd_1 = &botsink;
+                        if (bdd_0 == &botsink && bdd_1 == &botsink) // label node equivalent to botsink
+                            current_node->wrapper_->wraps_botsink = true;
+                        // set lower bound and upper bound to match slack
+                        current_node->lb_ = rhs - current_node->ub_;
+                        current_node->ub_ = rhs - current_node->ub_;
+                        break;
+                    }
+                    case ILP_input::inequality_type::smaller_equal:
+                    {
+                        // lower bound of topsink needs to be adjusted if it is a shortcut
+                        const integer lb_0 = (bdd_0 == &topsink) ? rests[level+1] : bdd_0->lb_;
+                        const integer lb_1 = (bdd_1 == &topsink) ? rests[level+1] + coeff : bdd_1->lb_ + coeff;
+                        const integer lb = std::max(lb_0, lb_1);
+                        const integer ub = std::max(std::min(bdd_0->ub_, bdd_1->ub_ + coeff), lb); // ensure that bound-interval is non-empty
+                        current_node->lb_ = lb;
+                        current_node->ub_ = ub;
+                        break;
+                    }
+                    case ILP_input::inequality_type::greater_equal:
+                        throw std::runtime_error("greater equal constraint not in normal form");
+                        break;
+                    default:
+                        throw std::runtime_error("inequality type not supported");
+                        break;
+                }
                 levels[level].insert(current_node->wrapper_); // when bounds are determined, insert into AVL tree
                 node_stack.pop();
                 level--;

@@ -20,8 +20,8 @@ using integer = long long int;
         : lb_(lb), ub_(ub), zero_kid_(zero_kid), one_kid_(one_kid)
         {}
 
-        integer lb_ = std::numeric_limits<integer>::min();
-        integer ub_ = std::numeric_limits<integer>::max(); // initially also serves as cost of path from root
+        integer lb_ = 0;
+        integer ub_ = 0; // initially also serves as cost of path from root
 
         lineq_bdd_node* zero_kid_ = nullptr;
         lineq_bdd_node* one_kid_ = nullptr;
