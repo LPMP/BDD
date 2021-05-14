@@ -25,7 +25,8 @@ namespace LPMP {
             size_t nr_bdd_variables() const;
 
             double lower_bound();
-            std::vector<float> lower_bound_per_bdd();
+            using vector_type = Eigen::Matrix<typename BDD_BRANCH_NODE::value_type, Eigen::Dynamic, 1>;
+            vector_type lower_bound_per_bdd();
 
             void forward_run();
             void backward_run();
@@ -38,8 +39,7 @@ namespace LPMP {
             void update_costs(const two_dim_variable_array<std::array<float,2>>& delta);
             void update_costs(const min_marginal_type& delta);
 
-            std::vector<float> get_costs();
-            using vector_type = Eigen::Matrix<typename BDD_BRANCH_NODE::value_type, Eigen::Dynamic, 1>;
+            vector_type get_costs();
             void update_costs(const vector_type& delta);
 
             // make a step that is guaranteed to be non-decreasing in the lower bound.
@@ -72,8 +72,8 @@ namespace LPMP {
             double compute_lower_bound_after_forward_pass();
             double compute_lower_bound_after_backward_pass();
 
-            std::vector<float> lower_bound_per_bdd_after_forward_pass();
-            std::vector<float> lower_bound_per_bdd_after_backward_pass();
+            vector_type lower_bound_per_bdd_after_forward_pass();
+            vector_type lower_bound_per_bdd_after_backward_pass();
 
             std::array<size_t,2> bdd_range(const size_t bdd_nr) const;
                 std::array<size_t,2> bdd_index_range(const size_t bdd_nr, const size_t bdd_idx) const;
@@ -302,7 +302,7 @@ namespace LPMP {
         }
 
     template<typename BDD_BRANCH_NODE>
-        std::vector<float> bdd_sequential_base<BDD_BRANCH_NODE>::lower_bound_per_bdd()
+        typename bdd_sequential_base<BDD_BRANCH_NODE>::vector_type bdd_sequential_base<BDD_BRANCH_NODE>::lower_bound_per_bdd()
         {
             if(message_passing_state_ == message_passing_state::after_backward_pass)
             {
@@ -323,11 +323,10 @@ namespace LPMP {
     // TODO: possibly implement template functino that takes lambda and can compute lower bound and lower bound per bdd
 
     template<typename BDD_BRANCH_NODE>
-        std::vector<float> bdd_sequential_base<BDD_BRANCH_NODE>::lower_bound_per_bdd_after_forward_pass()
+        typename bdd_sequential_base<BDD_BRANCH_NODE>::vector_type bdd_sequential_base<BDD_BRANCH_NODE>::lower_bound_per_bdd_after_forward_pass()
         {
             assert(message_passing_state_ == message_passing_state::after_forward_pass);
-            std::vector<float> lbs;
-            lbs.reserve(nr_bdds());
+            vector_type lbs(nr_bdds());
             for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
             {
                 const auto [first,last] = bdd_index_range(bdd_nr, nr_variables(bdd_nr)-1);
@@ -337,25 +336,24 @@ namespace LPMP {
                     const auto mm = bdd_branch_nodes_[idx].min_marginals();
                     bdd_lb = std::min({bdd_lb, mm[0], mm[1]});
                 }
-                lbs.push_back(bdd_lb);
+                lbs[bdd_nr] = bdd_lb;
             }
 
             return lbs;
         }
 
     template<typename BDD_BRANCH_NODE>
-        std::vector<float> bdd_sequential_base<BDD_BRANCH_NODE>::lower_bound_per_bdd_after_backward_pass()
+        typename bdd_sequential_base<BDD_BRANCH_NODE>::vector_type bdd_sequential_base<BDD_BRANCH_NODE>::lower_bound_per_bdd_after_backward_pass()
         {
             assert(message_passing_state_ == message_passing_state::after_backward_pass);
-            std::vector<float> lbs;
-            lbs.reserve(nr_bdds());
+            vector_type lbs(nr_bdds());
 
             // TODO: works only for non-split BDDs
             for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
             {
                 const auto [first,last] = bdd_index_range(bdd_nr, 0);
                 assert(first+1 == last);
-                lbs.push_back(bdd_branch_nodes_[first].m);
+                lbs[bdd_nr] = bdd_branch_nodes_[first].m;
             }
 
             return lbs;
@@ -493,7 +491,7 @@ namespace LPMP {
                         // see if active path points to current node;
                         if(next_node == i)
                         {
-                            if(mm[0] < mm[1])
+                            if(cur_mm[0] < cur_mm[1])
                             {
                                 assert(std::abs(bdd_lb - mm[0]) <= 1e-6);
                                 solutions.push_back(0); 
@@ -549,10 +547,10 @@ namespace LPMP {
         }
 
     template<typename BDD_BRANCH_NODE>
-        std::vector<float> bdd_sequential_base<BDD_BRANCH_NODE>::get_costs()
+        typename bdd_sequential_base<BDD_BRANCH_NODE>::vector_type bdd_sequential_base<BDD_BRANCH_NODE>::get_costs()
         {
-            std::vector<float> costs;
-            costs.reserve(nr_bdd_variables());
+            vector_type costs(nr_bdd_variables());
+            size_t c = 0;
 
             for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
             {
@@ -566,7 +564,7 @@ namespace LPMP {
                             assert(bdd.low_cost == 0.0);
                         if(bdd.offset_high != BDD_BRANCH_NODE::terminal_0_offset)
                         {
-                            costs.push_back(bdd.high_cost);
+                            costs[c++] = bdd.high_cost;
                             break;
                         } 
                     }
