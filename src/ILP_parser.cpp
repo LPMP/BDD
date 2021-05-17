@@ -42,6 +42,10 @@ namespace LPMP {
                                >{};
                                
                                */
+        struct term_identifier : tao::pegtl::seq<
+        tao::pegtl::plus<tao::pegtl::sor<tao::pegtl::alnum, tao::pegtl::string<'_'>, tao::pegtl::string<'-'>, tao::pegtl::string<'/'>, tao::pegtl::string<'('>, tao::pegtl::string<')'>, tao::pegtl::string<'{'>, tao::pegtl::string<'}'>, tao::pegtl::string<','> > >
+        > {};
+
                                
         struct variable_name : tao::pegtl::seq< 
                                tao::pegtl::alpha, 
@@ -57,18 +61,15 @@ namespace LPMP {
         struct objective_coefficient : real_number {};
         struct objective_variable : variable_name {};
         struct objective_term : tao::pegtl::seq< tao::pegtl::opt<sign, opt_whitespace>, tao::pegtl::opt<objective_coefficient, opt_whitespace, tao::pegtl::opt<tao::pegtl::string<'*'>>, opt_whitespace>, objective_variable> {};
-        struct subject_to : tao::pegtl::string<'S','u','b','j','e','c','t',' ','T','o'> {};
-        struct objective_line : tao::pegtl::seq< tao::pegtl::not_at<subject_to>, tao::pegtl::star<opt_whitespace, objective_term>, opt_whitespace, tao::pegtl::eol> {};
+        struct objective_constant : real_number {};
+        struct subject_to : tao::pegtl::istring<'S','u','b','j','e','c','t',' ','T','o'> {};
+        struct objective_line : tao::pegtl::seq< tao::pegtl::not_at<subject_to>, opt_whitespace, tao::pegtl::seq<tao::pegtl::opt<tao::pegtl::seq<term_identifier, tao::pegtl::string<':'>>>, opt_whitespace, tao::pegtl::star<opt_whitespace, objective_term>, opt_whitespace, tao::pegtl::opt<objective_constant>>, opt_whitespace, tao::pegtl::eol> {};
 
         struct subject_to_line : tao::pegtl::seq<opt_whitespace, subject_to, opt_whitespace, tao::pegtl::eol> {};
 
         struct inequality_type : tao::pegtl::sor<tao::pegtl::string<'<','='>, tao::pegtl::string<'>','='>, tao::pegtl::string<'='>> {};
 
-        struct inequality_identifier : tao::pegtl::seq<
-        tao::pegtl::plus<tao::pegtl::sor<tao::pegtl::alnum, tao::pegtl::string<'_'>, tao::pegtl::string<'-'>, tao::pegtl::string<'/'>, tao::pegtl::string<'('>, tao::pegtl::string<')'>, tao::pegtl::string<'{'>, tao::pegtl::string<'}'>, tao::pegtl::string<','> > >
-        > {};
-
-        struct new_inequality_identifier : tao::pegtl::seq<inequality_identifier, opt_whitespace, tao::pegtl::string<':'>> {};
+        struct new_inequality_identifier : tao::pegtl::seq<term_identifier, opt_whitespace, tao::pegtl::string<':'>> {};
 
         struct new_inequality : tao::pegtl::seq<opt_whitespace, tao::pegtl::not_at<tao::pegtl::sor<tao::pegtl::string<'E','n','d'>,tao::pegtl::string<'B','o','u','n','d','s'>,tao::pegtl::string<'C','o','a','l','e','s','c','e'>>>, tao::pegtl::opt<new_inequality_identifier>, opt_whitespace> {};
 
@@ -83,7 +84,7 @@ namespace LPMP {
 
         struct coalesce_begin : tao::pegtl::seq<opt_whitespace, tao::pegtl::string<'C','o','a','l','e','s','c','e'>, opt_whitespace, tao::pegtl::eol> {};
 
-        struct coalesce_identifier : inequality_identifier {};
+        struct coalesce_identifier : term_identifier {};
         struct coalesce_line : tao::pegtl::seq<opt_whitespace, coalesce_identifier, tao::pegtl::plus<opt_whitespace, coalesce_identifier>, opt_whitespace, tao::pegtl::eol> {};
 
         struct bounds_begin : tao::pegtl::opt<tao::pegtl::seq<opt_whitespace, tao::pegtl::string<'B','o','u','n','d','s'>, opt_whitespace, tao::pegtl::eol>> {};
