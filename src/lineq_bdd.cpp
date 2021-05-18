@@ -129,12 +129,15 @@ namespace LPMP {
                     case ILP_input::inequality_type::equal:
                     {
                         // replace children by botsink if they are equivalent
-                        if (bdd_0->wrapper_->wraps_botsink)
+                        if ((bdd_0->wrapper_ != nullptr) && bdd_0->wrapper_->wraps_botsink)
                             bdd_0 = &botsink;
-                        if (bdd_1->wrapper_->wraps_botsink)
+                        if ((bdd_1->wrapper_ != nullptr) && bdd_1->wrapper_->wraps_botsink)
                             bdd_1 = &botsink;
                         if (bdd_0 == &botsink && bdd_1 == &botsink) // label node equivalent to botsink
+                        {
+                            assert(current_node->wrapper_ != nullptr);
                             current_node->wrapper_->wraps_botsink = true;
+                        }
                         // set lower bound and upper bound to match slack
                         current_node->lb_ = rhs - current_node->ub_;
                         current_node->ub_ = rhs - current_node->ub_;

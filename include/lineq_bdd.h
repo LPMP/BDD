@@ -16,8 +16,7 @@ using integer = long long int;
     struct lineq_bdd_node {
 
         lineq_bdd_node() {}
-        lineq_bdd_node(integer lb, integer ub, lineq_bdd_node* zero_kid, lineq_bdd_node* one_kid)
-        : lb_(lb), ub_(ub), zero_kid_(zero_kid), one_kid_(one_kid)
+        lineq_bdd_node(integer lb, integer ub) : lb_(lb), ub_(ub)
         {}
 
         integer lb_ = 0;
@@ -25,15 +24,15 @@ using integer = long long int;
 
         lineq_bdd_node* zero_kid_ = nullptr;
         lineq_bdd_node* one_kid_ = nullptr;
-        avl_node<lineq_bdd_node>* wrapper_; // wrapper node in the AVL tree
+        avl_node<lineq_bdd_node>* wrapper_ = nullptr; // wrapper node in the AVL tree
     };
 
     // Implementation of BDD construction from a linear inequality/equation (cf. Behle, 2007)
     class lineq_bdd {
         public:
 
-            lineq_bdd() : topsink(0, std::numeric_limits<integer>::max(), nullptr, nullptr), 
-                botsink(std::numeric_limits<integer>::min(), -1, nullptr, nullptr)
+            lineq_bdd() : topsink(0, std::numeric_limits<integer>::max()), 
+                botsink(std::numeric_limits<integer>::min(), -1)
             {}
             lineq_bdd(lineq_bdd & other) = delete;
 
