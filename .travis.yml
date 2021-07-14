@@ -9,12 +9,12 @@ addons:
               - ubuntu-toolchain-r-test
               - deadsnakes
           packages:
-              - g++-10
+              - g++-9
               - python3.7-dev
 
 script:
-    - export CC=gcc-10
-    - export CXX=g++-10
+    - export CC=gcc-9
+    - export CXX=g++-9
     - cmake --version
     - cmake CMakeLists.txt
     - cmake  --build .
