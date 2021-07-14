@@ -4,6 +4,7 @@
 [submodule "external/PEGTL"]
 	path = external/PEGTL
 	url = https://github.com/taocpp/PEGTL.git
+    branch = main
 [submodule "external/CLI11"]
 	path = external/CLI11
 	url = https://github.com/CLIUtils/CLI11.git
