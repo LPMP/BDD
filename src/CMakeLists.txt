@@ -1,6 +1,5 @@
 add_subdirectory(bdd_manager)
 add_subdirectory(bdd_collection)
-add_subdirectory(eval)
 
 add_library(ILP_input ILP_input.cpp)
 target_link_libraries(ILP_input LPMP-BDD)
