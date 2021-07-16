@@ -4,9 +4,6 @@ target_link_libraries(bdd_node LPMP-BDD)
 add_library(bdd_node_cache bdd_node_cache.cpp) 
 target_link_libraries(bdd_node_cache bdd_node LPMP-BDD)
 
-add_library(bdd_node_depth bdd_node_depth.cpp)
-target_link_libraries(bdd_node_depth bdd_node LPMP-BDD)
-
 add_library(bdd_var bdd_var.cpp)
 target_link_libraries(bdd_var bdd_node_cache LPMP-BDD)
 
