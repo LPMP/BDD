@@ -311,6 +311,11 @@ namespace LPMP {
         }
     }
 
+    std::vector<double> bdd_solver::min_marginals()
+    {
+        return std::visit([](auto&& s) { return s.total_min_marginals(); }, *solver); 
+    }
+
     void bdd_solver::round()
     {
         MEASURE_FUNCTION_EXECUTION_TIME;
@@ -326,7 +331,7 @@ namespace LPMP {
 
         std::cout << "Retrieving total min-marginals..." << std::endl;
 
-        std::vector<double> total_min_marginals = std::visit([](auto&& s) { return s.total_min_marginals(); }, *solver);
+        std::vector<double> total_min_marginals = min_marginals();
         bool success = primal_heuristic->round(total_min_marginals);
 
         if (!success)
