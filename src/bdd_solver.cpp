@@ -31,7 +31,7 @@ namespace LPMP {
 
     }
 
-    bdd_solver::bdd_solver(int argc, char** argv)
+    bdd_solver_options::bdd_solver_options(int argc, char** argv)
     {
         MEASURE_FUNCTION_EXECUTION_TIME;
 
@@ -40,15 +40,15 @@ namespace LPMP {
         app.allow_extras();
  
         auto input_group = app.add_option_group("input", "input either from file or as string");
-        std::string input_file;
+        //std::string input_file;
         auto input_file_arg = input_group->add_option("-i, --input_file", input_file, "ILP input file name")
             ->check(CLI::ExistingPath);
 
-        std::string lp_input_string;
-        auto lp_input_string_arg = input_group->add_option("--lp_input_string", lp_input_string, "ILP input in string");
+        //std::string lp_input_string;
+        auto lp_input_string_arg = input_group->add_option("--input_as_string", lp_input_as_string, "ILP input in string");
 
-        std::string opb_input_string;
-        auto opb_input_string_arg = input_group->add_option("--opb_input_string", opb_input_string, "OPB input in string");
+        //std::string opb_input_as_string;
+        auto opb_input_string_arg = input_group->add_option("--opb_input_string", opb_input_as_string, "OPB input in string");
 
         input_group->require_option(1); // either as string or as filename
 
@@ -59,8 +59,8 @@ namespace LPMP {
             {"mindegree", ILP_input::variable_order::mindegree}
         };
 
-        ILP_input::variable_order variable_order_ = ILP_input::variable_order::input;
-        app.add_option("-o, --order", variable_order_, "variable order")
+        //ILP_input::variable_order variable_order_ = ILP_input::variable_order::input;A
+        app.add_option("-o, --order", var_order, "variable order")
             ->transform(CLI::CheckedTransformer(variable_order_map, CLI::ignore_case));
 
         app.add_option("-m, --max_iter", max_iter, "maximal number of iterations, default value = 10000")
@@ -72,7 +72,7 @@ namespace LPMP {
         app.add_option("-l, --time_limit", time_limit, "time limit in seconds, default value = 3600")
             ->check(CLI::PositiveNumber);
 
-        enum class bdd_solver_impl { mma, mma_srmp, mma_agg, decomposition_mma, anisotropic_mma, mma_vec } bdd_solver_impl_;
+        //enum class bdd_solver_impl { mma, mma_srmp, mma_agg, decomposition_mma, anisotropic_mma, mma_vec } bdd_solver_impl_;
         std::unordered_map<std::string, bdd_solver_impl> bdd_solver_impl_map{
             {"mma",bdd_solver_impl::mma},
             {"decomposition_mma",bdd_solver_impl::decomposition_mma},
@@ -82,18 +82,18 @@ namespace LPMP {
             {"mma_vec",bdd_solver_impl::mma_vec}
         };
 
-        auto solver_group = app.add_option_group("solver", "solver either a BDD solver or output of statistics");
+        auto solver_group = app.add_option_group("solver", "solver either a BDD solver, output of statistics or export of LP solved by BDD relaxation");
         solver_group->add_option("-s, --solver", bdd_solver_impl_, "the name of solver for the relaxation")
             ->transform(CLI::CheckedTransformer(bdd_solver_impl_map, CLI::ignore_case));
 
 
-        bool primal_rounding = false;
+        //bool primal_rounding = false;
         auto primal_arg = app.add_flag("-p, --primal", primal_rounding, "primal rounding flag");
 
         auto primal_param_group = app.add_option_group("primal parameters", "parameters for rounding a primal solution");
         primal_param_group->needs(primal_arg);
 
-        bdd_fix_options fixing_options_;
+        //bdd_fix_options fixing_options_;
         using fix_order = bdd_fix_options::variable_order;
         using fix_value = bdd_fix_options::variable_value;
 
@@ -105,14 +105,17 @@ namespace LPMP {
         primal_param_group->add_option("--fixing_value", fixing_options_.var_value, "preferred variable value for primal heuristic, default value = marg")
             ->transform(CLI::CheckedTransformer(fixing_var_value_map, CLI::ignore_case));
 
-        auto tighten_arg = app.add_flag("--tighten", tighten_, "tighten relaxation flag");
+        auto tighten_arg = app.add_flag("--tighten", tighten, "tighten relaxation flag");
         
         bool statistics = false;
         solver_group->add_flag("--statistics", statistics, "statistics of the problem");
+
+        std::string export_bdd_lp_file;
+        solver_group->add_option("--export_bdd_lp", export_bdd_lp_file, "filename for export of LP of the BDD relaxation");
+
         solver_group->require_option(1); // either a solver or statistics
 
-        decomposition_mma_options decomposition_mma_options_;
-        app.callback([&app, &bdd_solver_impl_, &decomposition_mma_options_]() {
+        app.callback([this,&app]() {
                 CLI::App solver_app;
                 std::cout << "decomposition_mma callback\n";
 
@@ -133,9 +136,9 @@ namespace LPMP {
                 } 
         });
 
-        app.parse(argc, argv);
+        app.parse(argc, argv); 
 
-        ILP_input ilp = [&]() {
+        ilp = [&]() {
             if(!input_file.empty())
             {
                 if(input_file.substr(input_file.find_last_of(".") + 1) == "opb")
@@ -149,22 +152,40 @@ namespace LPMP {
                     return ILP_parser::parse_file(input_file);
                 }
             }
-            else if(!lp_input_string.empty())
+            else if(!lp_input_as_string.empty())
             {
                 // Possibly check if file is in lp or opb format
-                return ILP_parser::parse_string(lp_input_string);
+                return ILP_parser::parse_string(lp_input_as_string);
             }
-            else if(!opb_input_string.empty())
+            else if(!opb_input_as_string.empty())
             {
-                return OPB_parser::parse_string(opb_input_string); 
+                return OPB_parser::parse_string(opb_input_as_string); 
             }
             else
-                throw std::runtime_error("could not detect ILP input");
+                return ILP_input();
         }();
+    }
 
-        std::cout << "ILP has " << ilp.nr_variables() << " variables and " << ilp.nr_constraints() << " constraints\n";
-        if (ilp.preprocess())
-            std::cout << "ILP has " << ilp.nr_variables() << " variables and " << ilp.nr_constraints() << " constraints after preprocessing\n";
+    bdd_solver_options::bdd_solver_options(const std::vector<std::string>& args)
+        : bdd_solver_options(args.size()+1, convert_string_to_argv(args).get())
+    {}
+
+    bdd_solver::bdd_solver(int argc, char** argv)
+        : bdd_solver(bdd_solver_options(argc, argv))
+    {}
+
+    bdd_solver::bdd_solver(const std::vector<std::string>& args)
+        : bdd_solver(bdd_solver_options(args))
+    {}
+
+    bdd_solver::bdd_solver(bdd_solver_options opt)
+        : options(opt)
+    {
+        options.ilp.reorder(options.var_order);
+
+        std::cout << "ILP has " << options.ilp.nr_variables() << " variables and " << options.ilp.nr_constraints() << " constraints\n";
+        if(options.ilp.preprocess())
+            std::cout << "ILP has " << options.ilp.nr_variables() << " variables and " << options.ilp.nr_constraints() << " constraints after preprocessing\n";
         else
         {
             std::cout << "The problem appears to be infeasible." << std::endl;
@@ -173,52 +194,59 @@ namespace LPMP {
 
         const auto start_time = std::chrono::steady_clock::now();
 
-        ilp.reorder(variable_order_);
-        costs = ilp.objective();
+        costs = options.ilp.objective();
 
         // print variable order
         // for (size_t v = 0; v < ilp.nr_variables(); v++)
         //     std::cout << ilp.get_var_name(v) << std::endl;
 
-        bdd_preprocessor bdd_pre(ilp);
+        bdd_preprocessor bdd_pre(options.ilp);
         //bdd_pre.construct_bdd_collection(); // this is only needed if bdd collection is used in bdd preprocessor
         bdd_storage stor(bdd_pre);
 
         std::cout << std::setprecision(10);
 
-        if(statistics)
+        if(options.statistics)
         {
-            print_statistics(ilp, stor);
+            print_statistics(options.ilp, stor);
             exit(0);
         }
-        else if(bdd_solver_impl_ == bdd_solver_impl::mma)
+        else if(!options.export_bdd_lp.empty())
         {
-            solver = std::move(bdd_mma(stor, ilp.objective().begin(), ilp.objective().end()));
+            bdd_pre.construct_bdd_collection(); // this is only needed if bdd collection is used in bdd preprocessor
+            std::ofstream f;
+            f.open(options.export_bdd_lp);
+            bdd_pre.get_bdd_collection().write_bdd_lp(f, options.ilp.objective().begin(), options.ilp.objective().end());
+            f.close(); 
+        }
+        else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::mma)
+        {
+            solver = std::move(bdd_mma(stor, options.ilp.objective().begin(), options.ilp.objective().end()));
             std::cout << "constructed mma solver\n";
         } 
-        else if(bdd_solver_impl_ == bdd_solver_impl::mma_srmp)
+        else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::mma_srmp)
         {
-            solver = std::move(bdd_mma_srmp(stor, ilp.objective().begin(), ilp.objective().end()));
+            solver = std::move(bdd_mma_srmp(stor, options.ilp.objective().begin(), options.ilp.objective().end()));
             std::cout << "constructed srmp mma solver\n";
         }
-        else if(bdd_solver_impl_ == bdd_solver_impl::mma_agg)
+        else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::mma_agg)
         {
-            solver = std::move(bdd_mma_agg(stor, ilp.objective().begin(), ilp.objective().end()));
+            solver = std::move(bdd_mma_agg(stor, options.ilp.objective().begin(), options.ilp.objective().end()));
             std::cout << "constructed aggressive mma solver\n";
         }
-        else if(bdd_solver_impl_ == bdd_solver_impl::decomposition_mma)
+        else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::decomposition_mma)
         {
-            solver = std::move(decomposition_bdd_mma(stor, ilp.objective().begin(), ilp.objective().end(), decomposition_mma_options_));
+            solver = std::move(decomposition_bdd_mma(stor, options.ilp.objective().begin(), options.ilp.objective().end(), options.decomposition_mma_options_));
             std::cout << "constructed decomposition mma solver\n";
         }
-        else if(bdd_solver_impl_ == bdd_solver_impl::anisotropic_mma)
+        else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::anisotropic_mma)
         {
-            solver = std::move(bdd_mma_anisotropic(stor, ilp.objective().begin(), ilp.objective().end()));
+            solver = std::move(bdd_mma_anisotropic(stor, options.ilp.objective().begin(), options.ilp.objective().end()));
             std::cout << "constructed anisotropic mma solver\n"; 
         }
-        else if(bdd_solver_impl_ == bdd_solver_impl::mma_vec)
+        else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::mma_vec)
         {
-            solver = std::move(bdd_mma_vec(stor, ilp.objective().begin(), ilp.objective().end()));
+            solver = std::move(bdd_mma_vec(stor, options.ilp.objective().begin(), options.ilp.objective().end()));
             std::cout << "constructed vectorized mma solver\n"; 
         }
         else
@@ -226,22 +254,19 @@ namespace LPMP {
             assert(false);
         }
 
-        if (primal_rounding)
+        if (options.primal_rounding)
         {
-            std::cout << fixing_options_.var_order << ", " << fixing_options_.var_value << "\n";
-            primal_heuristic = std::move(bdd_fix(stor, fixing_options_));
+            std::cout << options.fixing_options_.var_order << ", " << options.fixing_options_.var_value << "\n";
+            primal_heuristic = std::move(bdd_fix(stor, options.fixing_options_));
             std::cout << "constructed primal heuristic\n";
         }
 
         auto setup_time = (double) std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_time).count() / 1000;
         std::cout << "setup time = " << setup_time << " s";
         std::cout << "\n";
-        time_limit -= setup_time;
+        options.time_limit -= setup_time;
+    
     }
-
-    bdd_solver::bdd_solver(const std::vector<std::string>& args)
-        : bdd_solver(args.size()+1, convert_string_to_argv(args).get())
-    {}
 
     ILP_input bdd_solver::get_ILP(const std::string& input_file, ILP_input::variable_order variable_order_)
     { 
@@ -264,22 +289,25 @@ namespace LPMP {
 
     void bdd_solver::solve()
     {
-        if (time_limit < 0)
+        if(options.time_limit < 0)
         {
             std::cout << "Time limit exceeded." << std::endl;
             return;
         }
         std::visit([&](auto&& s) {
-                s.solve(max_iter, tolerance, time_limit);
+                s.solve(options.max_iter, options.tolerance, options.time_limit);
                 }, *solver);
 
         // TODO: improve, do periodic tightening
-        if(tighten_)
+        if(options.tighten)
         {
+            for(size_t tighten_iter=0; tighten_iter<10; ++tighten_iter)
+            {
             tighten();
             std::visit([&](auto&& s) {
-                    s.solve(10, tolerance, time_limit);
+                    s.solve(10, 1e-9, options.time_limit);
                     }, *solver);
+            }
         }
     }
 
@@ -287,13 +315,13 @@ namespace LPMP {
     {
         MEASURE_FUNCTION_EXECUTION_TIME;
 
-        if (time_limit < 0)
+        if(options.time_limit < 0)
         {
             std::cout << "Time limit exceeded, aborting rounding." << std::endl;
             return;
         }
 
-        if (!primal_heuristic)
+        if (primal_heuristic)
             return;
 
         std::cout << "Retrieving total min-marginals..." << std::endl;
@@ -315,7 +343,7 @@ namespace LPMP {
     {
         MEASURE_FUNCTION_EXECUTION_TIME;
 
-        if(time_limit < 0)
+        if(options.time_limit < 0)
         {
             std::cout << "Time limit exceeded, aborting tightening." << std::endl;
             return;

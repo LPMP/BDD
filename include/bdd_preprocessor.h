@@ -1,7 +1,7 @@
 #pragma once
 
-#include "bdd.h"
-#include "bdd_collection.h"
+#include "bdd_manager/bdd.h"
+#include "bdd_collection/bdd_collection.h"
 #include "ILP_input.h"
 #include "convert_pb_to_bdd.h"
 #include "lineq_bdd.h"

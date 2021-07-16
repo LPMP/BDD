@@ -1,6 +1,6 @@
 #pragma once
 
-#include "bdd.h"
+#include "bdd_manager/bdd.h"
 #include "ILP_input.h"
 #include "hash_helper.hxx"
 #include <tsl/robin_map.h>

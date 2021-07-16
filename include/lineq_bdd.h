@@ -4,7 +4,7 @@
 #include <stack>
 #include <vector>
 #include <tsl/robin_map.h>
-#include "bdd.h"
+#include "bdd_manager/bdd.h"
 #include "ILP_input.h"
 #include "avl_tree.hxx"
 

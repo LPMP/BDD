@@ -1,8 +1,8 @@
 #pragma once
 
-#include "bdd.h"
+#include "bdd_manager/bdd.h"
 #include "bdd_preprocessor.h"
-#include "bdd_collection.h"
+#include "bdd_collection/bdd_collection.h"
 #include "hash_helper.hxx"
 #include <vector>
 #include <stack>
@@ -160,7 +160,6 @@ return interval_1 == o.interval_1 && bdd_index_1 == o.bdd_index_1 && interval_2 
                 NEXT_BDD_NODE& next_bdd_node,
                 BDD_VARIABLE_ITERATOR bdd_vars_begin, BDD_VARIABLE_ITERATOR bdd_vars_end)
         {
-            //std::unordered_map<BDD_NODE_TYPE, size_t> node_to_index;
             tsl::robin_map<BDD_NODE_TYPE, size_t> node_to_index;
 
             auto get_node_index = [&](BDD_NODE_TYPE node) -> size_t {
@@ -255,8 +254,8 @@ return interval_1 == o.interval_1 && bdd_index_1 == o.bdd_index_1 && interval_2 
             };
 
             for(size_t i=0; i<bdd_nodes_.size(); ++i) {
-                s << i << " -> " << get_node_string(bdd_nodes_[i].low) << " [label=\"0\"];\n";
-                s << i << " -> " << get_node_string(bdd_nodes_[i].high) << " [label=\"1\"];\n";
+                s << i << " -> " << get_node_string(bdd_nodes_[i].low) << " [style=\"dashed\"];\n";
+                s << i << " -> " << get_node_string(bdd_nodes_[i].high) << ";\n";
             }
             s << "}\n"; 
         }
