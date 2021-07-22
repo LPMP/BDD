@@ -28,6 +28,7 @@ namespace LPMP {
     struct bdd_solver_options {
         bdd_solver_options(int argc, char** argv);
         bdd_solver_options(const std::vector<std::string>& args);
+        bdd_solver_options() {};
 
         std::string input_file;
         std::string lp_input_as_string;
