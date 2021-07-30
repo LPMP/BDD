@@ -71,7 +71,7 @@ namespace LPMP {
 
             // return {bdd_var_adjacency, var_bdd_adjacency};
             template<typename BDDS>
-                std::array<two_dim_variable_array<size_t>,2> construct_bdd_var_adjacency(BDDS& bdds) const;
+                std::tuple<two_dim_variable_array<size_t>,two_dim_variable_array<size_t>> construct_bdd_var_adjacency(BDDS& bdds) const;
 
             //std::tuple<bdd_preprocessor::adjacency_graph, two_dim_variable_array<size_t>, two_dim_variable_array<size_t>>
             //compute_var_adjacency(const size_t bdd_size_limit = std::numeric_limits<size_t>::max());
@@ -99,7 +99,7 @@ namespace LPMP {
         }
 
     template<typename BDDS>
-    std::array<two_dim_variable_array<size_t>,2> bdd_preprocessor::construct_bdd_var_adjacency(BDDS& bdds) const
+    std::tuple<two_dim_variable_array<size_t>,two_dim_variable_array<size_t>> bdd_preprocessor::construct_bdd_var_adjacency(BDDS& bdds) const
     {
         two_dim_variable_array<size_t> bdd_var_adjacency;
 

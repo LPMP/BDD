@@ -1,7 +1,7 @@
 #pragma once
 
 #include <memory>
-#include <random>
+#include <array>
 #include "bdd_node.h"
 
 namespace BDD {

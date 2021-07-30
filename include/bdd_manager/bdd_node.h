@@ -7,10 +7,10 @@
 
 namespace BDD {
 
-constexpr static std::size_t logvarsize = 41;
-constexpr static std::size_t maxvarsize = static_cast<std::size_t>(1) << logvarsize;
-constexpr static std::size_t unique_table_hash_size = 22;
-constexpr static std::size_t hashtablesize = static_cast<std::size_t>(1) << unique_table_hash_size;
+constexpr static size_t logvarsize = 41;
+constexpr static size_t maxvarsize = static_cast<size_t>(1) << logvarsize;
+constexpr static size_t unique_table_hash_size = 22;
+constexpr static size_t hashtablesize = static_cast<size_t>(1) << unique_table_hash_size;
 
 class bdd_mgr;
 
@@ -61,8 +61,8 @@ class node_struct
     //std::size_t large_subtree : 1; // subtree is large enough so that recursively visiting nodes would exceed stack
 	int xref = 0;
 
-    constexpr static size_t botsink_index = std::pow(2,logvarsize)-1;
-    constexpr static size_t topsink_index = std::pow(2,logvarsize)-2;
+    constexpr static size_t botsink_index = (static_cast<size_t>(1) << logvarsize) - 1; //std::pow(2,logvarsize)-1;
+    constexpr static size_t topsink_index = (static_cast<size_t>(1) << logvarsize) - 2; //std::pow(2,logvarsize)-2;
 
     template<typename STREAM>
         void print(STREAM& s);
