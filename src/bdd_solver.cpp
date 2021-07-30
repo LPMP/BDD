@@ -261,7 +261,7 @@ namespace LPMP {
             assert(false);
         }
 
-        if (options.primal_rounding)
+        if(options.primal_rounding)
         {
             std::cout << options.fixing_options_.var_order << ", " << options.fixing_options_.var_value << "\n";
             primal_heuristic = std::move(bdd_fix(stor, options.fixing_options_));
@@ -272,7 +272,6 @@ namespace LPMP {
         std::cout << "setup time = " << setup_time << " s";
         std::cout << "\n";
         options.time_limit -= setup_time;
-    
     }
 
     ILP_input bdd_solver::get_ILP(const std::string& input_file, ILP_input::variable_order variable_order_)
@@ -320,11 +319,17 @@ namespace LPMP {
 
     std::vector<double> bdd_solver::min_marginals()
     {
-        return std::visit([](auto&& s) { return s.total_min_marginals(); }, *solver); 
+        return std::visit([&](auto&& s) { 
+                return s.total_min_marginals();
+                }, *solver); 
     }
 
     void bdd_solver::round()
     {
+        assert(options.primal_rounding == bool(primal_heuristic));
+        if(!options.primal_rounding)
+            return;
+
         MEASURE_FUNCTION_EXECUTION_TIME;
 
         if(options.time_limit < 0)
@@ -333,8 +338,11 @@ namespace LPMP {
             return;
         }
 
-        if (primal_heuristic)
+        if(!primal_heuristic)
+        {
+            std::cout << "no primal heuristic intialized\n";
             return;
+        }
 
         std::cout << "Retrieving total min-marginals..." << std::endl;
 

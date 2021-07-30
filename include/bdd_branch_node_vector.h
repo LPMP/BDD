@@ -847,15 +847,19 @@ namespace LPMP {
 
     inline std::vector<double> bdd_mma_base_vec::total_min_marginals()
     {
+        std::cout << "compute total min marginals in mma_vec\n";
         if(message_passing_state_ != message_passing_state::after_backward_pass)
             this->backward_run();
+        message_passing_state_ = message_passing_state::none;
         // prepare forward run
         for(size_t bdd_index=0; bdd_index<first_bdd_node_indices_.size(); ++bdd_index)
             for(size_t j=0; j<first_bdd_node_indices_.size(bdd_index); ++j)
                 bdd_branch_nodes_[first_bdd_node_indices_(bdd_index,j)].m = 0.0;
 
-        std::vector<double> total_min_marginals;
-        total_min_marginals.reserve(nr_variables());
+        std::vector<double> total_min_marginals_vec;
+        total_min_marginals_vec.reserve(nr_variables());
+
+        std::cout << "after forward run\n";
 
         for(size_t var=0; var<this->nr_variables(); ++var)
         {
@@ -875,9 +879,12 @@ namespace LPMP {
             }
             this->forward_step(var);
 
-            total_min_marginals.push_back(total_min_marg); 
+            total_min_marginals_vec.push_back(total_min_marg); 
         }
-        return total_min_marginals;
+        std::cout << "return mms\n";
+
+        message_passing_state_ = message_passing_state::after_forward_pass;
+        return total_min_marginals_vec;
     }
 
     inline std::vector<size_t> bdd_mma_base_vec::compute_bdd_branch_instruction_variables() const
@@ -1145,10 +1152,11 @@ namespace LPMP {
 
     inline two_dim_variable_array<std::array<float,2>> bdd_mma_base_vec::min_marginals()
     {
+        std::cout << "compute all min marginals in mma_vec\n";
         two_dim_variable_array<std::array<float,2>> mm;
 
         // TODO: seems not to work. Somewhere state is not set correctly!
-        //if(message_passing_state_ != message_passing_state::after_backward_pass)
+        if(message_passing_state_ != message_passing_state::after_backward_pass)
             backward_run();
         message_passing_state_ = message_passing_state::none;
 
