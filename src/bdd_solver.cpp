@@ -1,7 +1,9 @@
 #include "bdd_solver.h"
 #include "ILP_parser.h"
 #include "OPB_parser.h"
+#ifdef _OPENMP
 #include <omp.h>
+#endif
 #include <iomanip>
 #include <memory>
 #include <CLI/CLI.hpp>
@@ -121,6 +123,7 @@ namespace LPMP {
 
                 if(bdd_solver_impl_ == bdd_solver_impl::decomposition_mma)
                 {
+#ifdef _OPENMP
                     std::cout << "use decomposition mma solver\n";
                     solver_app.add_option("--nr_threads", decomposition_mma_options_.nr_threads, "number of threads (up to available nr of available units) for simultaneous optimization of the Lagrange decomposition")
                         ->required()
@@ -133,7 +136,11 @@ namespace LPMP {
 
 
                     solver_app.parse(app.remaining_for_passthrough());
-                } 
+#else
+                    std::cout << "No OpenMP found, decomposition_mma not supported\n";
+                    throw std::runtime_error("OpenMP needed but not found");
+#endif
+                }
         });
 
         app.parse(argc, argv); 

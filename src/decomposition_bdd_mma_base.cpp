@@ -1,5 +1,7 @@
 #include "decomposition_bdd_mma_base.h"
-#include "omp.h"
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 namespace LPMP {
 
