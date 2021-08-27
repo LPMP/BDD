@@ -21,6 +21,7 @@ namespace LPMP {
     namespace ILP_parser {
 
         // import basic parsers
+        //using opt_whitespace = tao::pegtl::star<tao::pegtl::sor<parsing::opt_whitespace, tao::pegtl::eol>>;
         using parsing::opt_whitespace;
         using parsing::mand_whitespace;
         using parsing::opt_invisible;
@@ -56,11 +57,9 @@ namespace LPMP {
 
         struct variable : tao::pegtl::seq<variable_coefficient, opt_whitespace, variable_name> {};
 
-        struct weighted_sum_of_variables : tao::pegtl::seq< opt_whitespace, variable, tao::pegtl::star< opt_whitespace, sign, opt_whitespace, variable >>{};
-
         struct objective_coefficient : real_number {};
         struct objective_variable : variable_name {};
-        struct objective_term : tao::pegtl::seq< tao::pegtl::opt<sign, opt_whitespace>, tao::pegtl::opt<objective_coefficient, opt_whitespace, tao::pegtl::opt<tao::pegtl::string<'*'>>, opt_whitespace>, objective_variable> {};
+        struct objective_term : tao::pegtl::seq< tao::pegtl::opt<sign, opt_whitespace, tao::pegtl::opt<tao::pegtl::eol>, opt_whitespace >, tao::pegtl::opt<objective_coefficient, opt_whitespace, tao::pegtl::opt<tao::pegtl::string<'*'>>, opt_whitespace>, objective_variable> {};
         struct objective_constant : real_number {};
         struct subject_to : tao::pegtl::istring<'S','u','b','j','e','c','t',' ','T','o'> {};
         struct objective_line : tao::pegtl::seq< tao::pegtl::not_at<subject_to>, opt_whitespace, tao::pegtl::seq<tao::pegtl::opt<tao::pegtl::seq<term_identifier, tao::pegtl::string<':'>>>, opt_whitespace, tao::pegtl::star<opt_whitespace, objective_term>, opt_whitespace, tao::pegtl::opt<objective_constant>>, opt_whitespace, tao::pegtl::eol> {};
@@ -107,7 +106,7 @@ namespace LPMP {
                          subject_to_line,
                          tao::pegtl::star<inequality_line>,
                          tao::pegtl::opt<coalesce_begin, tao::pegtl::star<coalesce_line>>,
-                         bounds_begin, // ignore everything after bounds (variables are assumed to be binary)
+                         //bounds_begin, // ignore everything after bounds (variables are assumed to be binary)
                          // binaries,
                          // end_line> {};
                          tao::pegtl::until<end_line>> {};
