@@ -30,7 +30,6 @@ namespace LPMP {
         const auto var_groups = stor.compute_variable_groups();
         std::cout << "#var groups = " << var_groups.size() << "\n";
         std::cout << "#average nr vars per group = " << stor.nr_variables() / double(var_groups.size()) << "\n";
-
     }
 
     bdd_solver_options::bdd_solver_options(int argc, char** argv)
@@ -88,6 +87,7 @@ namespace LPMP {
         solver_group->add_option("-s, --solver", bdd_solver_impl_, "the name of solver for the relaxation")
             ->transform(CLI::CheckedTransformer(bdd_solver_impl_map, CLI::ignore_case));
 
+        auto solution_statistics_arg = app.add_flag("--solution_statistics", solution_statistics, "list min marginals and, objective after solving dual problem");
 
         //bool primal_rounding = false;
         auto primal_arg = app.add_flag("-p, --primal", primal_rounding, "primal rounding flag");
@@ -313,6 +313,17 @@ namespace LPMP {
             std::visit([&](auto&& s) {
                     s.solve(10, 1e-9, options.time_limit);
                     }, *solver);
+            }
+        }
+
+        if(options.solution_statistics)
+        {
+            std::cout << "print solution statistics:\n";
+            const auto mms = min_marginals();
+            assert(mms.size() == options.ilp.nr_variables());
+            for(size_t i=0; i<mms.size(); ++i)
+            {
+                std::cout << options.ilp.get_var_name(i) << ", c = " << options.ilp.objective(i) << ", min marginal = " << mms[i] << "\n";
             }
         }
     }

@@ -587,6 +587,9 @@ namespace LPMP {
             }
         }
         std::cout << "final lower bound = " << this->lower_bound() << "\n"; 
+
+        total_min_marginals();
+
         const auto mmd = min_marginal_differences(0.001);
         std::vector<char> tighten_variables(nr_variables(), false);
         for(size_t i=0; i<mmd.size(); ++i)
@@ -651,7 +654,7 @@ namespace LPMP {
             lb += bdd_lb;
         }
 
-        assert(lb.value() >= lower_bound_ - 1e-8);
+        assert(lb.value() >= lower_bound_ - 1e-6);
         lower_bound_ = lb.value();
     } 
 
@@ -881,7 +884,6 @@ namespace LPMP {
 
             total_min_marginals_vec.push_back(total_min_marg); 
         }
-        std::cout << "return mms\n";
 
         message_passing_state_ = message_passing_state::after_forward_pass;
         return total_min_marginals_vec;

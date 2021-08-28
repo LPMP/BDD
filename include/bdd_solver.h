@@ -41,6 +41,7 @@ namespace LPMP {
         double time_limit = 3600;
         enum class bdd_solver_impl { mma, mma_srmp, mma_agg, decomposition_mma, anisotropic_mma, mma_vec } bdd_solver_impl_;
         decomposition_mma_options decomposition_mma_options_;
+        bool solution_statistics = false;
 
         bool tighten = false;
 

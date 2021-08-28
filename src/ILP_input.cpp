@@ -64,7 +64,10 @@ namespace LPMP {
     double ILP_input::objective(const size_t var) const
     {
         if(var >= nr_variables())
+        {
+            std::cout << var << ", " << nr_variables() << "\n";
             throw std::runtime_error("variable not present");
+        }
         if(var >= objective_.size())
             return 0.0;
         return objective_[var];
