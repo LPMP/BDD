@@ -1,5 +1,7 @@
 #include "decomposition_bdd_mma_base.h"
-#include "omp.h"
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 namespace LPMP {
 
@@ -39,7 +41,12 @@ namespace LPMP {
 
         assert(intra_interval_message_passing_weight >= 0 && intra_interval_message_passing_weight <= 1.0);
         const size_t nr_intervals = opt.nr_threads;
-        auto [bdd_storages, duplicated_bdd_variables] = bdd_storage_.split_bdd_nodes(intervals);
+
+        std::vector<bdd_storage> bdd_storages;
+        tsl::robin_set<bdd_storage::duplicate_variable, bdd_storage::duplicate_variable_hash> duplicated_bdd_variables;
+        std::tie(bdd_storages, duplicated_bdd_variables) = bdd_storage_.split_bdd_nodes(intervals);
+        // Does not compile on clang
+        //auto [bdd_storages, duplicated_bdd_variables] = bdd_storage_.split_bdd_nodes(intervals);
 
         //std::cout << "Allocate " << nr_intervals << " bdd bases\n";
         bdd_bases = std::make_unique<bdd_sub_base[]>(nr_intervals);

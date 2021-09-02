@@ -1,0 +1,21 @@
+language: cpp
+compiler: gcc
+
+os: linux
+dist: xenial
+addons:
+      apt:
+          sources:
+              - ubuntu-toolchain-r-test
+              - deadsnakes
+          packages:
+              - g++-9
+              - python3.7-dev
+
+script:
+    - export CC=gcc-9
+    - export CXX=g++-9
+    - cmake --version
+    - cmake CMakeLists.txt
+    - cmake  --build .
+

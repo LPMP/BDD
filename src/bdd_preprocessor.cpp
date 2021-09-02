@@ -567,7 +567,8 @@ namespace LPMP {
             std::vector<bdd_intersection> current_bdd_intersections;
 
             std::cout << "coalesce round " << coalesce_round << "\n";
-            const auto [bdd_var_adjacency, var_bdd_adjacency] = construct_bdd_var_adjacency(bdd_collection);
+            two_dim_variable_array<size_t> bdd_var_adj, var_bdd_adj;
+            std::tie(bdd_var_adj, var_bdd_adj) = construct_bdd_var_adjacency(bdd_collection);
 
             auto filter_out_candidates = [&](std::vector<coalesce_candidate>& candidates) {
                 std::cout << "before filtering: " << candidates.size() << "\n";
@@ -582,44 +583,44 @@ namespace LPMP {
 
             const auto intersection_candidates = [&]() -> std::vector<coalesce_candidate> {
                 std::vector<coalesce_candidate> candidates;
-                if(coalesce_bridge_ == true)
+                if(this->coalesce_bridge_ == true)
                 {
-                    auto bridge_candidates = this->bridge_candidates(bdd_var_adjacency, var_bdd_adjacency);
+                    auto bridge_candidates = this->bridge_candidates(bdd_var_adj, var_bdd_adj);
                     filter_out_candidates(bridge_candidates);
                     candidates.insert(candidates.end(), bridge_candidates.begin(), bridge_candidates.end());
-                    if(candidates.size() * 20 >= bdd_var_adjacency.size())
+                    if(candidates.size() * 20 >= bdd_var_adj.size())
                         return candidates;
                 }
                 if(coalesce_subsumption_ == true)
                 {
-                    auto subsumption_candidates = this->subsumption_candidates(bdd_var_adjacency, var_bdd_adjacency);
+                    auto subsumption_candidates = this->subsumption_candidates(bdd_var_adj, var_bdd_adj);
                     filter_out_candidates(subsumption_candidates);
                     candidates.insert(candidates.end(), subsumption_candidates.begin(), subsumption_candidates.end());
-                    if(candidates.size() * 20 >= bdd_var_adjacency.size())
+                    if(candidates.size() * 20 >= bdd_var_adj.size())
                         goto return_candidates;
                 }
                 if(coalesce_contiguous_overlap_ == true)
                 {
-                    auto contiguous_overlap_candidates = this->contiguous_overlap_candidates(bdd_var_adjacency, var_bdd_adjacency);
+                    auto contiguous_overlap_candidates = this->contiguous_overlap_candidates(bdd_var_adj, var_bdd_adj);
                     filter_out_candidates(contiguous_overlap_candidates);
                     candidates.insert(candidates.end(), contiguous_overlap_candidates.begin(), contiguous_overlap_candidates.end());
-                    if(candidates.size() * 20 >= bdd_var_adjacency.size())
+                    if(candidates.size() * 20 >= bdd_var_adj.size())
                         goto return_candidates;
                 }
                 if(coalesce_subsumption_except_one_ == true)
                 {
-                    auto subsumption_candidates = this->subsumption_candidates(bdd_var_adjacency, var_bdd_adjacency);
+                    auto subsumption_candidates = this->subsumption_candidates(bdd_var_adj, var_bdd_adj);
                     filter_out_candidates(subsumption_candidates);
                     candidates.insert(candidates.end(), subsumption_candidates.begin(), subsumption_candidates.end());
-                    if(candidates.size() * 20 >= bdd_var_adjacency.size())
+                    if(candidates.size() * 20 >= bdd_var_adj.size())
                         goto return_candidates;
                 }
                 if(coalesce_partial_contiguous_overlap_ == true)
                 {
-                    auto contiguous_overlap_candidates = this->contiguous_overlap_candidates(bdd_var_adjacency, var_bdd_adjacency);
+                    auto contiguous_overlap_candidates = this->contiguous_overlap_candidates(bdd_var_adj, var_bdd_adj);
                     filter_out_candidates(contiguous_overlap_candidates);
                     candidates.insert(candidates.end(), contiguous_overlap_candidates.begin(), contiguous_overlap_candidates.end());
-                    if(candidates.size() * 20 >= bdd_var_adjacency.size())
+                    if(candidates.size() * 20 >= bdd_var_adj.size())
                         goto return_candidates;
                 }
 
