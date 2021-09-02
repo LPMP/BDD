@@ -113,7 +113,6 @@ namespace LPMP {
         bool statistics = false;
         solver_group->add_flag("--statistics", statistics, "statistics of the problem");
 
-        std::string export_bdd_lp_file;
         solver_group->add_option("--export_bdd_lp", export_bdd_lp_file, "filename for export of LP of the BDD relaxation");
 
         solver_group->require_option(1); // either a solver or statistics
@@ -225,7 +224,8 @@ namespace LPMP {
             std::ofstream f;
             f.open(options.export_bdd_lp);
             bdd_pre.get_bdd_collection().write_bdd_lp(f, options.ilp.objective().begin(), options.ilp.objective().end());
-            f.close(); 
+            f.close();
+            exit(0);
         }
         else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::mma)
         {
