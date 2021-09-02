@@ -14,6 +14,7 @@
 #include "kahan_summation.hxx"
 #include "bdd_filtration.hxx"
 #include "bdd_manager/bdd.h"
+#include "min_marginal_utils.h"
 #include <iostream>
 
 namespace LPMP {
@@ -224,7 +225,8 @@ namespace LPMP {
             void compute_lower_bound_after_forward_pass(); 
             void compute_lower_bound_after_backward_pass(); 
 
-            std::vector<double> total_min_marginals();
+            //std::vector<double> total_min_marginals();
+            two_dim_variable_array<std::array<double,2>> min_marginals();
             void solve(const size_t max_iter, const double tolerance, const double time_limit); 
             double lower_bound() const { return lower_bound_; }
             void set_cost(const double c, const size_t var);
@@ -272,9 +274,9 @@ namespace LPMP {
 
             // for BDD tightening
         public:
-            std::vector<float> min_marginal_differences(const float eps);
+            //std::vector<float> min_marginal_differences(const float eps);
             // min marginals for each variable and each bdd
-            two_dim_variable_array<std::array<float,2>> min_marginals();
+            //two_dim_variable_array<std::array<float,2>> min_marginals();
             // export BDDs that cover the given variables
             // TODO: unify with init?
             std::vector<size_t> add_bdds(const bdd_storage& stor);
@@ -588,9 +590,9 @@ namespace LPMP {
         }
         std::cout << "final lower bound = " << this->lower_bound() << "\n"; 
 
-        total_min_marginals();
+        const auto mms = min_marginals();
 
-        const auto mmd = min_marginal_differences(0.001);
+        const auto mmd = min_marginal_differences(mms, 0.001);
         std::vector<char> tighten_variables(nr_variables(), false);
         for(size_t i=0; i<mmd.size(); ++i)
             if(std::abs(mmd[i]) < 1e-3)
@@ -848,9 +850,10 @@ namespace LPMP {
         return bdd_branch_instruction_variables_[bdd_offset]; 
     }
 
-    inline std::vector<double> bdd_mma_base_vec::total_min_marginals()
+    //inline std::vector<double> bdd_mma_base_vec::total_min_marginals()
+    inline two_dim_variable_array<std::array<double,2>> bdd_mma_base_vec::min_marginals()
     {
-        std::cout << "compute total min marginals in mma_vec\n";
+        std::cout << "compute min marginals in mma_vec\n";
         if(message_passing_state_ != message_passing_state::after_backward_pass)
             this->backward_run();
         message_passing_state_ = message_passing_state::none;
@@ -859,8 +862,9 @@ namespace LPMP {
             for(size_t j=0; j<first_bdd_node_indices_.size(bdd_index); ++j)
                 bdd_branch_nodes_[first_bdd_node_indices_(bdd_index,j)].m = 0.0;
 
-        std::vector<double> total_min_marginals_vec;
-        total_min_marginals_vec.reserve(nr_variables());
+        two_dim_variable_array<std::array<double,2>> mms;
+
+        //total_min_marginals_vec.reserve(nr_variables());
 
         std::cout << "after forward run\n";
 
@@ -869,24 +873,24 @@ namespace LPMP {
             const size_t _nr_bdds = nr_bdds(var);
             std::array<float,2> min_marginals[_nr_bdds];
             std::fill(min_marginals, min_marginals + _nr_bdds, std::array<float,2>{std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity()});
-
             for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
                 bdd_branch_nodes_[i].min_marginal(min_marginals);
 
-            float total_min_marg = 0.0;
+            std::array<double,2> min_marginals_double[_nr_bdds];
             for(size_t i=0; i<_nr_bdds; ++i)
             {
                 assert(std::isfinite(min_marginals[i][0]));
                 assert(std::isfinite(min_marginals[i][1]));
-                total_min_marg += (min_marginals[i][1] - min_marginals[i][0]);
+                min_marginals_double[i][0] = min_marginals[i][0];
+                min_marginals_double[i][1] = min_marginals[i][1];
             }
             this->forward_step(var);
 
-            total_min_marginals_vec.push_back(total_min_marg); 
+            mms.push_back(min_marginals_double, min_marginals_double + _nr_bdds); 
         }
 
         message_passing_state_ = message_passing_state::after_forward_pass;
-        return total_min_marginals_vec;
+        return mms;
     }
 
     inline std::vector<size_t> bdd_mma_base_vec::compute_bdd_branch_instruction_variables() const
@@ -1082,6 +1086,7 @@ namespace LPMP {
         std::cout << "new bdd size = " << bdd_collection.nr_bdd_nodes(new_bdd_nr) << "\n";
     }
 
+    /*
     inline std::vector<float> bdd_mma_base_vec::min_marginal_differences(const float eps)
     {
         // go over all variables and see where min-marginal difference
@@ -1151,7 +1156,9 @@ namespace LPMP {
         
         return min_marg_diffs;
     }
+    */
 
+    /*
     inline two_dim_variable_array<std::array<float,2>> bdd_mma_base_vec::min_marginals()
     {
         std::cout << "compute all min marginals in mma_vec\n";
@@ -1182,6 +1189,7 @@ namespace LPMP {
         message_passing_state_ = message_passing_state::after_forward_pass;
         return mm;
     }
+    */
 
     inline two_dim_variable_array<size_t> bdd_mma_base_vec::tighten_bdd_groups(const std::vector<char>& tighten_variables)
     {

@@ -344,7 +344,7 @@ namespace LPMP {
         return lb;
     }
 
-    std::vector<double> decomposition_bdd_base::total_min_marginals()
+    two_dim_variable_array<std::array<double,2>> decomposition_bdd_base::min_marginals()
     {
 #pragma omp parallel for
         for(size_t i=0; i<intervals.nr_intervals(); ++i)
@@ -353,18 +353,26 @@ namespace LPMP {
             bdd_bases[i].read_in_Lagrange_multipliers(bdd_bases[i].backward_queue);
         }
 
-        std::vector<double> total_min_marginals(nr_variables(), 0.0);
-// #pragma omp parallel for
+        std::vector<two_dim_variable_array<std::array<double,2>>> decomposition_mms(intervals.nr_intervals());
+#pragma omp parallel for
         for(size_t i=0; i<intervals.nr_intervals(); ++i)
         {
-            const auto intn_total_min_margs = bdd_bases[i].base.total_min_marginals();
-            assert(intn_total_min_margs.size() == total_min_marginals.size());
-//#pragma barrier
-            for(size_t i=0; i<intn_total_min_margs.size(); ++i)
-                total_min_marginals[i] += intn_total_min_margs[i];
-
+            decomposition_mms[i] = bdd_bases[i].base.min_marginals();
         }
-        return total_min_marginals;
+
+        two_dim_variable_array<std::array<double,2>> mms;
+        std::vector<std::array<double,2>> current_mms;
+        for(size_t i=0; i<nr_variables(); ++i)
+        {
+            current_mms.clear();
+            for(size_t j=0; j<decomposition_mms.size(); ++j)
+            {
+                current_mms.insert(current_mms.end(), decomposition_mms[i][j].begin(), decomposition_mms[i][j].end());
+            }
+            mms.push_back(current_mms.begin(), current_mms.end());
+        }
+
+        return mms;
     }
 
 }

@@ -18,9 +18,9 @@ namespace LPMP {
             void set_cost(const double c, const size_t var);
             void set_avg_type(const averaging_type avg_type);
             double lower_bound();
-            std::vector<double> total_min_marginals();
             void solve(const size_t max_iter, const double tolerance, const double time_limit);
             void backward_run(); 
+            two_dim_variable_array<std::array<double,2>> min_marginals();
 
             void tighten();
         private:

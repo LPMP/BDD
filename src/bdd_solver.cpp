@@ -1,6 +1,7 @@
 #include "bdd_solver.h"
 #include "ILP_parser.h"
 #include "OPB_parser.h"
+#include "min_marginal_utils.h"
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -320,18 +321,21 @@ namespace LPMP {
         {
             std::cout << "print solution statistics:\n";
             const auto mms = min_marginals();
+            const auto mm_diffs = min_marginal_differences(mms, 0.0);
             assert(mms.size() == options.ilp.nr_variables());
-            for(size_t i=0; i<mms.size(); ++i)
+            assert(mm_diffs.size() == options.ilp.nr_variables());
+
+            for(size_t i=0; i<mm_diffs.size(); ++i)
             {
-                std::cout << options.ilp.get_var_name(i) << ", c = " << options.ilp.objective(i) << ", min marginal = " << mms[i] << "\n";
+                std::cout << options.ilp.get_var_name(i) << ", c = " << options.ilp.objective(i) << ", min marginal = " << mm_diffs[i] << "\n";
             }
         }
     }
 
-    std::vector<double> bdd_solver::min_marginals()
+    two_dim_variable_array<std::array<double,2>> bdd_solver::min_marginals()
     {
         return std::visit([&](auto&& s) { 
-                return s.total_min_marginals();
+                return s.min_marginals();
                 }, *solver); 
     }
 
@@ -357,7 +361,8 @@ namespace LPMP {
 
         std::cout << "Retrieving total min-marginals..." << std::endl;
 
-        std::vector<double> total_min_marginals = min_marginals();
+        // TODO: const?
+        std::vector<double> total_min_marginals = min_marginal_differences(min_marginals(), 0.0);
         bool success = primal_heuristic->round(total_min_marginals);
 
         if (!success)

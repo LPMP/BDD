@@ -58,9 +58,9 @@ namespace LPMP {
         return pimpl->mma.lower_bound();
     } 
 
-    std::vector<double> bdd_mma::total_min_marginals()
+    two_dim_variable_array<std::array<double,2>> bdd_mma::min_marginals()
     {
-        return pimpl->mma.total_min_marginals();
+        return pimpl->mma.min_marginals();
     }
 
 }

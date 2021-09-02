@@ -63,7 +63,7 @@ namespace LPMP {
             void round();
             void tighten();
             double lower_bound();
-            std::vector<double> min_marginals();
+            two_dim_variable_array<std::array<double,2>> min_marginals();
 
         private:
             ILP_input get_ILP(const std::string& input, ILP_input::variable_order variable_order_);

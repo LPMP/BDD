@@ -25,7 +25,7 @@ namespace LPMP {
             double lower_bound_backward(const std::size_t var, const std::size_t bdd_index);
             double lower_bound_forward(const std::size_t var, const std::size_t bdd_index);
             double compute_lower_bound();
-            std::vector<double> total_min_marginals();
+            two_dim_variable_array<std::array<double,2>> min_marginals();
 
         protected: 
             std::array<double, 2> min_marginal(const size_t var, const size_t bdd_index) const;
@@ -125,24 +125,23 @@ namespace LPMP {
     }
 
     template<typename BDD_VARIABLE, typename BDD_BRANCH_NODE, typename DERIVED>
-    std::vector<double> bdd_opt_base<BDD_VARIABLE, BDD_BRANCH_NODE, DERIVED>::total_min_marginals()
+    two_dim_variable_array<std::array<double,2>> bdd_opt_base<BDD_VARIABLE, BDD_BRANCH_NODE, DERIVED>::min_marginals()
     {
         this->backward_run();
-        std::vector<double> total_min_marginals;
-        total_min_marginals.reserve(this->nr_variables());
-        for(std::size_t var=0; var<this->nr_variables(); ++var)
+        two_dim_variable_array<std::array<double,2>> mms;
+        //total_min_marginals.reserve(this->nr_variables());
+        for(size_t var=0; var<this->nr_variables(); ++var)
         {
-            double total_min_marg = 0;
-            for(std::size_t bdd_index=0; bdd_index<this->nr_bdds(var); ++bdd_index)
+            std::array<double,2> cur_mms[this->nr_bdds(var)];
+            for(size_t bdd_index=0; bdd_index<this->nr_bdds(var); ++bdd_index)
             {
-                std::array<double,2> min_marg = min_marginal(var,bdd_index);
-                total_min_marg += (min_marg[1] - min_marg[0]);
+                cur_mms[bdd_index] = min_marginal(var,bdd_index);
                 this->forward_step(var,bdd_index);
             }
             // std::cout << total_min_marg << "\n";
-            total_min_marginals.push_back(total_min_marg);
+            mms.push_back(cur_mms, cur_mms + this->nr_bdds(var));
         }
-        return total_min_marginals;
+        return mms;
     }
 
     template<typename BDD_VARIABLE, typename BDD_BRANCH_NODE, typename DERIVED>

@@ -27,7 +27,7 @@ namespace LPMP {
             void backward_run();
             void solve(const size_t max_iter, const double tolerance, const double time_limit);
             double lower_bound();
-            std::vector<double> total_min_marginals();
+            two_dim_variable_array<std::array<double,2>> min_marginals();
 
         private:
             struct impl;
