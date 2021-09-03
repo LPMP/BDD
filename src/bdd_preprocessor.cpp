@@ -31,9 +31,9 @@ namespace LPMP {
 
         // second, coalesce BDDs and add them to bdd_collection
         std::vector<size_t> bdd_nrs;
-        for(size_t c=0; c<input.nr_coalesce_sets(); ++c)
+        for(size_t c=0; c<input.nr_constraint_groups(); ++c)
         {
-            auto [c_begin, c_end] = input.coalesce_set(c);
+            auto [c_begin, c_end] = input.constraint_group(c);
             std::vector<size_t> coalesce_bdd_nrs;
             for(auto it=c_begin; it!=c_end; ++it)
             {
@@ -57,9 +57,9 @@ namespace LPMP {
 
         // third, record those inequalities that should be directly added and remove the others
         std::vector<char> add_inequality(input.constraints().size(), true);
-        for(size_t c=0; c<input.nr_coalesce_sets(); ++c)
+        for(size_t c=0; c<input.nr_constraint_groups(); ++c)
         {
-            auto [c_begin, c_end] = input.coalesce_set(c);
+            auto [c_begin, c_end] = input.constraint_group(c);
             for(auto it=c_begin; it!=c_end; ++it)
                 add_inequality[*it] = false; 
         }

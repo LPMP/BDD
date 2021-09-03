@@ -78,9 +78,10 @@ namespace LPMP {
         return objective(get_var_index(var));
     }
 
-    void ILP_input::begin_new_inequality()
+    size_t ILP_input::begin_new_inequality()
     {
         linear_constraints_.push_back({});
+        return linear_constraints_.size()-1;
     }
 
     void ILP_input::set_inequality_identifier(const std::string& identifier)
@@ -392,14 +393,14 @@ namespace LPMP {
         return order;
     }
 
-    size_t ILP_input::nr_coalesce_sets() const
+    size_t ILP_input::nr_constraint_groups() const
     {
         return coalesce_sets_.size(); 
     }
 
-    std::tuple<const size_t*, const size_t*> ILP_input::coalesce_set(const size_t i) const
+    std::tuple<const size_t*, const size_t*> ILP_input::constraint_group(const size_t i) const
     {
-        assert(i < nr_coalesce_sets());
+        assert(i < nr_constraint_groups());
         return std::make_tuple(coalesce_sets_[i].begin(), coalesce_sets_[i].end());
     }
 

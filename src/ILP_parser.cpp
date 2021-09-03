@@ -229,7 +229,7 @@ namespace LPMP {
                 static void apply(const INPUT & in, ILP_input& i, tmp_storage& tmp)
                 {
                     assert(tmp.coalesce_identifiers.size() > 1);
-                    i.add_coalesce_set(tmp.coalesce_identifiers.begin(), tmp.coalesce_identifiers.end());
+                    i.add_constraint_group(tmp.coalesce_identifiers.begin(), tmp.coalesce_identifiers.end());
                     tmp.coalesce_identifiers.clear();
                 }
         };

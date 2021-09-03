@@ -43,7 +43,7 @@ namespace LPMP {
         const std::vector<double>& objective() const { return objective_; };
         double objective(const size_t var) const;
         double objective(const std::string& var) const;
-        void begin_new_inequality();
+        size_t begin_new_inequality();
         void set_inequality_identifier(const std::string& identifier);
         void set_inequality_type(const inequality_type ineq);
         void add_to_constraint(const int coefficient, const size_t var);
@@ -77,10 +77,10 @@ namespace LPMP {
         void reorder(const permutation& new_order);
 
         template<typename ITERATOR>
-            void add_coalesce_set(ITERATOR begin, ITERATOR end);
+            void add_constraint_group(ITERATOR begin, ITERATOR end);
 
-        size_t nr_coalesce_sets() const;
-        std::tuple<const size_t*, const size_t*> coalesce_set(const size_t i) const;
+        size_t nr_constraint_groups() const;
+        std::tuple<const size_t*, const size_t*> constraint_group(const size_t i) const;
 
         std::tuple<Eigen::SparseMatrix<int>, Eigen::MatrixXi> export_constraints() const;
 
@@ -144,17 +144,24 @@ namespace LPMP {
         }
 
         template<typename ITERATOR>
-            void ILP_input::add_coalesce_set(ITERATOR begin, ITERATOR end)
+            void ILP_input::add_constraint_group(ITERATOR begin, ITERATOR end)
             {
-                std::vector<size_t> lineq_nrs;
-                for(auto it=begin; it!=end; ++it)
+                if constexpr(std::is_integral_v<decltype(*begin)>)
                 {
-                    auto ineq_nr_it = inequality_identifier_to_index_.find(*it);
-                    if(ineq_nr_it == inequality_identifier_to_index_.end())
-                        throw std::runtime_error("inequality identifier " + *it + " not present");
-                    lineq_nrs.push_back(ineq_nr_it->second);
+                    coalesce_sets_.push_back(begin, end); 
                 }
-                coalesce_sets_.push_back(lineq_nrs.begin(), lineq_nrs.end()); 
+                else if constexpr(std::is_convertible_v<decltype(*begin), std::string>)
+                {
+                    std::vector<size_t> lineq_nrs;
+                    for(auto it=begin; it!=end; ++it)
+                    {
+                        auto ineq_nr_it = inequality_identifier_to_index_.find(*it);
+                        if(ineq_nr_it == inequality_identifier_to_index_.end())
+                            throw std::runtime_error("inequality identifier " + *it + " not present");
+                        lineq_nrs.push_back(ineq_nr_it->second);
+                    }
+                    coalesce_sets_.push_back(lineq_nrs.begin(), lineq_nrs.end()); 
+                }
             }
 
     template<typename STREAM>
