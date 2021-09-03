@@ -316,16 +316,18 @@ namespace LPMP {
     permutation ILP_input::reorder(ILP_input::variable_order var_ord)
     {
         if(var_ord == variable_order::input)
-            return permutation(nr_variables());
+            var_permutation_ = permutation(nr_variables());
         else if(var_ord == variable_order::bfs)
-            return this->reorder_bfs();
+            var_permutation_ = this->reorder_bfs();
         else if(var_ord == variable_order::cuthill)
-            return this->reorder_Cuthill_McKee();
+            var_permutation_ = this->reorder_Cuthill_McKee();
         else
         {
             assert(var_ord == variable_order::mindegree);
-            return this->reorder_minimum_degree_ordering();
+            var_permutation_ = this->reorder_minimum_degree_ordering();
         }
+
+        return var_permutation_;
     }
 
     void ILP_input::reorder(const permutation& order)

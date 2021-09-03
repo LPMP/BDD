@@ -75,6 +75,7 @@ namespace LPMP {
         permutation reorder_Cuthill_McKee(); 
         permutation reorder_minimum_degree_ordering();
         void reorder(const permutation& new_order);
+        permutation get_variable_permutation() const { return var_permutation_; }
 
         template<typename ITERATOR>
             void add_constraint_group(ITERATOR begin, ITERATOR end);
@@ -91,6 +92,8 @@ namespace LPMP {
             tsl::robin_map<std::string, size_t> var_name_to_index_;
             tsl::robin_map<std::string, size_t> inequality_identifier_to_index_;
             two_dim_variable_array<size_t> coalesce_sets_;
+
+            permutation var_permutation_;
 
         private:
             two_dim_variable_array<size_t> variable_adjacency_matrix() const;
@@ -146,7 +149,7 @@ namespace LPMP {
         template<typename ITERATOR>
             void ILP_input::add_constraint_group(ITERATOR begin, ITERATOR end)
             {
-                if constexpr(std::is_integral_v<decltype(*begin)>)
+                if constexpr(std::is_integral_v<std::remove_reference_t<decltype(*begin)>>)
                 {
                     coalesce_sets_.push_back(begin, end); 
                 }
