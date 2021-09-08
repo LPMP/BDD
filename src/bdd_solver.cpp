@@ -320,6 +320,8 @@ namespace LPMP {
         if(options.solution_statistics)
         {
             std::cout << "print solution statistics:\n";
+            const auto var_perm = options.ilp.get_variable_permutation().inverse_permutation();
+            assert(var_perm.size() == options.ilp.nr_variables());
             const auto mms = min_marginals();
             const auto mm_diffs = min_marginal_differences(mms, 0.0);
             assert(mms.size() == options.ilp.nr_variables());
@@ -327,16 +329,17 @@ namespace LPMP {
 
             for(size_t i=0; i<mm_diffs.size(); ++i)
             {
-                std::cout << options.ilp.get_var_name(i) << ", c = " << options.ilp.objective(i) << ", min marginal = " << mm_diffs[i] << "\n";
+                std::cout << options.ilp.get_var_name(var_perm[i]) << ", position = " << var_perm[i] << ", c = " << options.ilp.objective(var_perm[i]) << ", min marginal = " << mm_diffs[i] << "\n";
             }
         }
     }
 
     two_dim_variable_array<std::array<double,2>> bdd_solver::min_marginals()
     {
-        return std::visit([&](auto&& s) { 
+        const auto mms = std::visit([&](auto&& s) { 
                 return s.min_marginals();
                 }, *solver); 
+        return permute_min_marginals(mms, options.ilp.get_variable_permutation());
     }
 
     void bdd_solver::round()
@@ -361,8 +364,7 @@ namespace LPMP {
 
         std::cout << "Retrieving total min-marginals..." << std::endl;
 
-        // TODO: const?
-        std::vector<double> total_min_marginals = min_marginal_differences(min_marginals(), 0.0);
+        const std::vector<double> total_min_marginals = min_marginal_differences(min_marginals(), 0.0);
         bool success = primal_heuristic->round(total_min_marginals);
 
         if (!success)

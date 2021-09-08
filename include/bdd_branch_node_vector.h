@@ -679,7 +679,7 @@ namespace LPMP {
             lb += bdd_lb;
         }
 
-        assert(lb.value() >= lower_bound_ - 1e-8);
+        assert(lb.value() >= lower_bound_ - 1e-6);
         lower_bound_ = lb.value();
     }
 

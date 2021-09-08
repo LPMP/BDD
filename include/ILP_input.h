@@ -153,7 +153,7 @@ namespace LPMP {
                 {
                     coalesce_sets_.push_back(begin, end); 
                 }
-                else if constexpr(std::is_convertible_v<decltype(*begin), std::string>)
+                else if constexpr(std::is_convertible_v<std::remove_reference_t<decltype(*begin)>, std::string>)
                 {
                     std::vector<size_t> lineq_nrs;
                     for(auto it=begin; it!=end; ++it)
@@ -164,6 +164,8 @@ namespace LPMP {
                         lineq_nrs.push_back(ineq_nr_it->second);
                     }
                     coalesce_sets_.push_back(lineq_nrs.begin(), lineq_nrs.end()); 
+                } else {
+                    static_assert("add_constraint_group must be called with iterators referencing integral types or std::string");
                 }
             }
 
@@ -205,6 +207,14 @@ namespace LPMP {
             s << "Subject To\n";
             for(const auto& constr : constraints()) {
                 write_lp(s, constr);
+            }
+            if(coalesce_sets_.size() > 0)
+            {
+                s << "Coalesce\n";
+                for(size_t c=0; c<coalesce_sets_.size(); ++c)
+                {
+                    ...
+                }
             }
             s << "Bounds\n";
             s << "Binaries\n";

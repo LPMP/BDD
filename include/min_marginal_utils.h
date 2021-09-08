@@ -3,6 +3,7 @@
 #include <vector>
 #include <array>
 #include "two_dimensional_variable_array.hxx"
+#include "permutation.hxx"
 
 namespace LPMP {
 
@@ -62,6 +63,30 @@ namespace LPMP {
                 std::cout << " " << i;
         std::cout << "\n";
         return mmd;
+    }
+
+    template<typename REAL>
+    two_dim_variable_array<std::array<REAL,2>> permute_min_marginals(const two_dim_variable_array<std::array<REAL,2>>& min_marginals, const permutation& perm)
+    {
+        if(perm.is_identity())
+            return min_marginals;
+        assert(min_marginals.size() == perm.size());
+        std::vector<size_t> mm_size;
+        mm_size.reserve(min_marginals.size());
+        for(size_t i=0; i<min_marginals.size(); ++i)
+            mm_size.push_back(min_marginals.size(i));
+
+        const auto perm_mm_size = perm.inverse_permute(mm_size.begin(), mm_size.end());
+        two_dim_variable_array<std::array<REAL,2>> perm_mms(perm_mm_size.begin(), perm_mm_size.end());
+
+        for(size_t i=0; i<min_marginals.size(); ++i)
+        {
+            assert(min_marginals.size(i) == perm_mms.size(perm[i]));
+            for(size_t j=0; j<min_marginals.size(i); ++j)
+                perm_mms(perm[i],j) = min_marginals(i,j);
+        }
+
+        return perm_mms;
     }
 
 }

@@ -34,6 +34,7 @@ namespace LPMP {
         var_index_to_name_.push_back(var);
         if(objective_.size() <= var_index) // variables with 0 objective coefficient need not appear in objective line!
             objective_.resize(var_index+1,0.0);
+        var_permutation_.push_back(var_permutation_.size()-1);
         return var_index;
     }
 
