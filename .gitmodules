@@ -20,3 +20,6 @@
 [submodule "external/pybind11"]
 	path = external/pybind11
 	url = https://github.com/pybind/pybind11.git
+[submodule "external/thrust"]
+	path = external/thrust
+	url = https://github.com/NVIDIA/thrust.git
