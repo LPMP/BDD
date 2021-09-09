@@ -4,80 +4,58 @@
 #include <tsl/robin_map.h>
 #include <tsl/robin_set.h>
 #include "time_measure_util.h"
-#include <fstream> // TODO: remove
 
 namespace LPMP {
 
     bdd_preprocessor::bdd_preprocessor(const ILP_input& input)
     {
-        MEASURE_FUNCTION_EXECUTION_TIME
+        MEASURE_FUNCTION_EXECUTION_TIME;
+        assert(bdd_collection.nr_bdds() == 0);
         // first transform linear inequalities into BDDs
         std::vector<int> coefficients;
         std::vector<std::size_t> variables;
-        std::vector<BDD::node_ref> tmp_bdds;
-        tmp_bdds.reserve(input.constraints().size());
+        BDD::bdd_mgr bdd_mgr;
         bdd_converter converter(bdd_mgr);
 
         for(size_t c=0; c<input.constraints().size(); ++c)
         {
             const auto& constraint = input.constraints()[c];
             coefficients.clear();
+            variables.clear();
             for(const auto e : constraint.variables) {
                 coefficients.push_back(e.coefficient);
+                variables.push_back(e.var);
             }
             BDD::node_ref bdd = converter.convert_to_bdd(coefficients, constraint.ineq, constraint.right_hand_side);
-            tmp_bdds.push_back(bdd);
+            bdd_collection.add_bdd(bdd);
+            bdd_collection.rebase(bdd_collection.nr_bdds()-1, variables.begin(), variables.end());
         }
 
-        // second, coalesce BDDs and add them to bdd_collection
+        // coalesce BDDs 
         std::vector<size_t> bdd_nrs;
         for(size_t c=0; c<input.nr_constraint_groups(); ++c)
         {
             auto [c_begin, c_end] = input.constraint_group(c);
-            std::vector<size_t> coalesce_bdd_nrs;
-            for(auto it=c_begin; it!=c_end; ++it)
-            {
-                const size_t ineq_idx = *it;
-                const size_t bdd_nr = bdd_collection.add_bdd(tmp_bdds[ineq_idx]);
-                coalesce_bdd_nrs.push_back(bdd_nr);
-                std::vector<size_t> indices;
-                for(const auto e : input.constraints()[ineq_idx].variables) {
-                    indices.push_back(e.var);
-                }
-                bdd_collection.rebase(bdd_nr, indices.begin(), indices.end());
-            }
-            const size_t coalesced_bdd_nr = bdd_collection.bdd_and(coalesce_bdd_nrs.begin(), coalesce_bdd_nrs.end());
-
-            std::fstream fs;
-            fs.open ("kwas.dot", std::fstream::in | std::fstream::out | std::ofstream::trunc);
-            bdd_collection.export_graphviz(coalesced_bdd_nr, fs);
-            add_bdd(bdd_collection[coalesced_bdd_nr]);
-            bdd_collection.remove(coalesce_bdd_nrs.begin(), coalesce_bdd_nrs.end());
+            const size_t coalesced_bdd_nr = bdd_collection.bdd_and(c_begin, c_end);
         }
-
-        // third, record those inequalities that should be directly added and remove the others
-        std::vector<char> add_inequality(input.constraints().size(), true);
+        
+        // remove BDDs that were coalesced
+        std::vector<size_t> unused_bdd_nrs;
         for(size_t c=0; c<input.nr_constraint_groups(); ++c)
         {
             auto [c_begin, c_end] = input.constraint_group(c);
-            for(auto it=c_begin; it!=c_end; ++it)
-                add_inequality[*it] = false; 
+            unused_bdd_nrs.insert(unused_bdd_nrs.end(), c_begin, c_end);
         }
+        std::sort(unused_bdd_nrs.begin(), unused_bdd_nrs.end());
+        auto new_unused_bdd_nrs_end = std::unique(unused_bdd_nrs.begin(), unused_bdd_nrs.end());
+        unused_bdd_nrs.resize(std::distance(unused_bdd_nrs.begin(), new_unused_bdd_nrs_end));
 
-        // and add them
-        for(size_t c=0; c<tmp_bdds.size(); ++c)
-        {
-            if(add_inequality[c])
-            {
-                const auto& constraint = input.constraints()[c];
-                variables.clear();
-                for(const auto e : constraint.variables) {
-                    variables.push_back(e.var);
-                }
-                assert(std::is_sorted(variables.begin(), variables.end()));
-                add_bdd(tmp_bdds[c], variables.begin(), variables.end());
-            }
-        }
+        //std::fstream fs;
+        //fs.open ("kwas.dot", std::fstream::in | std::fstream::out | std::ofstream::trunc);
+        //bdd_collection.export_graphviz(coalesced_bdd_nr, fs);
+        //add_bdd(bdd_collection[coalesced_bdd_nr]);
+        bdd_collection.remove(unused_bdd_nrs.begin(), unused_bdd_nrs.end());
+
 
         // second, preprocess BDDs, TODO: do this separately!
         /*
@@ -119,11 +97,11 @@ namespace LPMP {
     void bdd_preprocessor::add_bdd(BDD::bdd_collection_entry bdd)
     {
         //throw std::runtime_error("bdd_add in bdd_preprocessor not implemted");
-
     }
 
     void bdd_preprocessor::construct_bdd_collection()
     {
+        return; // TODO: remove
         assert(bdd_collection.nr_bdds() == 0);
         for(size_t i=0; i<bdds.size(); ++i)
         {

@@ -17,7 +17,7 @@ namespace LPMP {
             size_t nr_bdds() const;
 
         protected:
-            thrust::device_vector<int> variables_;
+            thrust::device_vector<int> variable_offsets_;
             thrust::device_vector<int> lo_offsets_; // = 0
             thrust::device_vector<int> hi_offsets_; // = 1
             thrust::device_vector<float> hi_cost;

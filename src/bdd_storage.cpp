@@ -9,7 +9,7 @@ namespace LPMP {
         MEASURE_FUNCTION_EXECUTION_TIME;
 
         // first add BDDs from bdd_sollection
-        assert(bdd_pre.get_bdd_collection().nr_bdds() > 0 || bdd_pre.get_bdds().size() > 0);
+        assert(bdd_pre.get_bdd_collection().nr_bdds() > 0);
 
         if(bdd_pre.get_bdd_collection().nr_bdds() > 0)
         {
@@ -19,6 +19,7 @@ namespace LPMP {
         }
 
 
+        /*
         // second, add BDDs from BDD manager
         const auto bdds = bdd_pre.get_bdds();
         std::cout << "Add " << bdds.size() << " bdds from bdd manager\n";
@@ -26,6 +27,7 @@ namespace LPMP {
         assert(bdds.size() == bdd_variable_indices.size());
         for(size_t bdd_index=0; bdd_index<bdds.size(); ++bdd_index)
             add_bdd(bdd_pre.get_bdd_manager(), bdds[bdd_index], bdd_variable_indices[bdd_index].begin(), bdd_variable_indices[bdd_index].end());
+            */
     }
 
     bdd_storage::bdd_storage()
