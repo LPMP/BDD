@@ -403,6 +403,4 @@ namespace LPMP {
                 }, *solver);
 
     }
-
 }
-

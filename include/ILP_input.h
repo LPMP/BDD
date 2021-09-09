@@ -91,6 +91,7 @@ namespace LPMP {
             std::vector<std::string> var_index_to_name_;
             tsl::robin_map<std::string, size_t> var_name_to_index_;
             tsl::robin_map<std::string, size_t> inequality_identifier_to_index_;
+            std::vector<std::string> inequality_identifiers_;
             two_dim_variable_array<size_t> coalesce_sets_;
 
             permutation var_permutation_;
@@ -213,7 +214,14 @@ namespace LPMP {
                 s << "Coalesce\n";
                 for(size_t c=0; c<coalesce_sets_.size(); ++c)
                 {
-                    ...
+                    for(size_t j=0; j<coalesce_sets_.size(c); ++j)
+                    {
+                        const size_t ineq_nr = coalesce_sets_(c,j);
+                        const std::string& inequality_id = inequalitity_identifiers_[ineq_nr];
+                        assert(inequality_id != "");
+                        s << inequality_id << " ";
+                    }
+                    s << "\n";
                 }
             }
             s << "Bounds\n";
