@@ -1,4 +1,4 @@
-#include "bdd_cuda_base.h"
+#include "bdd_cuda_parallel_mma_sorting.h"
 #include "ILP_parser.h"
 #include "bdd_collection.h"
 #include "bdd_preprocessor.h"
@@ -25,14 +25,17 @@ int main(int argc, char** argv)
     ILP_input ilp = ILP_parser::parse_string(matching_3x3);
     bdd_preprocessor bdd_pre(ilp);
     bdd_collection bdd_col = bdd_pre.get_bdd_collection();
-    bdd_cuda_base bcb(bdd_col);
+    bdd_cuda_parallel_mma_sorting solver(bdd_col);
 
-    test(bcb.nr_variables() == 9);
-    test(bcb.nr_bdds() == 6);
+    test(solver.nr_variables() == 9);
+    test(solver.nr_bdds() == 6);
 
-    for(size_t i=0; i<bcb.nr_variables(); ++i)
-        bcb.set_cost(ilp.objective()[i], i);
+    for(size_t i=0; i<solver.nr_variables(); ++i)
+        solver.set_cost(ilp.objective()[i], i);
 
-    const auto mms = bcb.min_marginals();
-    // test for correct min marginals
+    for(size_t iter=0; iter<10; ++iter)
+        solver.iteration();
+
+    test(std::abs(solver.lower_bound() + 6.0) <= 1e-6);
 }
+

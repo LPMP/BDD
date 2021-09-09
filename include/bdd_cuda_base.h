@@ -13,8 +13,10 @@ namespace LPMP {
             double lower_bound();
             void set_cost(const double c, const size_t var);
             two_dim_variable_array<std::array<double,2>> min_marginals();
+            size_t nr_variables() const;
+            size_t nr_bdds() const;
 
-        private:
+        protected:
 
     };
 
