@@ -25,12 +25,12 @@ namespace LPMP {
 
     void print_statistics(ILP_input& ilp, bdd_storage& stor)
     {
-        std::cout << "#variables = " << ilp.nr_variables() << "\n";
-        std::cout << "#constraints = " << ilp.nr_constraints() << "\n";
-        std::cout << "#BDDs = " << stor.nr_bdds() << "\n";
+        std::cout << "[print_statistics] #variables = " << ilp.nr_variables() << "\n";
+        std::cout << "[print_statistics] #constraints = " << ilp.nr_constraints() << "\n";
+        std::cout << "[print_statistics] #BDDs = " << stor.nr_bdds() << "\n";
         const auto var_groups = stor.compute_variable_groups();
-        std::cout << "#var groups = " << var_groups.size() << "\n";
-        std::cout << "#average nr vars per group = " << stor.nr_variables() / double(var_groups.size()) << "\n";
+        std::cout << "[print_statistics] #var groups = " << var_groups.size() << "\n";
+        std::cout << "[print_statistics] #average nr vars per group = " << stor.nr_variables() / double(var_groups.size()) << "\n";
     }
 
     bdd_solver_options::bdd_solver_options(int argc, char** argv)
@@ -110,17 +110,14 @@ namespace LPMP {
 
         auto tighten_arg = app.add_flag("--tighten", tighten, "tighten relaxation flag");
         
-        bool statistics = false;
         solver_group->add_flag("--statistics", statistics, "statistics of the problem");
 
-        std::string export_bdd_lp_file;
         solver_group->add_option("--export_bdd_lp", export_bdd_lp_file, "filename for export of LP of the BDD relaxation");
 
         solver_group->require_option(1); // either a solver or statistics
 
         app.callback([this,&app]() {
                 CLI::App solver_app;
-                std::cout << "decomposition_mma callback\n";
 
                 if(bdd_solver_impl_ == bdd_solver_impl::decomposition_mma)
                 {
@@ -219,13 +216,14 @@ namespace LPMP {
             print_statistics(options.ilp, stor);
             exit(0);
         }
-        else if(!options.export_bdd_lp.empty())
+        else if(!options.export_bdd_lp_file.empty())
         {
             bdd_pre.construct_bdd_collection(); // this is only needed if bdd collection is used in bdd preprocessor
             std::ofstream f;
-            f.open(options.export_bdd_lp);
+            f.open(options.export_bdd_lp_file);
             bdd_pre.get_bdd_collection().write_bdd_lp(f, options.ilp.objective().begin(), options.ilp.objective().end());
             f.close(); 
+            exit(0);
         }
         else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::mma)
         {
@@ -259,7 +257,7 @@ namespace LPMP {
         }
         else
         {
-            assert(false);
+            throw std::runtime_error("no solver nor output of statistics or export of lp selected");
         }
 
         if(options.primal_rounding)

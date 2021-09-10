@@ -17,6 +17,7 @@ namespace LPMP {
         BDD::bdd_mgr bdd_mgr;
         bdd_converter converter(bdd_mgr);
 
+        std::cout << "[bdd_preprocessor] convert " << input.constraints().size() << " linear inequalities.\n";
         for(size_t c=0; c<input.constraints().size(); ++c)
         {
             const auto& constraint = input.constraints()[c];
@@ -28,15 +29,22 @@ namespace LPMP {
             }
             BDD::node_ref bdd = converter.convert_to_bdd(coefficients, constraint.ineq, constraint.right_hand_side);
             bdd_collection.add_bdd(bdd);
+            bdd_collection.reorder(bdd_collection.size()-1);
             bdd_collection.rebase(bdd_collection.nr_bdds()-1, variables.begin(), variables.end());
+            assert(bdd_collection.is_reordered(bdd_collection.nr_bdds()-1));
         }
 
+        assert(bdd_collection.nr_bdds() == input.constraints().size());
+
         // coalesce BDDs 
+        std::cout << "[bdd_preprocessor] coalesce " << input.nr_constraint_groups() << " constraint groups.\n";
         std::vector<size_t> bdd_nrs;
         for(size_t c=0; c<input.nr_constraint_groups(); ++c)
         {
             auto [c_begin, c_end] = input.constraint_group(c);
             const size_t coalesced_bdd_nr = bdd_collection.bdd_and(c_begin, c_end);
+            bdd_collection.reorder(coalesced_bdd_nr);
+            assert(bdd_collection.is_reordered(coalesced_bdd_nr));
         }
         
         // remove BDDs that were coalesced
@@ -49,6 +57,7 @@ namespace LPMP {
         std::sort(unused_bdd_nrs.begin(), unused_bdd_nrs.end());
         auto new_unused_bdd_nrs_end = std::unique(unused_bdd_nrs.begin(), unused_bdd_nrs.end());
         unused_bdd_nrs.resize(std::distance(unused_bdd_nrs.begin(), new_unused_bdd_nrs_end));
+        std::cout << "[bdd_preprocessor] remove " << unused_bdd_nrs.size() << " original BDDs.\n";
 
         //std::fstream fs;
         //fs.open ("kwas.dot", std::fstream::in | std::fstream::out | std::ofstream::trunc);

@@ -194,6 +194,9 @@ namespace BDD {
             // variables fixed to 0 or 1
             std::array<std::vector<size_t>,2> fixed_variables(const size_t bdd_nr) const;
 
+            template<typename STREAM>
+                void write_lp(STREAM& s);
+
         private:
             size_t bdd_and_impl(const size_t i, const size_t j, const size_t node_limit);
             template<size_t N>
@@ -663,6 +666,11 @@ namespace BDD {
             s << "End\n"; 
         }
 
+    template<typename STREAM>
+        void bdd_collection::write_lp(STREAM& s)
+        {
+
+        }
 }
 
 // inject hash function for bdd_collection_node into std namespace

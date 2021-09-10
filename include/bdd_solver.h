@@ -49,7 +49,7 @@ namespace LPMP {
         bdd_fix_options fixing_options_;
 
         bool statistics = false;
-        std::string export_bdd_lp;
+        std::string export_bdd_lp_file = "";
     };
 
     class bdd_solver {
