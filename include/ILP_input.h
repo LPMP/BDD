@@ -84,6 +84,9 @@ namespace LPMP {
         std::tuple<const size_t*, const size_t*> constraint_group(const size_t i) const;
 
         std::tuple<Eigen::SparseMatrix<int>, Eigen::MatrixXi> export_constraints() const;
+        const std::vector<std::string>& var_index_to_name() const { return var_index_to_name_; };
+        const tsl::robin_map<std::string, size_t>& var_name_to_index() const { return var_name_to_index_; };
+        const tsl::robin_map<std::string, size_t>& inequality_identifier_to_index() const { return inequality_identifier_to_index_; };
 
         private:
             std::vector<linear_constraint> linear_constraints_;
