@@ -1,3 +1,5 @@
+add_subdirectory(bdd)
+
 add_executable(test_avl_tree test_avl_tree.cpp)
 target_link_libraries(test_avl_tree lineq_bdd LPMP-BDD)
 add_test(test_avl_tree test_avl_tree)

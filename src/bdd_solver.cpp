@@ -7,6 +7,7 @@
 #endif
 #include <iomanip>
 #include <memory>
+#include <stdlib.h>
 #include <CLI/CLI.hpp>
 #include "time_measure_util.h"
 
@@ -47,7 +48,7 @@ namespace LPMP {
             ->check(CLI::ExistingPath);
 
         //std::string lp_input_string;
-        auto lp_input_string_arg = input_group->add_option("--input_as_string", lp_input_as_string, "ILP input in string");
+        auto lp_input_string_arg = input_group->add_option("--lp_input_string", lp_input_as_string, "ILP input in string");
 
         //std::string opb_input_as_string;
         auto opb_input_string_arg = input_group->add_option("--opb_input_string", opb_input_as_string, "OPB input in string");
@@ -113,6 +114,8 @@ namespace LPMP {
         solver_group->add_flag("--statistics", statistics, "statistics of the problem");
 
         solver_group->add_option("--export_bdd_lp", export_bdd_lp_file, "filename for export of LP of the BDD relaxation");
+
+        solver_group->add_option("--export_bdd_graph", export_bdd_graph_file, "filename for export of BDD representation in .dot format");
 
         solver_group->require_option(1); // either a solver or statistics
 
@@ -218,11 +221,43 @@ namespace LPMP {
         }
         else if(!options.export_bdd_lp_file.empty())
         {
-            bdd_pre.construct_bdd_collection(); // this is only needed if bdd collection is used in bdd preprocessor
             std::ofstream f;
             f.open(options.export_bdd_lp_file);
             bdd_pre.get_bdd_collection().write_bdd_lp(f, options.ilp.objective().begin(), options.ilp.objective().end());
             f.close(); 
+            exit(0);
+        }
+        else if(!options.export_bdd_graph_file.empty())
+        {
+
+            // get ending and filename
+            const auto [filename, extension] = [&]() -> std::tuple<std::string, std::string> {
+                const auto idx = options.export_bdd_graph_file.rfind('.');
+                if(idx != std::string::npos)
+                {
+                    const std::string filename = options.export_bdd_graph_file.substr(0, idx);
+                    const std::string extension = options.export_bdd_graph_file.substr(idx+1);
+                    assert(extension == "dot");
+                    return {filename, extension};
+                }
+                else
+                {
+                    // no extension found
+                    return {options.export_bdd_graph_file, "dot"};
+                }
+            }();
+
+            for(size_t bdd_nr=0; bdd_nr<bdd_pre.get_bdd_collection().nr_bdds(); ++bdd_nr)
+            {
+                std::ofstream f;
+                const std::string dot_file = filename + "_" + std::to_string(bdd_nr) + ".dot";
+                const std::string png_file = filename + "_" + std::to_string(bdd_nr) + ".png";
+                f.open(dot_file);
+                bdd_pre.get_bdd_collection().export_graphviz(bdd_nr, f);
+                f.close(); 
+                const std::string convert_command = "dot -Tpng " + dot_file + " > " + png_file;
+                system(convert_command.c_str());
+            }
             exit(0);
         }
         else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::mma)

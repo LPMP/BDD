@@ -577,7 +577,7 @@ namespace BDD {
                 assert(bdd_nr < nr_bdds());
                 assert(bdd_idx >= bdd_delimiters[bdd_nr] && bdd_idx < bdd_delimiters[bdd_nr+1]-2);
                 assert(value <= 1);
-                return std::string("arc_") + std::to_string(bdd_nr) + "_" + std::to_string(bdd_idx) + "_" + std::to_string(value); 
+                return std::string("arc_") + std::to_string(bdd_nr) + "_" + std::to_string(bdd_idx-bdd_delimiters[bdd_nr]) + "_" + std::to_string(value); 
             };
 
             auto var_identifier = [&](const size_t var)
@@ -589,7 +589,7 @@ namespace BDD {
             for(size_t i=0; i<std::distance(cost_begin, cost_end); ++i)
             {
                 const double val = *(cost_begin + i);
-                s << (val < 0 ? "-" : "+") << std::abs(val) << " * " << var_identifier(i) << "\n";
+                s << (val < 0 ? "-" : "+") << std::abs(val) << " " << var_identifier(i) << "\n";
             }
 
             s << "Subject To\n";
@@ -599,6 +599,7 @@ namespace BDD {
             {
                 // exactly one path starts at root node
                 const auto root_instr = bdd_instructions[bdd_delimiters[bdd_nr]];
+                s << "R_" << bdd_nr << ": ";
                 if(!bdd_instructions[root_instr.lo].is_botsink())
                     s << arc_identifier(bdd_nr, bdd_delimiters[bdd_nr], 0);
                 if(!bdd_instructions[root_instr.hi].is_botsink())
@@ -614,6 +615,7 @@ namespace BDD {
                 for(size_t i=bdd_delimiters[bdd_nr]+1; i<bdd_delimiters[bdd_nr+1]-2; ++i)
                 {
                     const auto& instr = bdd_instructions[i];
+                    s << "FC_" << bdd_nr << "_" << i-bdd_delimiters[bdd_nr] << ": ";
                     // flow conservation constraint for intermediate nodes
                     // outgoing
                     if(!bdd_instructions[instr.lo].is_botsink())
@@ -640,6 +642,8 @@ namespace BDD {
                 for(size_t i=bdd_delimiters[bdd_nr]; i<bdd_delimiters[bdd_nr+1]-2; ++i)
                 {
                     const bdd_instruction& instr = bdd_instructions[i];
+                    std::cout << "bdd_nr " << bdd_nr << ", i = " << i - bdd_delimiters[bdd_nr] << ", var = " << instr.index << "\n";
+                    assert(!instr.is_terminal());
                     if(instr.index != cur_var)
                     {
                         s << " - " << var_identifier(cur_var) << " = 0\n";
@@ -648,6 +652,8 @@ namespace BDD {
                     if(!bdd_instructions[instr.hi].is_botsink())
                         s << " + " << arc_identifier(bdd_nr, i, 1); 
                 }
+                s << " - " << var_identifier(cur_var) << " = 0\n";
+                assert(cur_var == min_max_variables(bdd_nr)[1]);
             }
 
             s << "Bounds\n";

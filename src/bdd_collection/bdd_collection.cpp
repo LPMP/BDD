@@ -71,9 +71,8 @@ namespace BDD {
         else if(f.is_terminal() && !g.is_terminal())
             if(f.is_botsink())
                 return 0; //botsink position on stack
-            else if(!f.is_terminal() && g.is_terminal())
-                if(g.is_botsink())
-                    return 0; //botsink position on stack 
+            else if(!f.is_terminal() && g.is_terminal() && g.is_botsink()) // TODO: is superfluous!
+                    return 0; //botsink position on stack
 
         // compute lo and hi and see if they are present already. It not, add new branch instruction
         const size_t v = std::min(f.index, g.index);

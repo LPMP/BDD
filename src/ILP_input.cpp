@@ -82,15 +82,23 @@ namespace LPMP {
     size_t ILP_input::begin_new_inequality()
     {
         linear_constraints_.push_back({});
+        // set defaul inequality identifier
+        std::string ineq_name = "INEQ_NR_" + std::to_string(linear_constraints_.size()-1);
+        set_inequality_identifier(ineq_name);
         return linear_constraints_.size()-1;
     }
 
     void ILP_input::set_inequality_identifier(const std::string& identifier)
     {
         assert(linear_constraints_.size() > 0);
-        assert(linear_constraints_.back().identifier == "");
         if(identifier == "")
             return;
+        const std::string& old_identifier = linear_constraints_.back().identifier;
+        if(old_identifier != "")
+        {
+            assert(inequality_identifier_to_index_.count(old_identifier) > 0);
+            inequality_identifier_to_index_.erase(old_identifier);
+        }
         linear_constraints_.back().identifier = identifier;
         if(inequality_identifier_to_index_.count(identifier) > 0)
             throw std::runtime_error("Duplicate inequality identifier " + identifier);

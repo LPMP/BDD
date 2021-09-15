@@ -14,7 +14,7 @@ void test_problem(const std::string input_string, const double expected_lb, std:
 	args.push_back("-t");
 	args.push_back("1e-16");
 	args.push_back("-p");
-    args.push_back("--input_string");
+    args.push_back("--lp_input_string");
     args.push_back(input_string);
     bdd_solver solver(args);
     const double initial_lb = solver.lower_bound();
@@ -218,9 +218,10 @@ int main(int argc, char** arv)
 {
 	std::cout << "--- Short chain shuffled ---" << std::endl;
 
-	// test_problem(short_chain_shuffled, 1.0, {"-s", "mma", "-o", "input", "--max_iter", "5"});
-	// // test_problem(short_chain_shuffled, 1.0, {"-s", "mma", "-o", "bfs", "--max_iter", "5"});
-	// test_problem(short_chain_shuffled, 1.0, {"-s", "mma", "-o", "cuthill", "--max_iter", "5"});
+	test_problem(short_chain_shuffled, 1.0, {"-s", "mma_vec", "-o", "input", "--max_iter", "5"});
+    return 0;
+	test_problem(short_chain_shuffled, 1.0, {"-s", "mma_vec", "-o", "bfs", "--max_iter", "5"});
+	test_problem(short_chain_shuffled, 1.0, {"-s", "mma_vec", "-o", "cuthill", "--max_iter", "5"});
 	// // test_problem(short_chain_shuffled, 1.0, {"-s", "mma", "-o", "mindegree", "--max_iter", "5"});
 	// test_problem(short_chain_shuffled, 1.0, {"-s", "mma_srmp", "-o", "input", "--max_iter", "5"});
 	// // test_problem(short_chain_shuffled, 1.0, {"-s", "mma_srmp", "-o", "bfs", "--max_iter", "5"});

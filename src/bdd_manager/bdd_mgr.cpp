@@ -128,10 +128,12 @@ namespace BDD {
         {
             const size_t m_nr_nodes = m->nr_nodes();
             if(m != nullptr)
+            {
                 if(m_nr_nodes <= node_limit)
                     return {node_ref(m), m_nr_nodes};
                 else 
                     return {node_ref(nullptr), std::numeric_limits<size_t>::max()};
+            }
         }
 
         var& f_var = vars[f.variable()];
@@ -304,87 +306,6 @@ namespace BDD {
         memo_.cache_insert(f.ref, g.ref, h.ref, r);
         return node_ref(r); 
     }
-
-    /*
-    node_ref bdd_mgr::ite_non_rec(node_ref f, node_ref g, node_ref h, std::stack<>& stack2)
-    {
-        using instruction_type = unsigned char;
-
-        static constexpr instruction_type xor_instr = 0;
-        static constexpr instruction_type or_instr = 1;
-        static constexpr instruction_type and_instr = 2;
-        static constexpr instruction_type ite_instr = 3;
-
-        struct instruction {
-            instruction_type instr;
-            node_ref f;
-            node_ref g;
-            node_ref h; 
-        };
-
-        std::stack<instruction> stack;
-        std::stack<> result_stack;
-
-        while(!stack.empty())
-        {
-            const instruction_type instr = stack.top().instr;
-            node_ref f = stack.top().f;
-            node_ref g = stack.top().g;
-            node_ref h = stack.top().h;
-            stack.pop();
-
-        }
-
-        // trivial cases
-        if(f.is_topsink())
-            return g;
-        if(f.is_botsink())
-            return h;
-
-        if(g == f || g.is_topsink())
-            return or_rec(f,h);
-        if(h == f || h.is_botsink())
-            return and_rec(f,g);
-
-        if(g == h)
-            return g;
-
-        if(g.is_botsink() && h.is_topsink())
-            return xor_rec(node_ref(get_node_cache().topsink()), f);
-
-        node* m = memo_.cache_lookup(f.ref, g.ref, h.ref);
-        if(m != nullptr)
-            return node_ref(m);
-
-        var& vf = vars[f.variable()];
-        var& vg = g.is_terminal() ? vars.back() : vars[g.variable()];
-        var& vh = h.is_terminal() ? vars.back() : vars[h.variable()];
-
-        //var& v = *std::min({&vf,&vg,&vh}); // compilation error on gcc-8.1?
-        var& v = *std::min(std::min(&vf,&vg),&vh);
-
-        node_ref r0 = ite_rec(
-                (&vf == &v ? f.low() : f),
-                (&vg == &v ? g.low() : g),
-                (&vh == &v ? h.low() : h)
-                );
-        assert(r0.ref != nullptr);
-
-        node_ref r1 = ite_rec(
-                (&vf == &v ? f.high() : f),
-                (&vg == &v ? g.high() : g),
-                (&vh == &v ? h.high() : h)
-                );
-        assert(r1.ref != nullptr);
-
-        node* r = v.unique_find(r0.ref, r1.ref);
-        assert(r != nullptr);
-        memo_.cache_insert(f.ref, g.ref, h.ref, r);
-        return node_ref(r); 
-
-
-    }
-*/
 
     void bdd_mgr::collect_garbage()
     {

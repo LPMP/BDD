@@ -4,12 +4,9 @@
 #include <algorithm>
 #include <cstring>
 #include <deque>
+#include <iostream> // TODO: remove
 
 namespace BDD {
-
-    //static std::random_device rd;
-    //node_struct::unique_table_hash_gen = rd();
-    //node_struct::unique_table_distribution = std::uniform_int_distribution<std::size_t>(0,hashtablesize-1); 
 
     void node_struct::init_new_node(std::size_t v, node_struct* l, node_struct* h) 
     {
@@ -111,6 +108,60 @@ namespace BDD {
         return nodes; 
     }
 
+    size_t node::nr_solutions()
+    {
+        std::unordered_map<node*, size_t> nr_solutions;
+        const std::vector<size_t> vars = variables();
+        std::unordered_map<size_t,size_t> var_order;
+        for(size_t i=0; i<vars.size(); ++i)
+            var_order.insert({vars[i], i});
+        var_order.insert({topsink_index, vars.size()});
+        var_order.insert({botsink_index, std::numeric_limits<size_t>::max()});
+        const size_t nr_sols = nr_solutions_impl(nr_solutions, var_order);
+        assert(nr_solutions.count(this) > 0);
+        return nr_sols;
+    }
+
+    size_t node::nr_solutions_impl(std::unordered_map<node*, size_t>& nr_map, std::unordered_map<size_t, size_t>& var_order)
+    {
+        auto it = nr_map.find(this);
+        if(it != nr_map.end())
+        {
+            return it->second;
+        }
+        else if(is_botsink())
+        {
+            nr_map.insert({this, 0});
+            return 0;
+        }
+        else if(is_topsink())
+        {
+            nr_map.insert({this, 1});
+            return 1;
+        }
+        else
+        {
+            const size_t hi_nr = hi->nr_solutions_impl(nr_map, var_order);
+            assert(var_order.count(hi->index) > 0);
+            const size_t hi_var = var_order.find(hi->index)->second;
+            
+            const size_t lo_nr = lo->nr_solutions_impl(nr_map, var_order);
+            assert(var_order.count(lo->index) > 0);
+            const size_t lo_var = var_order.find(lo->index)->second;
+
+            assert(var_order.count(index) > 0);
+            const size_t this_var = var_order.find(index)->second;
+            assert(hi_var > this_var && lo_var > this_var);
+
+            const size_t nr = 
+                (hi_nr > 0 ? std::pow(2,hi_var-this_var-1)*hi_nr : 0)
+                +
+                (lo_nr > 0 ? std::pow(2,lo_var-this_var-1)*lo_nr : 0);
+
+            nr_map.insert({this, nr});
+            return nr;
+        }
+    }
 
     void node::init_botsink(bdd_mgr* mgr)
     {

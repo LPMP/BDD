@@ -1,0 +1,71 @@
+add_executable(test_bdd_node_cache test_bdd_node_cache.cpp)
+target_link_libraries(test_bdd_node_cache LPMP-BDD)
+add_test(test_bdd_node_cache test_bdd_node_cache)
+
+add_executable(test_unique_table_page_cache test_unique_table_page_cache.cpp)
+target_link_libraries(test_unique_table_page_cache LPMP-BDD)
+add_test(test_unique_table_page_cache test_unique_table_page_cache)
+
+add_executable(test_variable_addition test_variable_addition.cpp)
+target_link_libraries(test_variable_addition bdd_mgr LPMP-BDD)
+add_test(test_variable_addition test_variable_addition)
+
+add_executable(test_bdd_projection test_bdd_projection.cpp)
+target_link_libraries(test_bdd_projection LPMP-BDD)
+add_test(test_bdd_projection test_bdd_projection)
+
+add_executable(test_bdd_and_or test_bdd_and_or.cpp)
+target_link_libraries(test_bdd_and_or LPMP-BDD)
+add_test(test_bdd_and_or test_bdd_and_or)
+
+add_executable(test_ite test_ite.cpp)
+target_link_libraries(test_ite LPMP-BDD)
+add_test(test_ite test_ite)
+
+add_executable(test_mrf_chain test_mrf_chain.cpp)
+target_link_libraries(test_mrf_chain LPMP-BDD)
+add_test(test_mrf_chain test_mrf_chain)
+
+add_executable(test_bdd_and_limited test_bdd_and_limited.cpp)
+target_link_libraries(test_bdd_and_limited LPMP-BDD)
+add_test(test_bdd_and_limited test_bdd_and_limited)
+
+add_executable(test_utility_functions test_utility_functions.cpp)
+target_link_libraries(test_utility_functions LPMP-BDD)
+add_test(test_utility_functions test_utility_functions)
+
+add_executable(test_nodes_postorder test_nodes_postorder.cpp)
+target_link_libraries(test_nodes_postorder LPMP-BDD)
+add_test(test_nodes_postorder test_nodes_postorder)
+
+add_executable(test_nodes_bfs test_nodes_bfs.cpp)
+target_link_libraries(test_nodes_bfs LPMP-BDD)
+add_test(test_nodes_bfs test_nodes_bfs)
+
+add_executable(test_bdd_collection test_bdd_collection.cpp)
+target_link_libraries(test_bdd_collection LPMP-BDD)
+add_test(test_bdd_collection test_bdd_collection)
+
+add_executable(test_bdd_multi_and test_bdd_multi_and.cpp)
+target_link_libraries(test_bdd_multi_and LPMP-BDD)
+add_test(test_bdd_multi_and test_bdd_multi_and)
+
+add_executable(test_bdd_exactly_one_solution test_bdd_exactly_one_solution.cpp)
+target_link_libraries(test_bdd_exactly_one_solution LPMP-BDD)
+add_test(test_bdd_exactly_one_solution test_bdd_exactly_one_solution)
+
+add_executable(test_bdd_collection_and test_bdd_collection_and.cpp)
+target_link_libraries(test_bdd_collection_and LPMP-BDD)
+add_test(test_bdd_collection_and test_bdd_collection_and)
+
+add_executable(test_bdd_collection_or_var test_bdd_collection_or_var.cpp)
+target_link_libraries(test_bdd_collection_or_var LPMP-BDD)
+add_test(test_bdd_collection_and test_bdd_collection_and)
+
+add_executable(test_bdd_nr_solutions test_bdd_nr_solutions.cpp)
+target_link_libraries(test_bdd_nr_solutions LPMP-BDD)
+add_test(test_bdd_nr_solutions test_bdd_nr_solutions)
+
+add_executable(test_bdd_variables test_bdd_variables.cpp)
+target_link_libraries(test_bdd_variables LPMP-BDD)
+add_test(test_bdd_variables test_bdd_variables)

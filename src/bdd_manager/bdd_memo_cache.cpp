@@ -166,7 +166,7 @@ namespace BDD {
             c >>= 1;  
             count += 1;  
         }  
-        size_t n = 1 << count+2;  
+        size_t n = 1 << (count+2);  
         assert(4*items >= n);
         assert(8*items <= n);
         return n;

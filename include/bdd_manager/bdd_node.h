@@ -4,6 +4,7 @@
 #include <cassert>
 #include <vector>
 #include <functional>
+#include <unordered_map>
 
 namespace BDD {
 
@@ -38,6 +39,7 @@ class node_struct
     std::vector<node_struct*> nodes_postorder();
     std::vector<node_struct*> nodes_bfs();
     std::vector<size_t> variables();
+    size_t nr_solutions();
     bool exactly_one_solution();
 
     void init_botsink(bdd_mgr* mgr);
@@ -73,6 +75,7 @@ class node_struct
     size_t nr_nodes_impl();
     void variables_impl(std::vector<size_t>&);
     void nodes_postorder_impl(std::vector<node_struct*>&);
+    size_t nr_solutions_impl(std::unordered_map<node_struct*, size_t>& nr_map, std::unordered_map<size_t,size_t>& var_order);
     // depth first search bdd to find terminal node, where link to bdd mgr is stored
 
     template<typename STREAM>
@@ -96,6 +99,7 @@ class node_ref {
     bool is_topsink() const { return ref->is_topsink(); }
     bool is_terminal() const { return ref->is_terminal(); }
     size_t nr_nodes() const { return ref->nr_nodes(); }
+    size_t nr_solutions() const { return ref->nr_solutions(); }
     bool exactly_one_solution() const { return ref->exactly_one_solution(); }
     bdd_mgr* find_bdd_mgr() { return ref->find_bdd_mgr(); }
     node_ref botsink();
