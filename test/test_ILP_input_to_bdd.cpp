@@ -19,10 +19,7 @@ void test_against_utility_functions(bdd_converter& converter)
         for(size_t x=0; x<i; ++x)
             coeffs.push_back(1);
         BDD::node_ref simplex_converted = converter.convert_to_bdd(coeffs, ILP_input::inequality_type::equal, 1);
-        converter.get_lineq_bdd().export_graphviz("simplex_lineq_bdd.dot");
         BDD::node_ref simplex = bdd_mgr.simplex(vars.begin(), vars.begin()+i);
-        simplex.export_graphviz("simplex.dot");
-        simplex_converted.export_graphviz("simplex_converted.dot");
         test(simplex == simplex_converted);
     }
 
@@ -175,15 +172,15 @@ void test_simplex(bdd_converter & converter)
 
 void test_cardinality(bdd_converter & converter)
 {
-    std::vector<int> cardinality_weights;
-    size_t nr_vars = 1000;
+    size_t nr_vars = 100;
     for(size_t rhs=1; rhs<8; ++rhs)
     {
+        std::vector<int> cardinality_weights;
         for(size_t i=0; i<nr_vars; ++i)
             cardinality_weights.push_back(1);
         auto bdd = converter.convert_to_bdd(cardinality_weights.begin(), cardinality_weights.end(), ILP_input::inequality_type::equal, rhs);
         auto n_choose_k = [](size_t n, size_t k) -> size_t {
-            if (k > n) return 0;
+            assert(n >= k);
             if (k * 2 > n) k = n-k;
             if (k == 0) return 1;
 

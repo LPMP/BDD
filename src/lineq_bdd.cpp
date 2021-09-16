@@ -171,7 +171,7 @@ namespace LPMP {
     }
 
 
-    BDD::node_ref lineq_bdd::convert_to_lbdd(BDD::bdd_mgr & bdd_mgr_) const
+    BDD::node_ref lineq_bdd::convert_to_lbdd(BDD::bdd_mgr& bdd_mgr_) const
     {
         if (root_node == &topsink)
             return bdd_mgr_.topsink();
@@ -205,10 +205,10 @@ namespace LPMP {
                 };
                 BDD::node_ref zero_bdd_node = get_node(lbdd.zero_kid_);
                 BDD::node_ref one_bdd_node = get_node(lbdd.one_kid_);
-                if (inverted[l])
-                    bdd_nodes[l].push_back(bdd_mgr_.ite_rec(bdd_mgr_.projection(l), one_bdd_node, zero_bdd_node));
-                else
+                if(inverted[l])
                     bdd_nodes[l].push_back(bdd_mgr_.ite_rec(bdd_mgr_.projection(l), zero_bdd_node, one_bdd_node));
+                else
+                    bdd_nodes[l].push_back(bdd_mgr_.ite_rec(bdd_mgr_.projection(l), one_bdd_node, zero_bdd_node));
                 node_refs.insert(std::make_pair(&lbdd, bdd_nodes[l].size()-1));
             }
         }
