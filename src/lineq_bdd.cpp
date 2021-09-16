@@ -1,4 +1,6 @@
 #include "lineq_bdd.h"
+#include <fstream>
+#include <filesystem>
 
 namespace LPMP {
 
@@ -212,6 +214,19 @@ namespace LPMP {
         }
         assert(bdd_nodes[0].size() == 1);
         return bdd_nodes[0][0];
+    }
+
+    void lineq_bdd::export_graphviz(const std::string& filename)
+    {
+        const std::string dot_file = std::filesystem::path(filename).replace_extension("dot");
+        std::fstream f;
+        f.open(dot_file, std::ios::out | std::ios::trunc);
+        export_graphviz(f);
+        f.close();
+
+        const std::string png_file = std::filesystem::path(filename).replace_extension("png");
+        const std::string convert_command = "dot -Tpng " + dot_file + " > " + png_file;
+        std::system(convert_command.c_str());
     }
 
 }

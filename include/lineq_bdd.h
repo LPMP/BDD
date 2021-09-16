@@ -3,6 +3,8 @@
 #include <numeric>
 #include <stack>
 #include <vector>
+#include <queue>
+#include <sstream>
 #include <tsl/robin_map.h>
 #include "bdd_manager/bdd.h"
 #include "ILP_input.h"
@@ -43,6 +45,11 @@ using integer = long long int;
                 static std::tuple< std::vector<int>, ILP_input::inequality_type >
                 normal_form(COEFF_ITERATOR begin, COEFF_ITERATOR end, const ILP_input::inequality_type ineq_type, const int right_hand_side);
 
+            void export_graphviz(const char* filename) { const std::string f(filename); export_graphviz(f); }
+            void export_graphviz(const std::string& filename);
+            template<typename STREAM>
+                void export_graphviz(STREAM& s);
+
         private:
 
             bool build_bdd_node(lineq_bdd_node* &node_ptr, const integer path_cost, const unsigned int level, const ILP_input::inequality_type ineq_type);
@@ -82,4 +89,43 @@ using integer = long long int;
             return {c, ineq_type != ILP_input::inequality_type::greater_equal ? ineq_type : ILP_input::inequality_type::smaller_equal};
         }
 
+    template<typename STREAM>
+        void lineq_bdd::export_graphviz(STREAM& s)
+        {
+            s << "digraph BDD {\n";
+            tsl::robin_set<lineq_bdd_node*> visited;
+            std::queue<lineq_bdd_node*> q;
+            q.push(root_node);
+            while(!q.empty())
+            {
+                lineq_bdd_node* b = q.front();
+                q.pop();
+                if(visited.count(b) > 0)
+                    continue;
+                visited.insert(b);
+
+                if(b == &topsink)
+                    continue;
+                if(b == &botsink)
+                    continue;
+
+                auto node_id = [&](lineq_bdd_node* p) -> std::string {
+                    if(p == &botsink)
+                        return std::string("bot");
+                    if(p == &topsink)
+                        return std::string("top");
+                    const void* address = static_cast<const void*>(p);
+                    std::stringstream ss;
+                    ss << "\"" << address << "\"";
+                    return ss.str();
+                };
+
+                s << node_id(b) << " -> " << node_id(b->zero_kid_) << " [label=\"0\"]\n";;
+                s << node_id(b) << " -> " << node_id(b->one_kid_) << " [label=\"1\"]\n";;
+                q.push(b->zero_kid_);
+                q.push(b->one_kid_);
+            }
+
+            s << "}\n";
+        }
 }

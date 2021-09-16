@@ -66,8 +66,10 @@ class node_struct
     constexpr static size_t botsink_index = (static_cast<size_t>(1) << logvarsize) - 1; //std::pow(2,logvarsize)-1;
     constexpr static size_t topsink_index = (static_cast<size_t>(1) << logvarsize) - 2; //std::pow(2,logvarsize)-2;
 
+    void export_graphviz(const std::string& filename);
+    void export_graphviz(const char* filename) { const std::string f(filename); export_graphviz(f); }
     template<typename STREAM>
-        void print(STREAM& s);
+        void export_graphviz(STREAM& s);
 
     bdd_mgr* find_bdd_mgr();
 
@@ -79,7 +81,7 @@ class node_struct
     // depth first search bdd to find terminal node, where link to bdd mgr is stored
 
     template<typename STREAM>
-        void print_rec(STREAM& s);
+        void export_graphviz_rec(STREAM& s);
 };
 
 using node = node_struct;
@@ -113,8 +115,10 @@ class node_ref {
     size_t variable() const { return ref->index; }
     std::vector<size_t> variables() { return ref->variables(); }
 
+    void export_graphviz(const std::string& filename) { return ref->export_graphviz(filename); }
+    void export_graphviz(const char* filename) { const std::string f(filename); export_graphviz(f); }
     template<typename STREAM>
-        void print(STREAM& s) { return ref->print(s); }
+        void export_graphviz(STREAM& s) { return ref->export_graphviz(s); }
 
     friend class bdd_mgr;
 
@@ -151,16 +155,16 @@ bool node_struct::evaluate(ITERATOR var_begin, ITERATOR var_end)
 }
 
 template<typename STREAM>
-void node_struct::print(STREAM& s)
+void node_struct::export_graphviz(STREAM& s)
 {
     s << "digraph BDD {\n";
-    print_rec(s);
+    export_graphviz_rec(s);
     unmark();
     s << "}\n";
 }
 
 template<typename STREAM>
-void node_struct::print_rec(STREAM& s)
+void node_struct::export_graphviz_rec(STREAM& s)
 {
     if(is_terminal())
         return;
@@ -179,9 +183,9 @@ void node_struct::print_rec(STREAM& s)
     s << node_id(this) << " -> " << node_id(hi) << " [label=\"1\"]\n";
 
     if(lo->marked_ == 0)
-        lo->print_rec(s);
+        lo->export_graphviz_rec(s);
     if(hi->marked_ == 0)
-        hi->print_rec(s);
+        hi->export_graphviz_rec(s);
 }
 
 }

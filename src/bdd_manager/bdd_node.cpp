@@ -4,6 +4,9 @@
 #include <algorithm>
 #include <cstring>
 #include <deque>
+#include <fstream>
+#include <filesystem>
+#include <cstdlib>
 #include <iostream> // TODO: remove
 
 namespace BDD {
@@ -310,6 +313,18 @@ namespace BDD {
         if(lo->is_terminal())
             return lo->bdd_mgr_1;
         return hi->find_bdd_mgr(); 
+    }
+
+    void node_struct::export_graphviz(const std::string& filename)
+    {
+        const std::string dot_file = std::filesystem::path(filename).replace_extension("dot");
+        const std::string png_file = std::filesystem::path(filename).replace_extension("png");
+        std::fstream f;
+        f.open(dot_file, std::fstream::out | std::ofstream::trunc);
+        export_graphviz(f);
+        f.close();
+        const std::string convert_command = "dot -Tpng " + dot_file + " > " + png_file;
+        std::system(convert_command.c_str());
     }
 
     node_ref::node_ref(node* p)

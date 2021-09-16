@@ -24,6 +24,9 @@ namespace LPMP {
                 BDD::node_ref convert_to_bdd(LEFT_HAND_SIDE_ITERATOR begin, LEFT_HAND_SIDE_ITERATOR end, const ILP_input::inequality_type ineq_type, const int right_hand_side);
 
             BDD::node_ref convert_to_bdd(const std::vector<int> coefficients, const ILP_input::inequality_type ineq_type, const int right_hand_side);
+            
+            const lineq_bdd& get_lineq_bdd() const { return bdd_; }
+            lineq_bdd& get_lineq_bdd() { return bdd_; }
 
             BDD::bdd_mgr& bdd_mgr() { return bdd_mgr_; }
 

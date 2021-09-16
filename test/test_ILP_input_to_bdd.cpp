@@ -19,7 +19,10 @@ void test_against_utility_functions(bdd_converter& converter)
         for(size_t x=0; x<i; ++x)
             coeffs.push_back(1);
         BDD::node_ref simplex_converted = converter.convert_to_bdd(coeffs, ILP_input::inequality_type::equal, 1);
+        converter.get_lineq_bdd().export_graphviz("simplex_lineq_bdd.dot");
         BDD::node_ref simplex = bdd_mgr.simplex(vars.begin(), vars.begin()+i);
+        simplex.export_graphviz("simplex.dot");
+        simplex_converted.export_graphviz("simplex_converted.dot");
         test(simplex == simplex_converted);
     }
 
@@ -229,7 +232,7 @@ void test_covering(bdd_converter& converter)
             }
     test(bdd_1 == bdd_2);
     test(bdd_1 == bdd_3);
-    test(bdd_1.nr_solutions() == 9-1);
+    test(bdd_1.nr_solutions() == 8-1);
 }
 
 int main(int argc, char** argv)
