@@ -167,12 +167,14 @@ namespace BDD {
             // remove bdds with indices occurring in iterator
             template<typename ITERATOR>
                 void remove(ITERATOR bdd_it_begin, ITERATOR bdd_it_end);
+            void remove(const size_t bdd_nr);
 
             bdd_collection_entry operator[](const size_t bdd_nr);
             bdd_instruction operator()(const size_t bdd_nr, const size_t offset) const;
 
             template<typename STREAM>
                 void export_graphviz(const size_t bdd_nr, STREAM& s) const;
+
             auto get_bdd_instructions(const size_t bdd_nr) const { return std::make_pair(bdd_instructions.begin() + bdd_delimiters[bdd_nr], bdd_instructions.begin() + bdd_delimiters[bdd_nr+1]); }
             auto get_reverse_bdd_instructions(const size_t bdd_nr) const { return std::make_pair(bdd_instructions.begin() + bdd_delimiters[bdd_nr], bdd_instructions.begin() + bdd_delimiters[bdd_nr+1]); }
 
@@ -196,6 +198,9 @@ namespace BDD {
 
             template<typename STREAM>
                 void write_lp(STREAM& s);
+
+            // utility functions
+            size_t simplex_constraint(const size_t n);
 
         private:
             size_t bdd_and_impl(const size_t i, const size_t j, const size_t node_limit);
@@ -672,11 +677,55 @@ namespace BDD {
             s << "End\n"; 
         }
 
-    template<typename STREAM>
-        void bdd_collection::write_lp(STREAM& s)
-        {
+    inline size_t bdd_collection::simplex_constraint(const size_t n)
+    {
+        assert(n > 0);
 
+        const size_t nr_bdd_nodes = 2*n-1;
+        const size_t terminal_0_index = bdd_instructions.size() + nr_bdd_nodes;
+        const size_t terminal_1_index = bdd_instructions.size() + nr_bdd_nodes + 1;
+        const size_t offset = bdd_instructions.size();
+
+        bdd_instruction root;
+        root.index = 0;
+        root.lo = offset+1;
+        root.hi = offset+2;
+        bdd_instructions.push_back(root);
+
+        for(size_t i=1; i<n-1; ++i)
+        {
+            bdd_instruction instr_0;
+            instr_0.index = i;
+            instr_0.lo = offset + 2*i + 1;
+            instr_0.hi = offset + 2*i + 2;
+            bdd_instructions.push_back(instr_0);
+
+            bdd_instruction instr_1;
+            instr_1.index = i;
+            instr_1.lo = offset + 2*i + 2;
+            instr_1.hi = terminal_0_index;
+            bdd_instructions.push_back(instr_1);
         }
+
+        bdd_instruction instr_0;
+        instr_0.index = n-1;
+        instr_0.lo = terminal_0_index;
+        instr_0.hi = terminal_1_index;
+        bdd_instructions.push_back(instr_0);
+
+        bdd_instruction instr_1;
+        instr_1.index = n-1;
+        instr_1.lo = terminal_1_index;
+        instr_1.hi = terminal_0_index;
+        bdd_instructions.push_back(instr_1);
+
+        bdd_instructions.push_back(bdd_instruction::botsink());
+        bdd_instructions.push_back(bdd_instruction::topsink());
+
+        bdd_delimiters.push_back(bdd_instructions.size());
+
+        return nr_bdds()-1;
+    }
 }
 
 // inject hash function for bdd_collection_node into std namespace

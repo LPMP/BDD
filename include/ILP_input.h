@@ -204,9 +204,8 @@ namespace LPMP {
         void ILP_input::write_lp(STREAM& s) const
         {
             s << "Minimize\n";
-            for(const auto o : var_name_to_index_) {
-                s << (objective(o.second) < 0.0 ? "- " : "+ ") <<  std::abs(objective(o.second)) << " " << o.first << "\n"; 
-            }
+            for(size_t i=0; i<objective_.size(); ++i)
+                s << (objective_[i] < 0.0 ? "- " : "+ ") <<  std::abs(objective_[i]) << " " << var_index_to_name_[i] << "\n";
             s << "Subject To\n";
             for(const auto& constr : constraints()) {
                 write_lp(s, constr);

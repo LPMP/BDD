@@ -287,7 +287,7 @@ namespace LPMP {
         }
         else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::mma_vec)
         {
-            solver = std::move(bdd_mma_vec(stor, options.ilp.objective().begin(), options.ilp.objective().end()));
+            solver = std::move(bdd_mma_vec(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
             std::cout << "constructed vectorized mma solver\n"; 
         }
         else

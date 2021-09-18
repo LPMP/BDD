@@ -8,18 +8,18 @@ namespace LPMP {
 
     class bdd_mma_vec::impl {
         public:
-            impl(bdd_storage& bdd_storage_)
-                : mma(bdd_storage_)
+            impl(BDD::bdd_collection& bdd_col)
+                : mma(bdd_col)
             {};
 
             bdd_mma_base_vec mma;
             //bdd_mma_base_8f mma;
     };
 
-    bdd_mma_vec::bdd_mma_vec(bdd_storage& stor)
+    bdd_mma_vec::bdd_mma_vec(BDD::bdd_collection& bdd_col)
     {
         MEASURE_FUNCTION_EXECUTION_TIME; 
-        pimpl = std::make_unique<impl>(stor);
+        pimpl = std::make_unique<impl>(bdd_col);
     }
 
     bdd_mma_vec::bdd_mma_vec(bdd_mma_vec&& o)

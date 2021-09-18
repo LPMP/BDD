@@ -695,6 +695,12 @@ namespace BDD {
         return {min_var, max_var}; 
     }
 
+    void bdd_collection::remove(const size_t bdd_nr)
+    {
+        std::array<size_t,1> bdd_nrs{bdd_nr};
+        remove(bdd_nrs.begin(), bdd_nrs.end());
+    }
+
     std::array<std::vector<size_t>,2> bdd_collection::fixed_variables(const size_t bdd_nr) const
     {
         assert(bdd_nr < nr_bdds());

@@ -8,7 +8,13 @@
 #include <vector>
 #include <array>
 #include <cstddef>
+#include <fstream>
+#include <cstdlib>
+#include <filesystem>
+#include <unordered_set>
+#include <queue>
 #include "bdd_storage.h"
+#include "bdd_collection/bdd_collection.h"
 #include "two_dimensional_variable_array.hxx"
 #include "time_measure_util.h"
 #include "kahan_summation.hxx"
@@ -197,8 +203,8 @@ namespace LPMP {
     class bdd_mma_base_vec {
         public:
             bdd_mma_base_vec() {}
-            bdd_mma_base_vec(const bdd_storage& bdd_storage_) { add_bdds(bdd_storage_); } // { init(bdd_storage_); }
-            void init(const bdd_storage& bdd_storage_);
+            bdd_mma_base_vec(const bdd_storage& bdd_storage_) { add_bdds(bdd_storage_); } 
+            bdd_mma_base_vec(BDD::bdd_collection& bdd_col) { add_bdds(bdd_col); } 
             size_t nr_variables() const;
             size_t nr_variable_groups() const;
             size_t nr_bdd_vectors(const size_t var_group) const;
@@ -247,6 +253,11 @@ namespace LPMP {
             std::array<size_t,2> bdd_branch_node_offset(const size_t var, const size_t bdd_index) const;
             size_t variable(const size_t bdd_offset) const;
 
+            void export_graphviz(const char* filename);
+            void export_graphviz(const std::string& filename);
+            template<typename STREAM>
+                void export_graphviz(STREAM& s, const size_t bdd_nr);
+
         protected:
             std::vector<bdd_branch_node_vec> bdd_branch_nodes_;
             std::vector<size_t> bdd_branch_node_offsets_; // offsets into where bdd branch nodes belonging to a variable start 
@@ -280,6 +291,7 @@ namespace LPMP {
             // export BDDs that cover the given variables
             // TODO: unify with init?
             std::vector<size_t> add_bdds(const bdd_storage& stor);
+            void add_bdds(BDD::bdd_collection& bdd_col);
             template<typename BDD_NR_ITERATOR>
                 std::vector<size_t> add_bdds(BDD::bdd_collection& bdd_col, BDD_NR_ITERATOR bdd_nrs_begin, BDD_NR_ITERATOR bdd_nrs_end);
 
@@ -308,6 +320,7 @@ namespace LPMP {
         return bdd_branch_node_offsets_[var+1] - bdd_branch_node_offsets_[var];
     } 
 
+    /*
     inline void bdd_mma_base_vec::init(const bdd_storage& bdd_storage_)
     {
         bdd_branch_nodes_.clear();
@@ -318,19 +331,6 @@ namespace LPMP {
         first_bdd_node_indices_.clear();
         last_bdd_node_indices_.clear();
         lower_bound_ = -std::numeric_limits<double>::infinity();
-
-        /*
-           const auto variable_groups = compute_variable_groups(bdd_storage_);
-           std::cout << "# variable groups: = " << variable_groups.size() << "\n";
-           std::cout << "# variable : = " << bdd_storage_.nr_variables() << "\n";
-           for(size_t i=0; i<variable_groups.size(); ++i)
-           {
-           for(const size_t v : variable_groups[i])
-           std::cout << v << ", ";
-           std::cout << "\n";
-           }
-           std::cout << "\n";
-           */
 
         // count bdd branch nodes per variable
         std::vector<size_t> bdd_branch_nodes_per_var(bdd_storage_.nr_variables(), 0);
@@ -450,6 +450,7 @@ namespace LPMP {
 
         std::cout << "nr bdd nodes = " << bdd_branch_nodes_.size() << "\n";
     }
+*/
 
     inline void bdd_mma_base_vec::forward_step(const size_t var)
     {
@@ -653,8 +654,12 @@ namespace LPMP {
             float bdd_lb = std::numeric_limits<float>::infinity();
             for(size_t j=0; j<first_bdd_node_indices_.size(i); ++j)
                 bdd_lb = std::min(bdd_branch_nodes_[first_bdd_node_indices_(i,j)].m, bdd_lb);
+            std::cout << "bdd " << i << " lb " << bdd_lb << "\n";
             lb += bdd_lb;
         }
+
+        export_graphviz("bdd_mma_base_vec.dot");
+        exit(0);
 
         assert(lb.value() >= lower_bound_ - 1e-6);
         lower_bound_ = lb.value();
@@ -691,8 +696,13 @@ namespace LPMP {
         lower_bound_ = -std::numeric_limits<double>::infinity();
         message_passing_state_ = message_passing_state::none;
 
+        std::cout << "var " << var << " cost " << c << " nr bdds " << nr_bdds(var) << "\n";
         for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
+        {
+            assert(bdd_branch_nodes_[i].high_cost  == 0.0 || bdd_branch_nodes_[i].offset_high == bdd_branch_node_vec::terminal_0_offset);
+            assert(bdd_branch_nodes_[i].low_cost  == 0.0 || bdd_branch_nodes_[i].offset_low == bdd_branch_node_vec::terminal_0_offset);
             bdd_branch_nodes_[i].high_cost += c / float(nr_bdds(var));
+        }
     }
 
     template<typename ITERATOR>
@@ -1783,6 +1793,13 @@ namespace LPMP {
         return new_bdd_nrs;
     }
 
+    inline void bdd_mma_base_vec::add_bdds(BDD::bdd_collection& bdd_col)
+    {
+        std::vector<size_t> bdd_nrs(bdd_col.nr_bdds());
+        std::iota(bdd_nrs.begin(), bdd_nrs.end(), 0);
+        add_bdds(bdd_col, bdd_nrs.begin(), bdd_nrs.end());
+    }
+
     template<typename BDD_NR_ITERATOR>
         std::vector<size_t> bdd_mma_base_vec::add_bdds(BDD::bdd_collection& bdd_col, BDD_NR_ITERATOR bdd_nrs_begin, BDD_NR_ITERATOR bdd_nrs_end)
         {
@@ -2008,6 +2025,70 @@ namespace LPMP {
             message_passing_state_ = message_passing_state::none;
 
             return new_bdd_nrs;
+
+        }
+
+    inline void bdd_mma_base_vec::export_graphviz(const char* filename)
+    {
+        const std::string f(filename);    
+        export_graphviz(f);
+    }
+
+    inline void bdd_mma_base_vec::export_graphviz(const std::string& filename)
+    {
+        const std::string base_filename = std::filesystem::path(filename).replace_extension("").c_str();
+        for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
+        {
+            const std::string dot_file = base_filename + "_" + std::to_string(bdd_nr) + ".dot";
+            std::fstream f;
+            f.open(dot_file, std::fstream::out | std::ofstream::trunc);
+            export_graphviz(f, bdd_nr);
+            f.close();
+            const std::string png_file = base_filename + "_" + std::to_string(bdd_nr) + ".png";
+            const std::string convert_command = "dot -Tpng " + dot_file + " > " + png_file;
+            std::system(convert_command.c_str());
+        }
+    }
+
+    template<typename STREAM>
+        void bdd_mma_base_vec::export_graphviz(STREAM& s, const size_t bdd_nr)
+        {
+            std::unordered_set<bdd_branch_node_vec*> visited;
+            std::queue<bdd_branch_node_vec*> q;
+
+            s << "digraph BDD\n";
+            s << "{\n";
+            for(size_t j=0; j<first_bdd_node_indices_.size(bdd_nr); ++j)
+            {
+                auto& bdd = bdd_branch_nodes_[first_bdd_node_indices_(bdd_nr,j)];
+                q.push(&bdd);
+            }
+
+            while(!q.empty())
+            {
+                bdd_branch_node_vec* bdd = q.front();
+                q.pop();
+                if(visited.count(bdd) > 0)
+                    continue;
+                visited.insert(bdd);
+
+                if(bdd->offset_low != bdd_branch_node_vec::terminal_0_offset && bdd->offset_low != bdd_branch_node_vec::terminal_1_offset)
+                {
+                    q.push(bdd->address(bdd->offset_low));
+                    s << "\"" << bdd << "\" -> \"" << bdd->address(bdd->offset_low) << "\" [style=\"dashed\"];\n";;
+                }
+                else
+                    s << "\"" << bdd << "\" -> " << " bot [style=\"dashed\"];\n";;
+
+                if(bdd->offset_high != bdd_branch_node_vec::terminal_0_offset && bdd->offset_high != bdd_branch_node_vec::terminal_1_offset)
+                {
+                    q.push(bdd->address(bdd->offset_high));
+                    s << "\"" << bdd << "\" -> \"" << bdd->address(bdd->offset_high) << "\";\n";
+                }
+                else
+                    s << "\"" << bdd << "\" -> " << " top;\n";;
+            }
+            s << "}\n";
 
         }
 

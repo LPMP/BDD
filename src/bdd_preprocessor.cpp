@@ -28,10 +28,18 @@ namespace LPMP {
                 variables.push_back(e.var);
             }
             BDD::node_ref bdd = converter.convert_to_bdd(coefficients, constraint.ineq, constraint.right_hand_side);
-            bdd_collection.add_bdd(bdd);
-            bdd_collection.reorder(bdd_collection.size()-1);
+            const size_t bdd_nr = bdd_collection.add_bdd(bdd);
+            assert(bdd_nr == c);
+            bdd_collection.reorder(bdd_nr);
+            assert(bdd_collection.is_reordered(bdd_nr));
             bdd_collection.rebase(bdd_collection.nr_bdds()-1, variables.begin(), variables.end());
-            assert(bdd_collection.is_reordered(bdd_collection.nr_bdds()-1));
+            const size_t new_bdd_nr = bdd_collection.make_qbdd(bdd_nr);
+            std::cout << "bdd nr " << bdd_nr << ", new bdd nr " << new_bdd_nr << "\n";
+            std::cout << "init nr bdd nodes = " << bdd_collection.nr_bdd_nodes(bdd_nr) << ", new nr bdd nodes = " << bdd_collection.nr_bdd_nodes(new_bdd_nr) << ", nr bdds = " << bdd_collection.nr_bdds() << "\n";
+            assert(bdd_collection.is_qbdd(new_bdd_nr));
+            assert(new_bdd_nr == bdd_nr+1);
+            bdd_collection.remove(bdd_nr+1);
+            assert(bdd_collection.is_qbdd(bdd_nr));
         }
 
         assert(bdd_collection.nr_bdds() == input.constraints().size());

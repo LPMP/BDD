@@ -1,6 +1,7 @@
 #pragma once
 
-#include "bdd_storage.h"
+#include "bdd_collection/bdd_collection.h"
+#include "two_dimensional_variable_array.hxx"
 #include <memory>
 
 namespace LPMP {
@@ -9,9 +10,9 @@ namespace LPMP {
         public:
             enum class averaging_type { classic, vec };
 
-            bdd_mma_vec(bdd_storage& stor);
+            bdd_mma_vec(BDD::bdd_collection& bdd_col);
             template<typename ITERATOR>
-            bdd_mma_vec(bdd_storage& stor, ITERATOR cost_begin, ITERATOR cost_end);
+            bdd_mma_vec(BDD::bdd_collection& bdd_col, ITERATOR cost_begin, ITERATOR cost_end);
             bdd_mma_vec(bdd_mma_vec&&);
             bdd_mma_vec& operator=(bdd_mma_vec&&);
             ~bdd_mma_vec();
@@ -30,13 +31,12 @@ namespace LPMP {
     };
 
     template<typename ITERATOR>
-        bdd_mma_vec::bdd_mma_vec(bdd_storage& stor, ITERATOR cost_begin, ITERATOR cost_end)
-        : bdd_mma_vec(stor)
+        bdd_mma_vec::bdd_mma_vec(BDD::bdd_collection& bdd_col, ITERATOR cost_begin, ITERATOR cost_end)
+        : bdd_mma_vec(bdd_col)
         {
-            assert(std::distance(cost_begin, cost_end) <= stor.nr_variables());
             size_t var = 0;
-            for(auto cost_it=cost_begin; cost_it!=cost_end; ++cost_it)
-                set_cost(*cost_it, var++);
+            for(auto cost_it=cost_begin; cost_it!=cost_end; ++cost_it, ++var)
+                set_cost(*cost_it, var);
             backward_run();
         }
 
