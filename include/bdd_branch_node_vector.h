@@ -1841,6 +1841,8 @@ namespace LPMP {
             // fill in previous bdd nodes
             for(size_t bdd_idx=0; bdd_idx<nr_bdds(); ++bdd_idx)
             {
+                assert(bdd_col.is_qbdd(bdd_idx));
+                assert(bdd_col.is_reordered(bdd_idx));
                 // TODO: put in front of loop and clear before use
                 std::deque<size_t> dq;
                 for(size_t j=0; j<first_bdd_node_indices_.size(bdd_idx); ++j)

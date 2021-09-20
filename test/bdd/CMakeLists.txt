@@ -77,3 +77,7 @@ add_test(test_bdd_collection_remove test_bdd_variables)
 add_executable(test_bdd_collection_utility test_bdd_collection_utility.cpp)
 target_link_libraries(test_bdd_collection_utility LPMP-BDD)
 add_test(test_bdd_collection_utility test_bdd_variables)
+
+add_executable(test_bdd_collection_qbdd test_bdd_collection_qbdd.cpp)
+target_link_libraries(test_bdd_collection_qbdd LPMP-BDD)
+add_test(test_bdd_collection_qbdd test_bdd_variables)
