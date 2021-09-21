@@ -657,12 +657,9 @@ namespace LPMP {
             lb += bdd_lb;
         }
 
-        export_graphviz("bdd_mma_base_vec.dot");
-        exit(0);
-
         assert(lb.value() >= lower_bound_ - 1e-6);
         lower_bound_ = lb.value();
-    } 
+    }
 
     inline void bdd_mma_base_vec::compute_lower_bound_after_forward_pass()
     {
