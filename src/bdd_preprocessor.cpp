@@ -34,12 +34,9 @@ namespace LPMP {
             assert(bdd_collection.is_reordered(bdd_nr));
             const size_t new_bdd_nr = bdd_collection.make_qbdd(bdd_nr);
             bdd_collection.rebase(new_bdd_nr, variables.begin(), variables.end());
-            std::cout << "bdd nr " << bdd_nr << ", new bdd nr " << new_bdd_nr << "\n";
-            std::cout << "init nr bdd nodes = " << bdd_collection.nr_bdd_nodes(bdd_nr) << ", new nr bdd nodes = " << bdd_collection.nr_bdd_nodes(new_bdd_nr) << ", nr bdds = " << bdd_collection.nr_bdds() << "\n";
             assert(bdd_collection.is_qbdd(new_bdd_nr));
             assert(new_bdd_nr == bdd_nr+1);
             bdd_collection.remove(bdd_nr);
-            std::cout << "after remove nr bdd nodes " << bdd_collection.nr_bdd_nodes(bdd_nr) << "\n";
             assert(bdd_collection.is_qbdd(bdd_nr));
         }
 
