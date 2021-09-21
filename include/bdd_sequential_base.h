@@ -768,31 +768,33 @@ namespace LPMP {
             return A; 
         }
 
-    template<typename STREAM>
-        template<typename BDD_BRANCH_NODE>
+    template<typename BDD_BRANCH_NODE>
+        template<typename STREAM>
         void bdd_sequential_base<BDD_BRANCH_NODE>::export_graphviz(STREAM& s, const size_t bdd_nr)
         {
             s << "digraph BDD\n";
             s << "{\n";
-            for(size_t bdd_idx=0; bdd_idx<nr_variables(bdd_nr); ++bdd_idx, ++c)
+            for(size_t bdd_idx=0; bdd_idx<nr_variables(bdd_nr); ++bdd_idx)
             {
                 const auto& bdd = bdd_branch_nodes_[bdd_idx];
 
-                if(bdd.offset_low != bdd_branch_node_vec::terminal_0_offset && bdd.offset_low != bdd_branch_node_vec::terminal_1_offset)
+                if(bdd.offset_low != decltype(bdd)::terminal_0_offset && bdd.offset_low != decltype(bdd)::terminal_1_offset)
                 {
-                    q.push(bdd.address(bdd.offset_low));
-                    s << "\"" << bdd << "\" -> \"" << bdd->address(bdd->offset_low) << "\" [style=\"dashed\"];\n";;
+                    //s << "\"" << bdd << "\" -> \"" << bdd->address(bdd->offset_low) << "\" [style=\"dashed\"];\n";;
                 }
                 else
-                    s << "\"" << bdd << "\" -> " << " bot [style=\"dashed\"];\n";;
+                {
+                    //s << "\"" << bdd << "\" -> " << " bot [style=\"dashed\"];\n";;
+                }
 
-                if(bdd->offset_high != bdd_branch_node_vec::terminal_0_offset && bdd->offset_high != bdd_branch_node_vec::terminal_1_offset)
+                if(bdd.offset_high != decltype(bdd)::terminal_0_offset && bdd.offset_high != decltype(bdd)::terminal_1_offset)
                 {
-                    q.push(bdd->address(bdd->offset_high));
-                    s << "\"" << bdd << "\" -> \"" << bdd->address(bdd->offset_high) << "\";\n";
+                    //s << "\"" << bdd << "\" -> \"" << bdd.address(bdd.offset_high) << "\";\n";
                 }
                 else
-                    s << "\"" << bdd << "\" -> " << " top;\n";;
+                {
+                    //s << "\"" << bdd << "\" -> " << " top;\n";;
+                }
             }
             s << "}\n";
         }
