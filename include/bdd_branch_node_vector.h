@@ -654,7 +654,6 @@ namespace LPMP {
             float bdd_lb = std::numeric_limits<float>::infinity();
             for(size_t j=0; j<first_bdd_node_indices_.size(i); ++j)
                 bdd_lb = std::min(bdd_branch_nodes_[first_bdd_node_indices_(i,j)].m, bdd_lb);
-            std::cout << "bdd " << i << " lb " << bdd_lb << "\n";
             lb += bdd_lb;
         }
 
@@ -696,7 +695,6 @@ namespace LPMP {
         lower_bound_ = -std::numeric_limits<double>::infinity();
         message_passing_state_ = message_passing_state::none;
 
-        std::cout << "var " << var << " cost " << c << " nr bdds " << nr_bdds(var) << "\n";
         for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
         {
             assert(bdd_branch_nodes_[i].high_cost  == 0.0 || bdd_branch_nodes_[i].offset_high == bdd_branch_node_vec::terminal_0_offset);
@@ -1820,7 +1818,7 @@ namespace LPMP {
                     max_var = std::max(max_var, bdd_col.min_max_variables(*bdd_nr_it)[1]);
                 return max_var; 
             }();
-            const size_t new_nr_variables = std::max(nr_variables(), bdd_col_max_var);
+            const size_t new_nr_variables = std::max(nr_variables(), bdd_col_max_var+1);
             // count bdd branch nodes per variable
             std::vector<size_t> new_bdd_branch_nodes_per_var(new_nr_variables, 0);
             for(auto bdd_nr_it=bdd_nrs_begin; bdd_nr_it!=bdd_nrs_end; ++bdd_nr_it)
@@ -1836,11 +1834,15 @@ namespace LPMP {
                 new_bdd_branch_node_offsets_.push_back(new_bdd_branch_node_offsets_.back() + i);
 
             new_bdd_branch_nodes_.resize(new_bdd_branch_node_offsets_.back());
+            for(const auto& b : new_bdd_branch_nodes_)
+                assert(b.offset_low == 0 && b.offset_high == 0 && b.bdd_index == bdd_branch_node_vec::inactive_bdd_index);
             std::vector<size_t> new_bdd_branch_nodes_counter(new_nr_variables, 0); 
 
             // fill in previous bdd nodes
             for(size_t bdd_idx=0; bdd_idx<nr_bdds(); ++bdd_idx)
             {
+                assert(bdd_col.is_qbdd(bdd_idx));
+                assert(bdd_col.is_reordered(bdd_idx));
                 // TODO: put in front of loop and clear before use
                 std::deque<size_t> dq;
                 for(size_t j=0; j<first_bdd_node_indices_.size(bdd_idx); ++j)
@@ -1861,6 +1863,7 @@ namespace LPMP {
                         continue;
                     const size_t var = variable(old_i);
                     const size_t new_i = new_bdd_branch_node_offsets_[var] + new_bdd_branch_nodes_counter[var];
+                    assert(new_bdd_branch_nodes_[new_i].offset_low == 0 && new_bdd_branch_nodes_[new_i].offset_high == 0 && new_bdd_branch_nodes_[new_i].bdd_index == bdd_branch_node_vec::inactive_bdd_index);
                     ++new_bdd_branch_nodes_counter[var];
                     if(var == first_var)
                         new_cur_first_bdd_node_indices.push_back(new_i);
@@ -1934,8 +1937,11 @@ namespace LPMP {
                     assert(!stored_bdd.is_terminal());
                     const size_t v = stored_bdd.index;
                     const size_t bdd_branch_index = new_bdd_branch_node_offsets_[v] + new_bdd_branch_nodes_counter[v];
-                    assert(new_bdd_branch_nodes_[bdd_branch_index].offset_low == 0 && new_bdd_branch_nodes_[bdd_branch_index].offset_high == 0 && new_bdd_branch_nodes_[bdd_branch_index].bdd_index == bdd_branch_node_vec::inactive_bdd_index);
                     ++new_bdd_branch_nodes_counter[v];
+                    assert(bdd_branch_index < new_bdd_branch_nodes_.size());
+                    assert(new_bdd_branch_nodes_[bdd_branch_index].offset_low == 0 && new_bdd_branch_nodes_[bdd_branch_index].offset_high == 0 && new_bdd_branch_nodes_[bdd_branch_index].bdd_index == bdd_branch_node_vec::inactive_bdd_index);
+                    assert(v == new_nr_variables-1 || bdd_branch_index < new_bdd_branch_node_offsets_[v+1]);
+                    assert(new_bdd_branch_nodes_[bdd_branch_index].offset_low == 0 && new_bdd_branch_nodes_[bdd_branch_index].offset_high == 0 && new_bdd_branch_nodes_[bdd_branch_index].bdd_index == bdd_branch_node_vec::inactive_bdd_index);
 
                     if(v == first_var)
                         cur_first_bdd_node_indices.push_back(bdd_branch_index);

@@ -201,6 +201,7 @@ namespace BDD {
 
             // utility functions
             size_t simplex_constraint(const size_t n);
+            size_t not_all_false_constraint(const size_t n);
 
         private:
             size_t bdd_and_impl(const size_t i, const size_t j, const size_t node_limit);
@@ -724,6 +725,37 @@ namespace BDD {
 
         bdd_delimiters.push_back(bdd_instructions.size());
 
+        return nr_bdds()-1;
+    }
+
+    inline size_t bdd_collection::not_all_false_constraint(const size_t n)
+    {
+        assert(n > 0);
+
+        const size_t nr_bdd_nodes = n;
+        const size_t terminal_0_index = bdd_instructions.size() + nr_bdd_nodes;
+        const size_t terminal_1_index = bdd_instructions.size() + nr_bdd_nodes + 1;
+        const size_t offset = bdd_instructions.size();
+
+        for(size_t i=0; i<n-1; ++i)
+        {
+            bdd_instruction instr;
+            instr.index = i;
+            instr.lo = offset + i + 1;
+            instr.hi = terminal_1_index;
+            bdd_instructions.push_back(instr);
+        }
+
+        bdd_instruction instr;
+        instr.index = n-1;
+        instr.lo = terminal_0_index;
+        instr.hi = terminal_1_index;
+        bdd_instructions.push_back(instr);
+
+        bdd_instructions.push_back(bdd_instruction::botsink());
+        bdd_instructions.push_back(bdd_instruction::topsink());
+
+        bdd_delimiters.push_back(bdd_instructions.size());
         return nr_bdds()-1;
     }
 }

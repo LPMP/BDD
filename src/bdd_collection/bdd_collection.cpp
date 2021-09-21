@@ -451,6 +451,10 @@ namespace BDD {
             return false;
         if(bdd_instructions[bdd_delimiters[bdd_nr+1]-2] == bdd_instructions[bdd_delimiters[bdd_nr+1]-1])
             return false;
+        if(!(bdd_instructions[bdd_delimiters[bdd_nr+1]-2].is_botsink() || bdd_instructions[bdd_delimiters[bdd_nr+1]-1].is_botsink()))
+            return false;
+        if(!(bdd_instructions[bdd_delimiters[bdd_nr+1]-2].is_topsink() || bdd_instructions[bdd_delimiters[bdd_nr+1]-1].is_topsink()))
+            return false;
 
         for(size_t i=bdd_delimiters[bdd_nr]; i<bdd_delimiters[bdd_nr+1]-2; ++i)
         {
@@ -891,16 +895,20 @@ namespace BDD {
         next_var_map.reserve(vars.size());
         for(size_t i=0; i+1<vars.size(); ++i)
             next_var_map.insert({vars[i], vars[i+1]});
-        next_var_map.insert({vars.back(), std::numeric_limits<size_t>::max()});
+        next_var_map.insert({vars.back(), bdd_instruction::topsink_index});
 
-        for(size_t i=bdd_delimiters[bdd_nr]; i<bdd_delimiters[bdd_nr]-2; ++i)
+        for(size_t i=bdd_delimiters[bdd_nr]; i<bdd_delimiters[bdd_nr+1]-2; ++i)
         {
             const auto& bdd = bdd_instructions[i];
+            assert(next_var_map.count(bdd.index) > 0);
+            const size_t next_var = next_var_map.find(bdd.index)->second;
+
             const auto& low_bdd = bdd_instructions[bdd.lo];
-            if(!low_bdd.is_botsink() && low_bdd.index != next_var_map[bdd.index])
+            if(!(low_bdd.is_botsink() || low_bdd.index == next_var))
                 return false;
+
             const auto& high_bdd = bdd_instructions[bdd.hi];
-            if(!high_bdd.is_botsink() && high_bdd.index != next_var_map[bdd.index])
+            if(!(high_bdd.is_botsink() || high_bdd.index == next_var))
                 return false; 
         } 
 
