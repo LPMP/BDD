@@ -1,10 +1,11 @@
 #include "bdd_cuda_base.h"
 #include "ILP_parser.h"
-#include "bdd_collection.h"
+#include "bdd_collection/bdd_collection.h"
 #include "bdd_preprocessor.h"
 #include "test.h"
 
 using namespace LPMP;
+using namespace BDD;
 
 const char * matching_3x3 = 
 R"(Minimize
