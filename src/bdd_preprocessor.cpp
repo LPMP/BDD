@@ -32,13 +32,9 @@ namespace LPMP {
             assert(bdd_nr == c);
             bdd_collection.reorder(bdd_nr);
             assert(bdd_collection.is_reordered(bdd_nr));
-            const size_t new_bdd_nr = bdd_collection.make_qbdd(bdd_nr);
-            bdd_collection.rebase(new_bdd_nr, variables.begin(), variables.end());
-            assert(bdd_collection.is_qbdd(new_bdd_nr));
-            assert(new_bdd_nr == bdd_nr+1);
-            bdd_collection.remove(bdd_nr);
-            assert(bdd_collection.is_qbdd(bdd_nr));
+            bdd_collection.rebase(bdd_nr, variables.begin(), variables.end());
         }
+
 
         assert(bdd_collection.nr_bdds() == input.constraints().size());
 
@@ -71,6 +67,17 @@ namespace LPMP {
         //add_bdd(bdd_collection[coalesced_bdd_nr]);
         bdd_collection.remove(unused_bdd_nrs.begin(), unused_bdd_nrs.end());
 
+        // transform all BDDs to qbdds
+        std::vector<size_t> bdds_to_remove;
+        for(size_t bdd_nr = 0; bdd_nr<bdd_collection.nr_bdds(); ++bdd_nr)
+        {
+            if(!bdd_collection.is_qbdd(bdd_nr))
+            {
+                bdd_collection.make_qbdd(bdd_nr);
+                bdds_to_remove.push_back(bdd_nr);
+            }
+        }
+        bdd_collection.remove(bdds_to_remove.begin(), bdds_to_remove.end());
 
         // second, preprocess BDDs, TODO: do this separately!
         /*

@@ -55,6 +55,9 @@ namespace LPMP {
 
             Eigen::SparseMatrix<float> Lagrange_constraint_matrix() const;
 
+            template<typename STREAM>
+                void export_graphviz(STREAM& s, const size_t bdd_nr);
+
             private:
             enum class message_passing_state {
                 after_forward_pass,
@@ -589,7 +592,7 @@ namespace LPMP {
                 {
                     const auto [first_node, last_node] = bdd_index_range(bdd_nr, bdd_idx);
                     const size_t var = variable(bdd_nr, bdd_idx);
-                    const auto cost = *(begin+var)/nr_bdds(var);;
+                    const double cost = *(begin+var)/double(nr_bdds(var));
                     assert(std::isfinite(cost));
                     for(size_t i=first_node; i<last_node; ++i)
                     {
@@ -763,5 +766,36 @@ namespace LPMP {
             Eigen::SparseMatrix<float> A(nr_variables(), nr_bdd_variables());
             A.setFromTriplets(coefficients.begin(), coefficients.end());
             return A; 
+        }
+
+    template<typename BDD_BRANCH_NODE>
+        template<typename STREAM>
+        void bdd_sequential_base<BDD_BRANCH_NODE>::export_graphviz(STREAM& s, const size_t bdd_nr)
+        {
+            s << "digraph BDD\n";
+            s << "{\n";
+            for(size_t bdd_idx=0; bdd_idx<nr_variables(bdd_nr); ++bdd_idx)
+            {
+                const auto& bdd = bdd_branch_nodes_[bdd_idx];
+
+                if(bdd.offset_low != decltype(bdd)::terminal_0_offset && bdd.offset_low != decltype(bdd)::terminal_1_offset)
+                {
+                    //s << "\"" << bdd << "\" -> \"" << bdd->address(bdd->offset_low) << "\" [style=\"dashed\"];\n";;
+                }
+                else
+                {
+                    //s << "\"" << bdd << "\" -> " << " bot [style=\"dashed\"];\n";;
+                }
+
+                if(bdd.offset_high != decltype(bdd)::terminal_0_offset && bdd.offset_high != decltype(bdd)::terminal_1_offset)
+                {
+                    //s << "\"" << bdd << "\" -> \"" << bdd.address(bdd.offset_high) << "\";\n";
+                }
+                else
+                {
+                    //s << "\"" << bdd << "\" -> " << " top;\n";;
+                }
+            }
+            s << "}\n";
         }
 }

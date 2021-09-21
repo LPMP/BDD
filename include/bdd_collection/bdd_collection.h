@@ -347,7 +347,7 @@ namespace BDD {
 
             for(size_t i=0; i<nr_bdds(); ++i)
             {
-                assert(is_bdd(i));
+                assert(is_bdd(i) || is_qbdd(i));
             }
         }
 

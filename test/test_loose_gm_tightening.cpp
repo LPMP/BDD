@@ -266,7 +266,7 @@ int main(int argc, char** argv)
     std::cout << "Solve original loose LP\n";
     {
         std::vector<std::string> solver_input = {
-            "--input_string", test_instance,
+            "--lp_input_string", test_instance,
             "-s", "mma_vec",
             "--max_iter", "35"
         };
@@ -279,7 +279,7 @@ int main(int argc, char** argv)
     std::cout << "Solve tight LP with single BDD of intersection of all BDDs\n";
     {
         std::vector<std::string> solver_input = {
-            "--input_string", test_instance_single_bdd,
+            "--lp_input_string", test_instance_single_bdd,
             "-s", "mma_vec",
             "--max_iter", "35"
         };
@@ -292,7 +292,7 @@ int main(int argc, char** argv)
     std::cout << "Solve tight LP with single BDD of intersection of all reduced BDDs\n";
     {
         std::vector<std::string> solver_input = {
-            "--input_string", test_instance_single_reduced_bdd,
+            "--lp_input_string", test_instance_single_reduced_bdd,
             "-s", "mma_vec",
             "--max_iter", "35"
         };
@@ -305,7 +305,7 @@ int main(int argc, char** argv)
     std::cout << "Solve tight LP original BDDs and intersected BDD\n";
     {
         std::vector<std::string> solver_input = {
-            "--input_string", test_instance_tight_large,
+            "--lp_input_string", test_instance_tight_large,
             "-s", "mma_vec",
             "--max_iter", "1000"
         };
@@ -318,7 +318,7 @@ int main(int argc, char** argv)
     std::cout << "Solve tight LP original BDDs and intersected reduced BDD\n";
     {
         std::vector<std::string> solver_input = {
-            "--input_string", test_instance_tight_reduced_bdd,
+            "--lp_input_string", test_instance_tight_reduced_bdd,
             "-s", "mma_vec",
             "--max_iter", "1000"
         };
