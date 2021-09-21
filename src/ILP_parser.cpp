@@ -159,7 +159,7 @@ namespace LPMP {
                 {
                     i.begin_new_inequality();
                     i.set_inequality_identifier(tmp.inequality_identifier);
-                    tmp.inequality_identifier = "";
+                    tmp = tmp_storage{};
                 }
         };
 
