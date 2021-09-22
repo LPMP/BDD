@@ -43,6 +43,9 @@ target_link_libraries(decomposition_bdd_mma decomposition_bdd_mma_base LPMP-BDD)
 add_library(bdd_mma_vec bdd_mma_vec.cpp)
 target_link_libraries(bdd_mma_vec LPMP-BDD) 
 
+add_library(bdd_cuda_base bdd_cuda_base.cu)
+target_link_libraries(bdd_cuda_base LPMP-BDD)
+
 add_library(bdd_fix bdd_fix.cpp)
 target_link_libraries(bdd_fix LPMP-BDD) 
 
