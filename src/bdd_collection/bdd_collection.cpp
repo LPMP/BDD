@@ -1,5 +1,5 @@
 #include "bdd_collection/bdd_collection.h"
-#include <deque>
+#include <queue>
 #include <cassert>
 #include <unordered_set>
 #include <unordered_map>
@@ -417,6 +417,18 @@ namespace BDD {
         return &bdd_instructions[bdd_delimiters[bdd_nr+1]-2];
     } 
 
+    const bdd_instruction* bdd_collection::cbegin(const size_t bdd_nr) const
+    {
+        assert(bdd_nr < nr_bdds());
+        return &bdd_instructions[bdd_delimiters[bdd_nr]];
+    }
+
+    const bdd_instruction* bdd_collection::cend(const size_t bdd_nr) const
+    {
+        assert(bdd_nr < nr_bdds());
+        return &bdd_instructions[bdd_delimiters[bdd_nr+1]-2];
+    } 
+
     std::reverse_iterator<bdd_instruction*> bdd_collection::rbegin(const size_t bdd_nr)
     {
         assert(bdd_nr < nr_bdds());
@@ -634,26 +646,29 @@ namespace BDD {
     {
         assert(bdd_nr < nr_bdds());
         std::vector<char> r(nr_bdd_nodes(bdd_nr), false);
-        std::deque<size_t> dq;
-        dq.push_back(0);
-        while(!dq.empty())
+        std::queue<size_t> q;
+        q.push(0);
+        while(!q.empty())
         {
-            const size_t idx = dq.front();
-            dq.pop_front();
+            const size_t idx = q.front();
+            q.pop();
+            assert(idx < r.size());
             if(r[idx] == true)
                 continue;
             r[idx] = true;
             const bdd_instruction& instr = bdd_instructions[bdd_delimiters[bdd_nr]+idx];
             if(!instr.is_terminal())
             {
+                assert(instr.lo - bdd_delimiters[bdd_nr] < r.size());
                 if(!r[instr.lo - bdd_delimiters[bdd_nr]])
-                    dq.push_back(instr.lo - bdd_delimiters[bdd_nr]);
+                    q.push(instr.lo - bdd_delimiters[bdd_nr]);
+                assert(instr.hi - bdd_delimiters[bdd_nr] < r.size());
                 if(!r[instr.hi - bdd_delimiters[bdd_nr]])
-                    dq.push_back(instr.hi - bdd_delimiters[bdd_nr]); 
+                    q.push(instr.hi - bdd_delimiters[bdd_nr]); 
             }
         }
 
-        return r; 
+        return r;
     }
 
     void bdd_collection::reduce()
@@ -835,6 +850,12 @@ namespace BDD {
         assert(offset < bdd_delimiters[bdd_nr+1]);
         assert(offset >= bdd_delimiters[bdd_nr]);
         return bdd_instructions[offset]; 
+    }
+
+    const bdd_instruction& bdd_collection::get_bdd_instruction(const size_t i) const
+    {
+        assert(i < bdd_instructions.size());
+        return bdd_instructions[i];
     }
 
     size_t bdd_collection::new_bdd()

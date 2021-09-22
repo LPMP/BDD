@@ -144,6 +144,8 @@ namespace BDD {
 
             bdd_instruction* begin(const size_t bdd_nr);
             bdd_instruction* end(const size_t bdd_nr);
+            const bdd_instruction* cbegin(const size_t bdd_nr) const;
+            const bdd_instruction* cend(const size_t bdd_nr) const;
             std::reverse_iterator<bdd_instruction*> rbegin(const size_t bdd_nr);
             std::reverse_iterator<bdd_instruction*> rend(const size_t bdd_nr);
 
@@ -171,6 +173,7 @@ namespace BDD {
 
             bdd_collection_entry operator[](const size_t bdd_nr);
             bdd_instruction operator()(const size_t bdd_nr, const size_t offset) const;
+            const bdd_instruction& get_bdd_instruction(const size_t i) const;
 
             template<typename STREAM>
                 void export_graphviz(const size_t bdd_nr, STREAM& s) const;

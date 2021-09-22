@@ -3,8 +3,11 @@
 #include <vector>
 #include <array>
 #include <Eigen/SparseCore>
-#include "bdd_storage.h"
+#include "bdd_collection/bdd_collection.h"
 #include "two_dimensional_variable_array.hxx"
+#include <fstream>
+#include <cstdlib>
+#include <filesystem>
 
 namespace LPMP {
 
@@ -13,9 +16,10 @@ namespace LPMP {
     template<typename BDD_BRANCH_NODE>
         class bdd_sequential_base {
             public:
-            bdd_sequential_base(const bdd_storage& stor) { init(stor); }
+            //bdd_sequential_base(const bdd_storage& stor) { init(stor); }
+            bdd_sequential_base(BDD::bdd_collection& bdd_col) { add_bdds(bdd_col); }
 
-            void init(const bdd_storage& stor);
+            void add_bdds(BDD::bdd_collection& bdd_col);
 
             size_t nr_bdds() const;
             size_t nr_bdds(const size_t var) const;
@@ -55,6 +59,8 @@ namespace LPMP {
 
             Eigen::SparseMatrix<float> Lagrange_constraint_matrix() const;
 
+            void export_graphviz(const char* filename);
+            void export_graphviz(const std::string& filename);
             template<typename STREAM>
                 void export_graphviz(STREAM& s, const size_t bdd_nr);
 
@@ -79,17 +85,17 @@ namespace LPMP {
             vector_type lower_bound_per_bdd_after_backward_pass();
 
             std::array<size_t,2> bdd_range(const size_t bdd_nr) const;
-                std::array<size_t,2> bdd_index_range(const size_t bdd_nr, const size_t bdd_idx) const;
+            std::array<size_t,2> bdd_index_range(const size_t bdd_nr, const size_t bdd_idx) const;
 
-                std::vector<BDD_BRANCH_NODE> bdd_branch_nodes_;
+            std::vector<BDD_BRANCH_NODE> bdd_branch_nodes_;
 
-                // holds ranges of bdd branch instructions of specific bdd with specific variable
-                struct bdd_variable {
-                    size_t offset;
-                    size_t variable; 
-                };
-                two_dim_variable_array<bdd_variable> bdd_variables_;
-                std::vector<size_t> nr_bdds_per_variable_;
+            // holds ranges of bdd branch instructions of specific bdd with specific variable
+            struct bdd_variable {
+                size_t offset;
+                size_t variable; 
+            };
+            two_dim_variable_array<bdd_variable> bdd_variables_;
+            std::vector<size_t> nr_bdds_per_variable_;
         };
 
     ////////////////////
@@ -138,6 +144,7 @@ namespace LPMP {
             return std::accumulate(nr_bdds_per_variable_.begin(), nr_bdds_per_variable_.end(), 0); 
         }
 
+    /*
     template<typename BDD_BRANCH_NODE>
         void bdd_sequential_base<BDD_BRANCH_NODE>::init(const bdd_storage& stor)
         {
@@ -229,6 +236,101 @@ namespace LPMP {
                 }
             }
 
+            // add last entry for offset
+            std::vector<bdd_variable> tmp_bdd_variables;
+            tmp_bdd_variables.push_back({bdd_branch_nodes_.size(), std::numeric_limits<size_t>::max()});
+            bdd_variables_.push_back(tmp_bdd_variables.begin(), tmp_bdd_variables.end());
+        }
+*/
+
+    template<typename BDD_BRANCH_NODE>
+        void bdd_sequential_base<BDD_BRANCH_NODE>::add_bdds(BDD::bdd_collection& bdd_col)
+        {
+            message_passing_state_ = message_passing_state::none;
+            assert(bdd_branch_nodes_.size() == 0); // currently does not support incremental addition of BDDs
+            bdd_branch_nodes_.clear();
+            const size_t total_nr_bdd_nodes = [&]() {
+                size_t i=0;
+                for(size_t bdd_nr=0; bdd_nr<bdd_col.nr_bdds(); ++bdd_nr)
+                    i += bdd_col.nr_bdd_nodes(bdd_nr)-2; // do not count terminal nodes
+                return i;
+            }();
+            bdd_branch_nodes_.reserve(total_nr_bdd_nodes);
+            bdd_variables_.clear();
+            nr_bdds_per_variable_.clear();
+            const size_t nr_vars = [&]() {
+                size_t max_v=0;
+                for(size_t bdd_nr=0; bdd_nr<bdd_col.nr_bdds(); ++bdd_nr)
+                    max_v = std::max(max_v, bdd_col.min_max_variables(bdd_nr)[1]);
+                return max_v+1;
+            }();
+            nr_bdds_per_variable_.resize(nr_vars, 0);
+
+            for(size_t bdd_nr=0; bdd_nr<bdd_col.nr_bdds(); ++bdd_nr)
+            {
+                assert(bdd_col.is_qbdd(bdd_nr));
+                assert(bdd_col.is_reordered(bdd_nr));
+            }
+
+            for(size_t bdd_nr=0; bdd_nr<bdd_col.nr_bdds(); ++bdd_nr)
+            {
+                assert(bdd_col.is_qbdd(bdd_nr));
+                assert(bdd_col.is_reordered(bdd_nr));
+                std::vector<bdd_variable> cur_bdd_variables;
+                cur_bdd_variables.push_back({bdd_branch_nodes_.size(), bdd_col.min_max_variables(bdd_nr)[0]}); // TODO: use min_variable
+                for(auto bdd_it=bdd_col.cbegin(bdd_nr); bdd_it!=bdd_col.cend(bdd_nr); ++bdd_it)
+                {
+                    const BDD::bdd_instruction& stored_bdd = *bdd_it;
+                    assert(!stored_bdd.is_terminal());
+                    BDD_BRANCH_NODE bdd;
+
+                    if(bdd_col.get_bdd_instruction(stored_bdd.lo).is_botsink()) 
+                        bdd.offset_low = BDD_BRANCH_NODE::terminal_0_offset;
+                    else if(bdd_col.get_bdd_instruction(stored_bdd.lo).is_topsink()) 
+                        bdd.offset_low = BDD_BRANCH_NODE::terminal_1_offset;
+                    else
+                    {
+                        assert(bdd_col.offset(stored_bdd) < stored_bdd.lo);
+                        bdd.offset_low = stored_bdd.lo - bdd_col.offset(stored_bdd);
+                    }
+
+                    if(bdd_col.get_bdd_instruction(stored_bdd.hi).is_botsink()) 
+                        bdd.offset_high = BDD_BRANCH_NODE::terminal_0_offset;
+                    else if(bdd_col.get_bdd_instruction(stored_bdd.hi).is_topsink()) 
+                        bdd.offset_high = BDD_BRANCH_NODE::terminal_1_offset;
+                    else
+                    {
+                        assert(bdd_col.offset(stored_bdd) < stored_bdd.hi);
+                        bdd.offset_high = stored_bdd.hi - bdd_col.offset(stored_bdd);
+                    }
+
+                    if(bdd.offset_low == BDD_BRANCH_NODE::terminal_0_offset)
+                        bdd.low_cost = std::numeric_limits<decltype(bdd.low_cost)>::infinity();
+
+                    if(bdd.offset_high == BDD_BRANCH_NODE::terminal_0_offset)
+                        bdd.high_cost = std::numeric_limits<decltype(bdd.high_cost)>::infinity();
+
+                    if(stored_bdd.index != cur_bdd_variables.back().variable)
+                        cur_bdd_variables.push_back({bdd_branch_nodes_.size(), stored_bdd.index});
+
+                    assert(bdd_branch_nodes_.size() < total_nr_bdd_nodes);
+                    bdd_branch_nodes_.push_back(bdd);
+                }
+
+                assert(cur_bdd_variables.back().variable == bdd_col.min_max_variables(bdd_nr)[1]);
+                cur_bdd_variables.push_back({bdd_branch_nodes_.size(), std::numeric_limits<size_t>::max()}); // For extra delimiter at the end
+                bdd_variables_.push_back(cur_bdd_variables.begin(), cur_bdd_variables.end());
+                assert(bdd_variables_.size(bdd_nr) == bdd_col.variables(bdd_nr).size()+1);
+
+                for(const auto [offset, v] : cur_bdd_variables)
+                {
+                    assert(v < nr_bdds_per_variable_.size() || v == std::numeric_limits<size_t>::max());
+                    if(v != std::numeric_limits<size_t>::max())
+                        nr_bdds_per_variable_[v]++; 
+                }
+            }
+
+            assert(bdd_branch_nodes_.size() == total_nr_bdd_nodes);
             // add last entry for offset
             std::vector<bdd_variable> tmp_bdd_variables;
             tmp_bdd_variables.push_back({bdd_branch_nodes_.size(), std::numeric_limits<size_t>::max()});
@@ -406,6 +508,7 @@ namespace LPMP {
             assert(bdd_idx < nr_variables(bdd_nr));
             const size_t first_bdd_node = bdd_variables_(bdd_nr, bdd_idx).offset;
             const size_t last_bdd_node = bdd_variables_(bdd_nr, bdd_idx+1).offset;
+            assert(first_bdd_node < last_bdd_node);
             return {first_bdd_node, last_bdd_node};
         }
 
@@ -415,6 +518,7 @@ namespace LPMP {
             assert(bdd_nr < nr_bdds());
             const size_t first = bdd_variables_(bdd_nr, 0).offset;
             const size_t last = bdd_variables_(bdd_nr+1, 0).offset;
+            assert(first < last);
             return {first, last}; 
         }
 
@@ -422,6 +526,7 @@ namespace LPMP {
         two_dim_variable_array<std::array<float,2>> bdd_sequential_base<BDD_BRANCH_NODE>::min_marginals()
         {
             backward_run();
+            export_graphviz("bdd_sequential_base.dot");
             std::vector<size_t> nr_bdd_variables;
             nr_bdd_variables.reserve(nr_bdds());
             for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
@@ -769,31 +874,56 @@ namespace LPMP {
         }
 
     template<typename BDD_BRANCH_NODE>
+    void bdd_sequential_base<BDD_BRANCH_NODE>::export_graphviz(const char* filename)
+    {
+        const std::string f(filename);    
+        export_graphviz(f);
+    }
+
+    template<typename BDD_BRANCH_NODE>
+    void bdd_sequential_base<BDD_BRANCH_NODE>::export_graphviz(const std::string& filename)
+    {
+        const std::string base_filename = std::filesystem::path(filename).replace_extension("").c_str();
+        for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
+        {
+            const std::string dot_file = base_filename + "_" + std::to_string(bdd_nr) + ".dot";
+            std::fstream f;
+            f.open(dot_file, std::fstream::out | std::ofstream::trunc);
+            export_graphviz(f, bdd_nr);
+            f.close();
+            const std::string png_file = base_filename + "_" + std::to_string(bdd_nr) + ".png";
+            const std::string convert_command = "dot -Tpng " + dot_file + " > " + png_file;
+            std::system(convert_command.c_str());
+        }
+    }
+
+    template<typename BDD_BRANCH_NODE>
         template<typename STREAM>
         void bdd_sequential_base<BDD_BRANCH_NODE>::export_graphviz(STREAM& s, const size_t bdd_nr)
         {
             s << "digraph BDD\n";
             s << "{\n";
-            for(size_t bdd_idx=0; bdd_idx<nr_variables(bdd_nr); ++bdd_idx)
+            const auto [first,last] = bdd_range(bdd_nr);
+            for(size_t bdd_idx=first; bdd_idx<last; ++bdd_idx)
             {
-                const auto& bdd = bdd_branch_nodes_[bdd_idx];
+                auto& bdd = bdd_branch_nodes_[bdd_idx];
 
-                if(bdd.offset_low != decltype(bdd)::terminal_0_offset && bdd.offset_low != decltype(bdd)::terminal_1_offset)
+                if(bdd.offset_low != BDD_BRANCH_NODE::terminal_0_offset && bdd.offset_low != BDD_BRANCH_NODE::terminal_1_offset)
                 {
-                    //s << "\"" << bdd << "\" -> \"" << bdd->address(bdd->offset_low) << "\" [style=\"dashed\"];\n";;
+                    s << "\"" << &bdd << "\" -> \"" << bdd.address(bdd.offset_low) << "\" [ style=\"dashed\"];\n";;
                 }
                 else
                 {
-                    //s << "\"" << bdd << "\" -> " << " bot [style=\"dashed\"];\n";;
+                    s << "\"" << &bdd << "\" -> " << " bot [style=\"dashed\"];\n";
                 }
 
-                if(bdd.offset_high != decltype(bdd)::terminal_0_offset && bdd.offset_high != decltype(bdd)::terminal_1_offset)
+                if(bdd.offset_high != BDD_BRANCH_NODE::terminal_0_offset && bdd.offset_high != BDD_BRANCH_NODE::terminal_1_offset)
                 {
-                    //s << "\"" << bdd << "\" -> \"" << bdd.address(bdd.offset_high) << "\";\n";
+                    s << "\"" << &bdd << "\" -> \"" << bdd.address(bdd.offset_high) << "\";\n";
                 }
                 else
                 {
-                    //s << "\"" << bdd << "\" -> " << " top;\n";;
+                    s << "\"" << &bdd << "\" -> " << " top;\n";
                 }
             }
             s << "}\n";

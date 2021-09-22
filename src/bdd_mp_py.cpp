@@ -16,8 +16,7 @@ PYBIND11_MODULE(bdd_mp_py, m) {
     py::class_<bdd_base_type>(m, "bdd_mp")
         .def(py::init([](const LPMP::ILP_input& ilp) {
                     LPMP::bdd_preprocessor bdd_pre(ilp);
-                    LPMP::bdd_storage stor(bdd_pre);
-                    auto* base = new bdd_base_type(stor); 
+                    auto* base = new bdd_base_type(bdd_pre.get_bdd_collection()); 
                     base->set_costs(ilp.objective().begin(), ilp.objective().end());
                     return base;
                     }))

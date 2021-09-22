@@ -21,8 +21,7 @@ int main(int argc, char** argv)
     using bdd_base_type = bdd_sequential_base<bdd_branch_instruction<float>>;
     const ILP_input ilp = ILP_parser::parse_string(two_simplex_problem);
     bdd_preprocessor pre(ilp);
-    bdd_storage stor(pre);
-    bdd_base_type solver(stor);
+    bdd_base_type solver(pre.get_bdd_collection());
     solver.set_costs(ilp.objective().begin(), ilp.objective().end());
     solver.backward_run();
     const double lb = solver.lower_bound();
