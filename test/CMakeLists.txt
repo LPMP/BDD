@@ -67,3 +67,7 @@ add_test(test_loose_covering_problem test_loose_covering_problem)
 add_executable(test_bdd_sequential_base test_bdd_sequential_base.cpp)
 target_link_libraries(test_bdd_sequential_base LPMP-BDD)
 add_test(test_bdd_sequential_base test_bdd_sequential_base)
+
+add_executable(test_bdd_cuda_base test_bdd_cuda_base.cpp)
+target_link_libraries(test_bdd_cuda_base LPMP-BDD bdd_cuda_base)
+add_test(test_bdd_cuda_base test_bdd_cuda_base)
