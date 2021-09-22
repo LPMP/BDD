@@ -5,6 +5,15 @@
 #include <cuda_runtime.h>
 #include <thrust/device_vector.h>
 
+inline float __int_as_float_host(int a)
+{
+    union {int a; float b;} u;
+    u.a = a;
+    return u.b;
+}
+
+#define CUDART_INF_F __int_as_float_host(0x7f800000)
+
 namespace LPMP {
 
     class bdd_cuda_base {

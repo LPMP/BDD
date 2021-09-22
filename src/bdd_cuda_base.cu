@@ -127,11 +127,11 @@ namespace LPMP {
         thrust::device_vector<int> lo_bdd_node_index_temp(lo_bdd_node_index.begin(), lo_bdd_node_index.end());
         thrust::device_vector<int> hi_bdd_node_index_temp(hi_bdd_node_index.begin(), hi_bdd_node_index.end());
         thrust::device_vector<int> bdd_hop_dist(bdd_hop_dist_root.begin(), bdd_hop_dist_root.end());
-        cost_from_root_ = thrust::device_vector<float>(lo_bdd_node_index.size(), std::numeric_limits<float>::max());
-        cost_from_terminal_ = thrust::device_vector<float>(lo_bdd_node_index.size(), std::numeric_limits<float>::max());
-        hi_cost_ = thrust::device_vector<float>(lo_bdd_node_index.size(), std::numeric_limits<float>::max());
-        hi_path_cost_ = thrust::device_vector<float>(lo_bdd_node_index.size(), std::numeric_limits<float>::max());
-        lo_path_cost_ = thrust::device_vector<float>(lo_bdd_node_index.size(), std::numeric_limits<float>::max());
+        cost_from_root_ = thrust::device_vector<float>(lo_bdd_node_index.size(), CUDART_INF_F);
+        cost_from_terminal_ = thrust::device_vector<float>(lo_bdd_node_index.size(), CUDART_INF_F);
+        hi_cost_ = thrust::device_vector<float>(lo_bdd_node_index.size(), CUDART_INF_F);
+        hi_path_cost_ = thrust::device_vector<float>(lo_bdd_node_index.size(), CUDART_INF_F);
+        lo_path_cost_ = thrust::device_vector<float>(lo_bdd_node_index.size(), CUDART_INF_F);
         num_vars_per_bdd_ = thrust::device_vector<int>(num_vars_per_bdd.begin(), num_vars_per_bdd.end());
 
         // At this point all nodes of a BDD are contiguous in memory. Now we convert this so that nodes with same
@@ -209,10 +209,10 @@ namespace LPMP {
 
     void bdd_cuda_base::initialize_costs()
     {
-        thrust::fill(cost_from_root_.begin(), cost_from_root_.end(), std::numeric_limits<float>::max());
-        thrust::fill(cost_from_terminal_.begin(), cost_from_terminal_.end(), std::numeric_limits<float>::max());
-        thrust::fill(hi_path_cost_.begin(), hi_path_cost_.end(), std::numeric_limits<float>::max());
-        thrust::fill(lo_path_cost_.begin(), lo_path_cost_.end(), std::numeric_limits<float>::max());
+        thrust::fill(cost_from_root_.begin(), cost_from_root_.end(), CUDART_INF_F);
+        thrust::fill(cost_from_terminal_.begin(), cost_from_terminal_.end(), CUDART_INF_F);
+        thrust::fill(hi_path_cost_.begin(), hi_path_cost_.end(), CUDART_INF_F);
+        thrust::fill(lo_path_cost_.begin(), lo_path_cost_.end(), CUDART_INF_F);
     }
 
     struct set_var_cost_func {
@@ -312,10 +312,10 @@ namespace LPMP {
             num_nodes_processed += cur_num_bdd_nodes;
         }
         // Set costs of bot sinks to infinity:
-        thrust::scatter(thrust::make_constant_iterator<float>(std::numeric_limits<float>::max()), 
-                        thrust::make_constant_iterator<float>(std::numeric_limits<float>::max()) + bot_sink_indices_.size(),
-                        bot_sink_indices_.begin(), 
-                        cost_from_root_.begin());
+        // thrust::scatter(thrust::make_constant_iterator<float>(CUDART_INF_F), 
+        //                 thrust::make_constant_iterator<float>(CUDART_INF_F) + bot_sink_indices_.size(),
+        //                 bot_sink_indices_.begin(), 
+        //                 cost_from_root_.begin());
     }
 
     __global__ void backward_step(const int cur_num_bdd_nodes, const int start_offset,

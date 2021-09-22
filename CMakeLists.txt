@@ -1,4 +1,13 @@
-project(LPMP-BDD LANGUAGES CXX CUDA)
+project(LPMP-BDD LANGUAGES CXX)
+
+option(WITH_CUDA "Compile with CUDA support" OFF)
+
+if(WITH_CUDA)
+    message(STATUS "Compiling with CUDA support")
+    enable_language(CUDA)
+else()
+    message("Compiling without CUDA support")
+endif()
 
 cmake_minimum_required(VERSION 2.8.12)
 
