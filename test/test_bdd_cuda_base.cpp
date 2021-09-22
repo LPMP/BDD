@@ -60,12 +60,9 @@ int main(int argc, char** argv)
         for(size_t i=0; i<bcb.nr_variables(); ++i)
             bcb.set_cost(ilp.objective()[i], i);
 
-        bcb.forward_run();
-
         const double lb = bcb.lower_bound();
         test(lb == -2); 
 
-        bcb.backward_run();
         const auto mm = bcb.min_marginals();
         test(mm.size() == 1);
         test(mm[0].size() == 3);
@@ -87,12 +84,9 @@ int main(int argc, char** argv)
         for(size_t i=0; i<bcb.nr_variables(); ++i)
             bcb.set_cost(ilp.objective()[i], i);
 
-        bcb.forward_run();
-
         const double lb = bcb.lower_bound();
         test(lb == 1 + 0); 
 
-        bcb.backward_run();
         const auto mm = bcb.min_marginals();
         test(mm.size() == 2);
         test(mm[0].size() == 3);
@@ -119,8 +113,6 @@ int main(int argc, char** argv)
         for(size_t i=0; i<bcb.nr_variables(); ++i)
             bcb.set_cost(ilp.objective()[i], i);
 
-        bcb.forward_run();
-
         const double lb = bcb.lower_bound();
         test(lb == 1 + 3); 
     }
@@ -137,8 +129,6 @@ int main(int argc, char** argv)
 
         for(size_t i=0; i<bcb.nr_variables(); ++i)
             bcb.set_cost(ilp.objective()[i], i);
-
-        bcb.forward_run();
 
         const double lb = bcb.lower_bound();
         test(lb == -6); 

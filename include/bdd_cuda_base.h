@@ -57,6 +57,10 @@ namespace LPMP {
             thrust::device_vector<int> cum_nr_bdd_nodes_per_hop_dist_; // How many BDD nodes (cumulative) are present with a given hop distance away from root node.
             thrust::device_vector<int> num_vars_per_bdd_;
             thrust::device_vector<int> root_indices_, bot_sink_indices_, top_sink_indices_;
+
+            bool forward_state_valid_ = false;
+            bool backward_state_valid_ = false;
+
     };
 
 }

@@ -291,6 +291,9 @@ namespace LPMP {
 
     void bdd_cuda_base::forward_run()
     {
+        if (forward_state_valid_)
+            return;
+
         // Set costs of root nodes to 0:
         thrust::scatter(thrust::make_constant_iterator<float>(0.0), 
                         thrust::make_constant_iterator<float>(0.0) + root_indices_.size(),
@@ -311,6 +314,8 @@ namespace LPMP {
                 thrust::raw_pointer_cast(cost_from_root_.data()));
             num_nodes_processed += cur_num_bdd_nodes;
         }
+
+        forward_state_valid_ = true;
         // Set costs of bot sinks to infinity:
         // thrust::scatter(thrust::make_constant_iterator<float>(CUDART_INF_F), 
         //                 thrust::make_constant_iterator<float>(CUDART_INF_F) + bot_sink_indices_.size(),
@@ -368,6 +373,9 @@ namespace LPMP {
 
     void bdd_cuda_base::backward_run()
     {
+        if (backward_state_valid_)
+            return;
+
         const int num_steps = cum_nr_bdd_nodes_per_hop_dist_.size() - 2;
 
         // Set costs of top sinks to 0:
@@ -394,6 +402,8 @@ namespace LPMP {
                 thrust::raw_pointer_cast(lo_path_cost_.data()),
                 thrust::raw_pointer_cast(hi_path_cost_.data()));
         }
+
+        backward_state_valid_ = true;
     }
 
     struct tuple_min
@@ -410,6 +420,9 @@ namespace LPMP {
     std::tuple<thrust::device_vector<int>, thrust::device_vector<int>, thrust::device_vector<float>, thrust::device_vector<float>> 
         bdd_cuda_base::min_marginals_cuda()
     {
+        forward_run();
+        backward_run();
+
         thrust::device_vector<int> primal_variable_index_sorted = primal_variable_index_;
         thrust::device_vector<int> bdd_index_sorted = bdd_index_;
         thrust::device_vector<float> lo_path_cost_sorted = lo_path_cost_;
@@ -495,6 +508,8 @@ namespace LPMP {
 
     double bdd_cuda_base::lower_bound()
     {
+        forward_run();
+
         // Gather all BDD nodes corresponding to top_sink (i.e. primal_variable_index == -1) and sum their costs_from_root
         auto first = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.begin(), cost_from_root_.begin()));
         auto last = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.end(), cost_from_root_.end()));
