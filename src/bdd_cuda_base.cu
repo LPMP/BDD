@@ -458,7 +458,7 @@ namespace LPMP {
         return {min_marginal_primal_index, min_marginal_bdd_index, min_marginals_lo, min_marginals_hi};
     }
 
-    std::vector<std::vector<std::array<float, 2>>> bdd_cuda_base::min_marginals()
+    two_dim_variable_array<std::array<float,2>> bdd_cuda_base::min_marginals()
     {
         thrust::device_vector<int> mm_primal_index, mm_bdd_index;
         thrust::device_vector<float> mm_0, mm_1;
@@ -480,7 +480,10 @@ namespace LPMP {
         std::vector<float> h_mm_1(mm_primal_index.size());
         thrust::copy(mm_1.begin(), mm_1.end(), h_mm_1.begin());
 
-        std::vector<std::vector<std::array<float,2>>> min_margs(nr_bdds());
+        std::vector<size_t> h_num_vars_per_bdd(num_vars_per_bdd.size());
+        thrust::copy(num_vars_per_bdd.begin(), num_vars_per_bdd.end(), h_num_vars_per_bdd.begin());
+
+        two_dim_variable_array<std::array<float,2>> min_margs(h_num_vars_per_bdd);
         int idx_1d = 2; // ignore terminal nodes.
         for(int bdd_idx=0; bdd_idx < nr_bdds(); ++bdd_idx)
         {
@@ -488,7 +491,7 @@ namespace LPMP {
             {
                 assert(h_mm_primal_index[idx_1d] >= 0); // Should ignore terminal nodes.
                 std::array<float,2> mm = {h_mm_0[idx_1d], h_mm_1[idx_1d]};
-                min_margs[bdd_idx].push_back(mm);
+                min_margs(bdd_idx, var) = mm;
             }
             idx_1d += 2; // 2 terminal nodes per bdd.
         }

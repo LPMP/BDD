@@ -4,6 +4,7 @@
 #include "bdd_collection/bdd_collection.h"
 #include <cuda_runtime.h>
 #include <thrust/device_vector.h>
+#include "two_dimensional_variable_array.hxx"
 
 inline float __int_as_float_host(int a)
 {
@@ -28,7 +29,7 @@ namespace LPMP {
                 void set_costs(COST_ITERATOR begin, COST_ITERATOR end);
             void set_cost(const double c, const size_t var);
             
-            std::vector<std::vector<std::array<float,2>>> min_marginals();
+            two_dim_variable_array<std::array<float,2>> min_marginals();
             std::tuple<thrust::device_vector<int>, thrust::device_vector<int>, thrust::device_vector<float>, thrust::device_vector<float>> min_marginals_cuda();
 
             size_t nr_variables() const { return nr_vars_; }
