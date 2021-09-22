@@ -11,6 +11,8 @@ namespace LPMP {
         public:
             bdd_cuda_base(BDD::bdd_collection& bdd_col);
 
+            void initialize_costs();
+
             double lower_bound();
 
             template<typename COST_ITERATOR>
@@ -23,10 +25,10 @@ namespace LPMP {
             size_t nr_variables() const { return nr_vars_; }
             size_t nr_bdds() const { return nr_bdds_; }
 
-        protected:
-            void forward_run();
+            void forward_run(); //TODO: Should these functions be called from outside?
             void backward_run();
 
+        protected:
             // Following arrays are allocated for each bdd node:
             thrust::device_vector<int> primal_variable_index_;
             thrust::device_vector<int> bdd_index_;
@@ -45,7 +47,7 @@ namespace LPMP {
             thrust::device_vector<int> primal_variable_counts_; // In how many BDDs does a primal variable appear.
             thrust::device_vector<int> cum_nr_bdd_nodes_per_hop_dist_; // How many BDD nodes (cumulative) are present with a given hop distance away from root node.
             thrust::device_vector<int> num_vars_per_bdd_;
-
+            thrust::device_vector<int> root_indices_, bot_sink_indices_, top_sink_indices_;
     };
 
 }
