@@ -622,6 +622,8 @@ namespace LPMP {
 
     inline void bdd_mma_base_vec::forward_run()
     {
+        if(message_passing_state_ == message_passing_state::after_forward_pass)
+            return;
         MEASURE_FUNCTION_EXECUTION_TIME;
         // TODO: if we already have done a forward_run, we do not need to do it again. Check state!
         message_passing_state_ = message_passing_state::none;

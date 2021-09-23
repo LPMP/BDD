@@ -38,20 +38,6 @@ namespace LPMP {
         }
     };
 
-    template<typename T>
-    void print_vector(const thrust::device_vector<T>& v, const char* name, const int num = 0)
-    {
-        std::cout<<name<<": ";
-        if (num == 0)
-            thrust::copy(v.begin(), v.end(), std::ostream_iterator<T>(std::cout, " "));
-        else
-        {
-            int size = std::distance(v.begin(), v.end());
-            thrust::copy(v.begin(), v.begin() + std::min(size, num), std::ostream_iterator<T>(std::cout, " "));
-        }
-        std::cout<<"\n";
-    }
-
     bdd_cuda_base::bdd_cuda_base(BDD::bdd_collection& bdd_col)
     {
         std::vector<int> primal_variable_index; //TODO: Possibly store in compressed format?
@@ -114,6 +100,7 @@ namespace LPMP {
                 bdd_hop_dist_root.push_back(cur_hop_dist);
                 bdd_indices.push_back(bdd_idx);
             }
+            bdd_layer_width.push_back(width);
             const std::vector<size_t> cur_bdd_variables = bdd_col.variables(bdd_idx);
             for (const auto& var : cur_bdd_variables) {
                 auto it = primal_var_count.find(var);
@@ -496,16 +483,16 @@ namespace LPMP {
         min_marginal_primal_index.resize(out_size);
         min_marginal_bdd_index.resize(out_size);
 
-        print_vector(sorting_order_, "sorting_order_");
-        print_vector(hi_cost_, "hi_cost_");
-        print_vector(lo_bdd_node_index_, "lo_bdd_node_index_");
-        print_vector(hi_bdd_node_index_, "hi_bdd_node_index_");
-        print_vector(cost_from_root_, "cost_from_root_");
-        print_vector(cost_from_terminal_, "cost_from_terminal_");
-        print_vector(min_marginals_lo, "min_marginals_lo");
-        print_vector(min_marginals_hi, "min_marginals_hi");
-        print_vector(min_marginal_primal_index, "min_marginal_primal_index");
-        print_vector(min_marginal_bdd_index, "min_marginal_bdd_index");
+        // print_vector(sorting_order_, "sorting_order_");
+        // print_vector(hi_cost_, "hi_cost_");
+        // print_vector(lo_bdd_node_index_, "lo_bdd_node_index_");
+        // print_vector(hi_bdd_node_index_, "hi_bdd_node_index_");
+        // print_vector(cost_from_root_, "cost_from_root_");
+        // print_vector(cost_from_terminal_, "cost_from_terminal_");
+        // print_vector(min_marginals_lo, "min_marginals_lo");
+        // print_vector(min_marginals_hi, "min_marginals_hi");
+        // print_vector(min_marginal_primal_index, "min_marginal_primal_index");
+        // print_vector(min_marginal_bdd_index, "min_marginal_bdd_index");
 
         return {min_marginal_primal_index, min_marginal_bdd_index, min_marginals_lo, min_marginals_hi};
     }

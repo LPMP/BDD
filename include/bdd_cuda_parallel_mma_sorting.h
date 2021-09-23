@@ -8,7 +8,7 @@ namespace LPMP {
     // have not been updated recently. Update only these dual variable by parallel mma. 
     class bdd_cuda_parallel_mma_sorting : public bdd_cuda_base {
         public:
-            bdd_cuda_base::bdd_cuda_base; // inherit base constructor
+            using bdd_cuda_base::bdd_cuda_base; // inherit base constructor
 
             void iteration();
             void solve(const size_t max_iter, const double tolerance, const double time_limit);

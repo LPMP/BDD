@@ -13,6 +13,16 @@ namespace LPMP {
         }
     };
 
+    struct mm_diff_func {
+        __host__ __device__ float operator()(const float& m1, const float& m0)
+        {
+            if(!isinf(m0) && !isinf(m1))
+                return m1 - m0;
+            assert(isinf(m0) && isinf(m1));
+            return m0;
+        }
+    };
+
     struct normalize_by_num_vars_in_bdd_func {
         int* num_vars_per_bdd;
         __host__ __device__ void operator()(thrust::tuple<int, float&> t) const
@@ -20,6 +30,8 @@ namespace LPMP {
             const int bdd_idx = thrust::get<0>(t);
             float& mm_diff = thrust::get<1>(t);
 
+            if(isinf(mm_diff))
+                return;
             mm_diff /= num_vars_per_bdd[bdd_idx];
         }
     };
@@ -39,7 +51,7 @@ namespace LPMP {
     };
 
     template<typename T>
-    thrust::device_vector<int> repeat_values(const thrust::device_vector<T>& values, const thrust::device_vector<int>& counts)
+    thrust::device_vector<T> repeat_values(const thrust::device_vector<T>& values, const thrust::device_vector<int>& counts)
     {
         thrust::device_vector<int> counts_sum(counts.size() + 1);
         counts_sum[0] = 0;
@@ -69,9 +81,9 @@ namespace LPMP {
             std::tie(mm_primal_index, mm_bdd_index, mm_0, diff_1_0) = min_marginals_cuda();
 
             // Compute min-marginal difference (mm_1 - mm_0) and store in diff_1_0
-            thrust::transform(diff_1_0.begin(), diff_1_0.end(), mm_0.begin(), diff_1_0.begin(), thrust::minus<float>());
+            thrust::transform(diff_1_0.begin(), diff_1_0.end(), mm_0.begin(), diff_1_0.begin(), mm_diff_func()); // thrust::minus<float>());
         }
-
+        print_vector(diff_1_0, "mm diff");
         // For now, sort such that same primal variables are contiguous. TODO Returned min-marginals should already satisfy this condition. 
         auto first_key = thrust::make_zip_iterator(thrust::make_tuple(mm_primal_index.begin(), mm_bdd_index.begin()));
         auto last_key = thrust::make_zip_iterator(thrust::make_tuple(mm_primal_index.end(), mm_bdd_index.end()));
@@ -86,6 +98,7 @@ namespace LPMP {
 
             thrust::for_each(first, last, func_bdd_norm);
         }
+        print_vector(diff_1_0, "diff after norm");
 
         // Compute sum of min-marginal differences per primal variable
         thrust::device_vector<float> sum_diff_primal_var(diff_1_0.size());
@@ -104,6 +117,8 @@ namespace LPMP {
             // Here sum_diff_primal_index should resemble a thrust::sequence starting from 0.
         }
 
+        print_vector(sum_diff_primal_var, "sum_diff_primal_var");
+
         // Compute the update:
         {
             compute_update_func update_func({thrust::raw_pointer_cast(num_bdds_per_var_.data()), thrust::raw_pointer_cast(sum_diff_primal_var.data())});
@@ -112,15 +127,35 @@ namespace LPMP {
 
             thrust::for_each(first, last, update_func);
         }
+        print_vector(diff_1_0, "update");
+
         // diff_1_0 now contains the update.
         // Now replicate the update values since each primal variable can occur multiple times within a BDD:
         diff_1_0 = repeat_values(diff_1_0, bdd_layer_width_);
+        print_vector(diff_1_0, "after repeat");
 
         thrust::device_vector<float> diff_1_0_sorted(diff_1_0.size());
         thrust::gather(sorting_order_.begin(), sorting_order_.end(), diff_1_0.begin(), diff_1_0_sorted.begin());
 
+        // debug:
+        mm_primal_index = repeat_values(mm_primal_index, bdd_layer_width_);
+        mm_bdd_index = repeat_values(mm_bdd_index, bdd_layer_width_);
+        thrust::device_vector<int> mm_primal_index_sorted(mm_primal_index.size());
+        thrust::device_vector<int> mm_bdd_index_sorted(mm_bdd_index.size());
+        thrust::gather(sorting_order_.begin(), sorting_order_.end(), mm_bdd_index.begin(), mm_bdd_index_sorted.begin());
+        thrust::gather(sorting_order_.begin(), sorting_order_.end(), mm_primal_index.begin(), mm_primal_index_sorted.begin());
+
+        print_vector(primal_variable_index_, "primal_variable_index_");
+        print_vector(bdd_index_, "bdd_index_");
+        print_vector(mm_primal_index_sorted, "mm_primal_index_sorted");
+        print_vector(mm_bdd_index_sorted, "mm_bdd_index_sorted");
+
+        print_vector(bdd_layer_width_, "bdd_layer_width_");
+        print_vector(diff_1_0_sorted, "diff_1_0_sorted");
+        print_vector(hi_cost_, "hi_cost_");
         assert(diff_1_0_sorted.size() == hi_cost_.size());
         thrust::transform(hi_cost_.begin(), hi_cost_.end(), diff_1_0_sorted.begin(), hi_cost_.begin(), thrust::plus<float>());
+        print_vector(hi_cost_, "hi_cost_updated");
         forward_state_valid_ = false;
         backward_state_valid_ = false;
     }
