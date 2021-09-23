@@ -1,6 +1,6 @@
 #include "bdd_cuda.h"
 #ifdef WITH_CUDA
-#include "bdd_cuda_base.h"
+#include "bdd_cuda_parallel_mma_sorting.h"
 #endif
 #include "time_measure_util.h"
 
@@ -9,11 +9,13 @@ namespace LPMP {
     class bdd_cuda::impl {
         public:
             impl(BDD::bdd_collection& bdd_col);
+
+            bdd_cuda_parallel_mma_sorting pmma;
     };
 
     bdd_cuda::impl::impl(BDD::bdd_collection& bdd_col)
 #ifdef WITH_CUDA
-    : bdd_cuda_base(bdd_col)
+    : pmma(bdd_col)
 #endif
     {
 #ifndef WITH_CUDA
@@ -47,15 +49,14 @@ namespace LPMP {
     void bdd_cuda::set_cost(const double c, const size_t var)
     {
 #ifdef WITH_CUDA
-        pimpl->mma.set_cost(c, var);
+        pimpl->pmma.set_cost(c, var);
 #endif
     }
 
     void bdd_cuda::backward_run()
     {
 #ifdef WITH_CUDA
-        pimpl->mma.backward_run();
-        pimpl->mma.compute_lower_bound();
+        pimpl->pmma.backward_run();
 #endif
     }
 
@@ -63,14 +64,14 @@ namespace LPMP {
     {
 #ifdef WITH_CUDA
         MEASURE_FUNCTION_EXECUTION_TIME;
-        pimpl->mma.solve(max_iter, tolerance, time_limit);
+        pimpl->pmma.solve(max_iter, tolerance, time_limit);
 #endif
     }
 
     double bdd_cuda::lower_bound()
     {
 #ifdef WITH_CUDA
-        return pimpl->mma.lower_bound();
+        return pimpl->pmma.lower_bound();
 #endif
         return -std::numeric_limits<double>::infinity();
     } 
@@ -79,7 +80,7 @@ namespace LPMP {
     {
         throw std::runtime_error("not implemented");
 #ifdef WITH_CUDA
-        //return pimpl->mma.min_marginals();
+        //return pimpl->pmma.min_marginals();
 #endif
     }
 

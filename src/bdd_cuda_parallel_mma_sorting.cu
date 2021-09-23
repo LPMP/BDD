@@ -1,4 +1,5 @@
 #include "bdd_cuda_parallel_mma_sorting.h"
+#include <chrono>
 #include <thrust/sort.h>
 #include <thrust/for_each.h>
 #include <thrust/gather.h>
