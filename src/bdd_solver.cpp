@@ -82,7 +82,8 @@ namespace LPMP {
             {"mma_srmp",bdd_solver_impl::mma_srmp},
             {"mma_agg",bdd_solver_impl::mma_agg},
             {"anisotropic_mma",bdd_solver_impl::anisotropic_mma},
-            {"mma_vec",bdd_solver_impl::mma_vec}
+            {"mma_vec",bdd_solver_impl::mma_vec},
+            {"mma_cuda",bdd_solver_impl::mma_cuda}
         };
 
         auto solver_group = app.add_option_group("solver", "solver either a BDD solver, output of statistics or export of LP solved by BDD relaxation");
@@ -289,6 +290,11 @@ namespace LPMP {
         {
             solver = std::move(bdd_mma_vec(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
             std::cout << "constructed vectorized mma solver\n"; 
+        }
+        else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::mma_cuda)
+        {
+            solver = std::move(bdd_cuda(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
+            std::cout << "constructed CUDA based mma solver\n"; 
         }
         else
         {
