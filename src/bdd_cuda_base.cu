@@ -61,6 +61,7 @@ namespace LPMP {
         std::vector<int> bdd_hop_dist_root;
         std::vector<int> bdd_indices; // which bdd index does the bdd node belong to.
         std::vector<int> num_vars_per_bdd;
+        std::vector<int> bdd_layer_width;
 
         std::unordered_map<size_t, int> primal_var_count;
         //TODO: Iterate over BDDs in sorted order w.r.t number of nodes.
@@ -72,6 +73,7 @@ namespace LPMP {
             assert(bdd_col.is_reordered(bdd_idx));
             int cur_hop_dist = 0;
             size_t prev_var = bdd_col(bdd_idx, storage_offset).index;
+            int width = 0;
             for(size_t bdd_node_idx=0; bdd_node_idx < bdd_col.nr_bdd_nodes(bdd_idx); ++bdd_node_idx)
             {
                 const auto cur_instr = bdd_col(bdd_idx, bdd_node_idx + storage_offset);
@@ -79,10 +81,14 @@ namespace LPMP {
                 if(prev_var != var)
                 {
                     assert(prev_var < var);
+                    bdd_layer_width.push_back(width);
+                    width = 1;
                     prev_var = var;
                     if(!cur_instr.is_topsink())
                         cur_hop_dist++; // both terminal nodes can have same hop distance.
                 }
+                else
+                    width++;
                 if(!cur_instr.is_terminal())
                 {
                     assert(bdd_node_idx < bdd_col.nr_bdd_nodes(bdd_idx) - 2); // only last two nodes can be terminal nodes. 
@@ -122,43 +128,77 @@ namespace LPMP {
             storage_offset += bdd_col.nr_bdd_nodes(bdd_idx);
         }
         // copy to GPU
-        thrust::device_vector<int> primal_variable_index_temp(primal_variable_index.begin(), primal_variable_index.end());
-        thrust::device_vector<int> bdd_index_temp(bdd_indices.begin(), bdd_indices.end());
-        thrust::device_vector<int> lo_bdd_node_index_temp(lo_bdd_node_index.begin(), lo_bdd_node_index.end());
-        thrust::device_vector<int> hi_bdd_node_index_temp(hi_bdd_node_index.begin(), hi_bdd_node_index.end());
+        // per BDD data:
+        primal_variable_index_ = thrust::device_vector<int>(primal_variable_index.begin(), primal_variable_index.end());
+        bdd_index_ = thrust::device_vector<int>(bdd_indices.begin(), bdd_indices.end());
+        lo_bdd_node_index_ = thrust::device_vector<int>(lo_bdd_node_index.begin(), lo_bdd_node_index.end());
+        hi_bdd_node_index_ = thrust::device_vector<int>(hi_bdd_node_index.begin(), hi_bdd_node_index.end());
         thrust::device_vector<int> bdd_hop_dist(bdd_hop_dist_root.begin(), bdd_hop_dist_root.end());
+
+        // other data:
+        num_vars_per_bdd_ = thrust::device_vector<int>(num_vars_per_bdd.begin(), num_vars_per_bdd.end());
+        bdd_layer_width_ = thrust::device_vector<int>(bdd_layer_width.begin(), bdd_layer_width.end());
+
+        // Determine the sorting order for update step.
+        {
+            // First arrange the BDD nodes such that ordering is w.r.t primal_index and then BDD index:
+            thrust::device_vector<int> primal_var_temp = primal_variable_index_;
+            thrust::device_vector<int> bdd_idx_temp = bdd_index_;
+            thrust::device_vector<int> bdd_hop_dist_temp = bdd_hop_dist;
+            auto first_key = thrust::make_zip_iterator(thrust::make_tuple(primal_var_temp.begin(), bdd_idx_temp.begin()));
+            auto last_key = thrust::make_zip_iterator(thrust::make_tuple(primal_var_temp.end(), bdd_idx_temp.end()));
+
+            thrust::sort_by_key(first_key, last_key, bdd_hop_dist_temp.begin());
+
+            // Now determine the sorting order w.r.t this input ordering:
+            sorting_order_ = thrust::device_vector<int>(lo_bdd_node_index.size());
+            thrust::sequence(sorting_order_.begin(), sorting_order_.end());
+            thrust::sort_by_key(bdd_hop_dist_temp.begin(), bdd_hop_dist_temp.end(), sorting_order_.begin());
+        }
+         
         cost_from_root_ = thrust::device_vector<float>(lo_bdd_node_index.size(), CUDART_INF_F);
         cost_from_terminal_ = thrust::device_vector<float>(lo_bdd_node_index.size(), CUDART_INF_F);
         hi_cost_ = thrust::device_vector<float>(lo_bdd_node_index.size(), CUDART_INF_F);
         hi_path_cost_ = thrust::device_vector<float>(lo_bdd_node_index.size(), CUDART_INF_F);
         lo_path_cost_ = thrust::device_vector<float>(lo_bdd_node_index.size(), CUDART_INF_F);
-        num_vars_per_bdd_ = thrust::device_vector<int>(num_vars_per_bdd.begin(), num_vars_per_bdd.end());
 
         // At this point all nodes of a BDD are contiguous in memory. Now we convert this so that nodes with same
         // hop distances become contiguous.
+        {
+            thrust::device_vector<int> sorting_order_local(lo_bdd_node_index.size());
+            thrust::sequence(sorting_order_local.begin(), sorting_order_local.end());
+            
+            auto first_bdd_val = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.begin(), 
+                                                                            bdd_index_.begin(), 
+                                                                            lo_bdd_node_index_.begin(), 
+                                                                            hi_bdd_node_index_.begin(), 
+                                                                            sorting_order_local.begin()));
 
-        // Determine ordering:
-        thrust::device_vector<int> sorting_order(lo_bdd_node_index.size());
-        thrust::sequence(sorting_order.begin(), sorting_order.end());
-        thrust::sort_by_key(bdd_hop_dist.begin(), bdd_hop_dist.end(), sorting_order.begin());
+            auto last_bdd_val = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.end(), 
+                                                                            bdd_index_.end(), 
+                                                                            lo_bdd_node_index_.end(), 
+                                                                            hi_bdd_node_index_.end(), 
+                                                                            sorting_order_local.end()));
 
-        // Sort BDD nodes:
-        primal_variable_index_ = thrust::device_vector<int>(primal_variable_index_temp.size());
-        bdd_index_ = thrust::device_vector<int>(bdd_index_temp.size());
-        lo_bdd_node_index_ = thrust::device_vector<int>(lo_bdd_node_index_temp.size());
-        hi_bdd_node_index_ = thrust::device_vector<int>(hi_bdd_node_index_temp.size());
-        thrust::gather(sorting_order.begin(), sorting_order.end(), primal_variable_index_temp.begin(), primal_variable_index_.begin());
-        thrust::gather(sorting_order.begin(), sorting_order.end(), bdd_index_temp.begin(), bdd_index_.begin());
-        thrust::gather(sorting_order.begin(), sorting_order.end(), lo_bdd_node_index_temp.begin(), lo_bdd_node_index_.begin());
-        thrust::gather(sorting_order.begin(), sorting_order.end(), hi_bdd_node_index_temp.begin(), hi_bdd_node_index_.begin());
-        
-        // Since the ordering is changed so lo, hi indices also need to be updated:
-        thrust::device_vector<int> new_indices(sorting_order.size());
-        thrust::scatter(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + sorting_order.size(), 
-                        sorting_order.begin(), new_indices.begin());
-        assign_new_indices_func func({thrust::raw_pointer_cast(new_indices.data())});
-        thrust::for_each(lo_bdd_node_index_.begin(), lo_bdd_node_index_.end(), func);
-        thrust::for_each(hi_bdd_node_index_.begin(), hi_bdd_node_index_.end(), func);
+            thrust::sort_by_key(bdd_hop_dist.begin(), bdd_hop_dist.end(), first_bdd_val);
+
+            // primal_variable_index_ = thrust::device_vector<int>(primal_variable_index_temp.size());
+            // bdd_index_ = thrust::device_vector<int>(bdd_index_temp.size());
+            // lo_bdd_node_index_ = thrust::device_vector<int>(lo_bdd_node_index_temp.size());
+            // hi_bdd_node_index_ = thrust::device_vector<int>(hi_bdd_node_index_temp.size());
+            // thrust::gather(sorting_order_.begin(), sorting_order_.end(), primal_variable_index_temp.begin(), primal_variable_index_.begin());
+            // thrust::gather(sorting_order_.begin(), sorting_order_.end(), bdd_index_temp.begin(), bdd_index_.begin());
+            // thrust::gather(sorting_order_.begin(), sorting_order_.end(), lo_bdd_node_index_temp.begin(), lo_bdd_node_index_.begin());
+            // thrust::gather(sorting_order_.begin(), sorting_order_.end(), hi_bdd_node_index_temp.begin(), hi_bdd_node_index_.begin());
+            
+            // Since the ordering is changed so lo, hi indices also need to be updated:
+            thrust::device_vector<int> new_indices(sorting_order_.size());
+            thrust::scatter(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + sorting_order_local.size(), 
+                            sorting_order_local.begin(), new_indices.begin());
+            assign_new_indices_func func({thrust::raw_pointer_cast(new_indices.data())});
+            thrust::for_each(lo_bdd_node_index_.begin(), lo_bdd_node_index_.end(), func);
+            thrust::for_each(hi_bdd_node_index_.begin(), hi_bdd_node_index_.end(), func);
+        }
 
         // Count number of BDD nodes per hop distance:
         cum_nr_bdd_nodes_per_hop_dist_ = thrust::device_vector<int>(lo_bdd_node_index.size());
@@ -182,7 +222,7 @@ namespace LPMP {
         for (const auto& [var, val] : primal_var_count) {
             primal_variable_counts[var] = val;
         }
-        primal_variable_counts_ = thrust::device_vector<int>(primal_variable_counts.begin(), primal_variable_counts.end());
+        num_bdds_per_var_ = thrust::device_vector<int>(primal_variable_counts.begin(), primal_variable_counts.end());
 
         // Set indices of BDD nodes which are root, top, bot sinks.
         root_indices_ = thrust::device_vector<int>(primal_variable_index_.size());
@@ -231,7 +271,7 @@ namespace LPMP {
     void bdd_cuda_base::set_cost(const double c, const size_t var)
     {
         assert(var < nr_vars_);
-        set_var_cost_func func({(int) var, (float) c / primal_variable_counts_[var]});
+        set_var_cost_func func({(int) var, (float) c / num_bdds_per_var_[var]});
 
         auto first = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.begin(), hi_cost_.begin()));
         auto last = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.end(), hi_cost_.end()));
@@ -256,7 +296,8 @@ namespace LPMP {
         assert(std::distance(begin, end) == nr_variables());
         thrust::device_vector<float> primal_costs(begin, end);
         
-        set_vars_costs_func func({primal_variable_counts_, primal_costs});
+        set_vars_costs_func func({thrust::raw_pointer_cast(num_bdds_per_var_.data()), 
+                                thrust::raw_pointer_cast(primal_costs.data())});
         auto first = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.begin(), hi_cost_.begin()));
         auto last = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.end(), hi_cost_.end()));
 
@@ -454,6 +495,17 @@ namespace LPMP {
         min_marginals_hi.resize(out_size);
         min_marginal_primal_index.resize(out_size);
         min_marginal_bdd_index.resize(out_size);
+
+        print_vector(sorting_order_, "sorting_order_");
+        print_vector(hi_cost_, "hi_cost_");
+        print_vector(lo_bdd_node_index_, "lo_bdd_node_index_");
+        print_vector(hi_bdd_node_index_, "hi_bdd_node_index_");
+        print_vector(cost_from_root_, "cost_from_root_");
+        print_vector(cost_from_terminal_, "cost_from_terminal_");
+        print_vector(min_marginals_lo, "min_marginals_lo");
+        print_vector(min_marginals_hi, "min_marginals_hi");
+        print_vector(min_marginal_primal_index, "min_marginal_primal_index");
+        print_vector(min_marginal_bdd_index, "min_marginal_bdd_index");
 
         return {min_marginal_primal_index, min_marginal_bdd_index, min_marginals_lo, min_marginals_hi};
     }

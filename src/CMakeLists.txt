@@ -43,14 +43,22 @@ target_link_libraries(decomposition_bdd_mma decomposition_bdd_mma_base LPMP-BDD)
 add_library(bdd_mma_vec bdd_mma_vec.cpp)
 target_link_libraries(bdd_mma_vec LPMP-BDD) 
 
-add_library(bdd_cuda_base bdd_cuda_base.cu)
-target_link_libraries(bdd_cuda_base LPMP-BDD)
+if(WITH_CUDA)
+    add_library(bdd_cuda_base bdd_cuda_base.cu)
+    target_link_libraries(bdd_cuda_base LPMP-BDD)
+
+    add_library(bdd_cuda_parallel_mma_sorting bdd_cuda_parallel_mma_sorting.cu)
+    target_link_libraries(bdd_cuda_parallel_mma_sorting bdd_cuda_base LPMP-BDD)
+endif()
 
 add_library(bdd_fix bdd_fix.cpp)
 target_link_libraries(bdd_fix LPMP-BDD) 
 
 add_library(bdd_solver bdd_solver.cpp)
 target_link_libraries(bdd_solver bdd_mma decomposition_bdd_mma bdd_mma_srmp bdd_mma_agg bdd_mma_anisotropic bdd_mma_vec bdd_fix bdd_preprocessor ILP_parser OPB_parser bdd_storage ILP_input LPMP-BDD pthread)
+if(WITH_CUDA)
+    target_link_libraries(bdd_solver bdd_cuda_parallel_mma_sorting)
+endif()
 
 target_link_libraries(LPMP-BDD INTERFACE bdd_solver)
 

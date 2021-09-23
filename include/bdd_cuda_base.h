@@ -53,10 +53,12 @@ namespace LPMP {
             // Other information:
             size_t nr_vars_, nr_bdds_, nr_bdd_nodes_;
             int num_dual_variables_;
-            thrust::device_vector<int> primal_variable_counts_; // In how many BDDs does a primal variable appear.
             thrust::device_vector<int> cum_nr_bdd_nodes_per_hop_dist_; // How many BDD nodes (cumulative) are present with a given hop distance away from root node.
+            thrust::device_vector<int> num_bdds_per_var_; // In how many BDDs does a primal variable appear.
             thrust::device_vector<int> num_vars_per_bdd_;
+            thrust::device_vector<int> bdd_layer_width_; // Counts number of repetitions of a primal variable in a BDD. 
             thrust::device_vector<int> root_indices_, bot_sink_indices_, top_sink_indices_;
+            thrust::device_vector<int> sorting_order_; // Order in which BDD nodes are sorted such that the hop distance from root is non-decreasing.
 
             bool forward_state_valid_ = false;
             bool backward_state_valid_ = false;
