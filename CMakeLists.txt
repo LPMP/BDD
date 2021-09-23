@@ -4,6 +4,7 @@ option(WITH_CUDA "Compile with CUDA support" OFF)
 
 if(WITH_CUDA)
     message(STATUS "Compiling with CUDA support")
+    add_definitions(-DWITH_CUDA)
     enable_language(CUDA)
 else()
     message("Compiling without CUDA support")

@@ -20,7 +20,8 @@ namespace LPMP {
         public:
             bdd_cuda_base(BDD::bdd_collection& bdd_col);
 
-            void initialize_costs();
+            void flush_forward_states();
+            void flush_backward_states();
 
             double lower_bound();
 
@@ -71,8 +72,8 @@ namespace LPMP {
             thrust::device_vector<int> num_vars_per_bdd_;
             thrust::device_vector<int> bdd_layer_width_; // Counts number of repetitions of a primal variable in a BDD. 
             thrust::device_vector<int> root_indices_, bot_sink_indices_, top_sink_indices_;
-            thrust::device_vector<int> sorting_order_; // Order in which BDD nodes are sorted such that the hop distance from root is non-decreasing.
 
+        private:
             bool forward_state_valid_ = false;
             bool backward_state_valid_ = false;
 

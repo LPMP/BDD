@@ -1,6 +1,6 @@
 #include "bdd_cuda.h"
 #ifdef WITH_CUDA
-#include "bdd_cuda_base.hxx"
+#include "bdd_cuda_base.h"
 #endif
 #include "time_measure_util.h"
 
