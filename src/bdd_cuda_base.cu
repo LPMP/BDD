@@ -1,4 +1,5 @@
 #include "bdd_cuda_base.h"
+#include "time_measure_util.h"
 #include <thrust/sort.h>
 #include <thrust/for_each.h>
 #include <thrust/gather.h>
@@ -48,7 +49,13 @@ namespace LPMP {
         std::vector<int> bdd_indices; // which bdd index does the bdd node belong to.
         std::vector<int> num_vars_per_bdd;
 
-        std::unordered_map<size_t, int> primal_var_count;
+        nr_vars_ = [&]() {
+            size_t max_v=0;
+            for(size_t bdd_nr=0; bdd_nr<bdd_col.nr_bdds(); ++bdd_nr)
+                max_v = std::max(max_v, bdd_col.min_max_variables(bdd_nr)[1]);
+            return max_v+1;
+        }();
+        std::vector<int> primal_variable_counts(nr_vars_, 0);
         //TODO: Iterate over BDDs in sorted order w.r.t number of nodes.
         num_dual_variables_ = 0;
         for(size_t bdd_idx=0; bdd_idx < bdd_col.nr_bdds(); ++bdd_idx)
@@ -96,22 +103,12 @@ namespace LPMP {
             }
             const std::vector<size_t> cur_bdd_variables = bdd_col.variables(bdd_idx);
             for (const auto& var : cur_bdd_variables) {
-                auto it = primal_var_count.find(var);
-                if(it != primal_var_count.end())
-                    it->second++;
-                else
-                    primal_var_count[var] = 1;
+                primal_variable_counts[var]++;
             }
 
             num_vars_per_bdd.push_back(cur_bdd_variables.size());
             num_dual_variables_ += cur_bdd_variables.size();
         }
-        const size_t nr_vars = [&]() {
-            size_t max_v=0;
-            for(size_t bdd_nr=0; bdd_nr<bdd_col.nr_bdds(); ++bdd_nr)
-                max_v = std::max(max_v, bdd_col.min_max_variables(bdd_nr)[1]);
-            return max_v+1;
-        }();
 
         // copy to GPU
         // per BDD data:
@@ -166,24 +163,12 @@ namespace LPMP {
         // Convert to cumulative:
         thrust::inclusive_scan(cum_nr_bdd_nodes_per_hop_dist_.begin(), cum_nr_bdd_nodes_per_hop_dist_.end(), cum_nr_bdd_nodes_per_hop_dist_.begin());
 
-        nr_vars_ = *thrust::max_element(primal_variable_index_.begin(), primal_variable_index_.end()) + 1;
-        assert(nr_vars_ == nr_vars);
-
-        for (int var = 0; var < nr_vars_; var++)
-        {
-            assert(primal_var_count.find(var) != primal_var_count.end());
-        }
+        assert(nr_vars_ == *thrust::max_element(primal_variable_index_.begin(), primal_variable_index_.end()) + 1;);
 
         nr_bdds_ = bdd_col.nr_bdds();
         nr_bdd_nodes_ = lo_bdd_node_index.size();
 
         // Populate variable counts:
-        assert(primal_var_count.size() == nr_vars_);
-
-        std::vector<int> primal_variable_counts(nr_vars_);
-        for (const auto& [var, val] : primal_var_count) {
-            primal_variable_counts[var] = val;
-        }
         num_bdds_per_var_ = thrust::device_vector<int>(primal_variable_counts.begin(), primal_variable_counts.end());
 
         // Set indices of BDD nodes which are root, top, bot sinks.
@@ -211,6 +196,7 @@ namespace LPMP {
 
     void bdd_cuda_base::flush_forward_states()
     {
+        MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         forward_state_valid_ = false;
         thrust::fill(cost_from_root_.begin(), cost_from_root_.end(), CUDART_INF_F);
         thrust::fill(hi_path_cost_.begin(), hi_path_cost_.end(), CUDART_INF_F);
@@ -219,6 +205,7 @@ namespace LPMP {
 
     void bdd_cuda_base::flush_backward_states()
     {
+        MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         backward_state_valid_ = false;
         thrust::fill(cost_from_terminal_.begin(), cost_from_terminal_.end(), CUDART_INF_F);
         thrust::fill(hi_path_cost_.begin(), hi_path_cost_.end(), CUDART_INF_F);
@@ -240,6 +227,7 @@ namespace LPMP {
 
     void bdd_cuda_base::set_cost(const double c, const size_t var)
     {
+        MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         assert(var < nr_vars_);
         set_var_cost_func func({(int) var, (float) c / num_bdds_per_var_[var]});
 
@@ -263,6 +251,7 @@ namespace LPMP {
     template<typename COST_ITERATOR> 
     void bdd_cuda_base::set_costs(COST_ITERATOR begin, COST_ITERATOR end)
     {
+        MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         assert(std::distance(begin, end) == nr_variables());
         thrust::device_vector<float> primal_costs(begin, end);
         
@@ -302,7 +291,7 @@ namespace LPMP {
 
     void bdd_cuda_base::forward_run()
     {
-        MEASURE_FUNCTION_EXECUTION_TIME
+        MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         if (forward_state_valid_)
             return;
 
@@ -387,7 +376,7 @@ namespace LPMP {
 
     void bdd_cuda_base::backward_run()
     {
-        MEASURE_FUNCTION_EXECUTION_TIME
+        MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         if (backward_state_valid_)
             return;
 
@@ -437,7 +426,7 @@ namespace LPMP {
     std::tuple<thrust::device_vector<int>, thrust::device_vector<int>, thrust::device_vector<float>, thrust::device_vector<float>> 
         bdd_cuda_base::min_marginals_cuda()
     {
-        MEASURE_FUNCTION_EXECUTION_TIME
+        MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         forward_run();
         backward_run();
 
@@ -492,6 +481,7 @@ namespace LPMP {
 
     std::vector<std::vector<std::array<float, 2>>> bdd_cuda_base::min_marginals()
     {
+        MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         thrust::device_vector<int> mm_primal_index, mm_bdd_index;
         thrust::device_vector<float> mm_0, mm_1;
 
@@ -550,6 +540,7 @@ namespace LPMP {
 
     double bdd_cuda_base::lower_bound()
     {
+        MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         forward_run();
 
         // Gather all BDD nodes corresponding to top_sink (i.e. primal_variable_index == -1) and sum their costs_from_root
