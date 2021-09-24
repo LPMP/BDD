@@ -50,18 +50,17 @@ namespace LPMP {
 
         std::unordered_map<size_t, int> primal_var_count;
         //TODO: Iterate over BDDs in sorted order w.r.t number of nodes.
-        int storage_offset = 0;
         num_dual_variables_ = 0;
         for(size_t bdd_idx=0; bdd_idx < bdd_col.nr_bdds(); ++bdd_idx)
         {
             assert(bdd_col.is_qbdd(bdd_idx));
             assert(bdd_col.is_reordered(bdd_idx));
             int cur_hop_dist = 0;
+            const size_t storage_offset = bdd_col.offset(bdd_idx);
             size_t prev_var = bdd_col(bdd_idx, storage_offset).index;
             for(size_t bdd_node_idx=0; bdd_node_idx < bdd_col.nr_bdd_nodes(bdd_idx); ++bdd_node_idx)
             {
                 const auto cur_instr = bdd_col(bdd_idx, bdd_node_idx + storage_offset);
-                //assert(!cur_instr.is_terminal());
                 if(cur_instr.is_terminal())
                     continue;
                 const size_t var = cur_instr.index;
@@ -108,7 +107,6 @@ namespace LPMP {
 
             num_vars_per_bdd.push_back(cur_bdd_variables.size());
             num_dual_variables_ += cur_bdd_variables.size();
-            storage_offset += bdd_col.nr_bdd_nodes(bdd_idx);
         }
         // copy to GPU
         // per BDD data:
