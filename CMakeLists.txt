@@ -9,7 +9,7 @@ else()
     message("Compiling without CUDA support")
 endif()
 
-cmake_minimum_required(VERSION 2.8.12)
+cmake_minimum_required(VERSION 3.20) # does not work with 3.13
 
 set(CMAKE_CUDA_ARCHITECTURES OFF)
 

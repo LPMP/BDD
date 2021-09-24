@@ -73,3 +73,11 @@ if(WITH_CUDA)
     target_link_libraries(test_bdd_cuda_base LPMP-BDD bdd_cuda_base)
     add_test(test_bdd_cuda_base test_bdd_cuda_base)
 endif()
+
+add_executable(test_bdd_solver_fix_variable test_bdd_solver_fix_variable.cpp)
+target_link_libraries(test_bdd_solver_fix_variable LPMP-BDD)
+add_test(test_bdd_solver_fix_variable test_bdd_solver_fix_variable)
+
+add_executable(test_variable_reordering_invariance test_variable_reordering_invariance.cpp)
+target_link_libraries(test_variable_reordering_invariance LPMP-BDD)
+add_test(test_variable_reordering_invariance test_variable_reordering_invariance)

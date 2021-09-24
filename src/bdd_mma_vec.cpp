@@ -61,6 +61,11 @@ namespace LPMP {
         return pimpl->mma.min_marginals();
     }
 
+    void bdd_mma_vec::fix_variable(const size_t var, const bool value)
+    {
+        pimpl->mma.fix_variable(var, value);
+    }
+
     void bdd_mma_vec::tighten()
     {
         return LPMP::tighten(pimpl->mma, 0.1); 

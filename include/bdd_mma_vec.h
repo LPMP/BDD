@@ -22,6 +22,7 @@ namespace LPMP {
             void solve(const size_t max_iter, const double tolerance, const double time_limit);
             void backward_run(); 
             two_dim_variable_array<std::array<double,2>> min_marginals();
+            void fix_variable(const size_t var, const bool value);
 
             void tighten();
         private:

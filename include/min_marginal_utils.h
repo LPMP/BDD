@@ -22,9 +22,11 @@ namespace LPMP {
             for(size_t i=0; i<nr_bdds; ++i)
             {
                 diff_sum += std::abs(min_marginals(var,i)[1] - min_marginals(var,i)[0]);
-                assert(std::isfinite(min_marginals(var,i)[0]));
-                assert(std::isfinite(min_marginals(var,i)[1]));
-                if(min_marginals(var,i)[1] - min_marginals(var,i)[0] > eps)
+                if(min_marginals(var,i)[0] == std::numeric_limits<double>::infinity())
+                    negative = false;
+                else if(min_marginals(var,i)[1] == std::numeric_limits<double>::infinity())
+                    positive = false;
+                else if(min_marginals(var,i)[1] - min_marginals(var,i)[0] > eps)
                 {
                     negative = false; 
                 }

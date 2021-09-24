@@ -65,6 +65,8 @@ namespace LPMP {
             void round();
             void tighten();
             double lower_bound();
+            void fix_variable(const size_t var, const bool value);
+            void fix_variable(const std::string& var, const bool value);
             two_dim_variable_array<std::array<double,2>> min_marginals();
 
         private:

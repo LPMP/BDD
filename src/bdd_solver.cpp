@@ -332,7 +332,6 @@ namespace LPMP {
 
     }
 
-
     void bdd_solver::solve()
     {
         if(options.time_limit < 0)
@@ -433,6 +432,22 @@ namespace LPMP {
             else
                 throw std::runtime_error("tighten not implemented");
             }, *solver);
+    }
+
+    void bdd_solver::fix_variable(const size_t var, const bool value)
+    {
+        std::visit([var, value](auto&& s) {
+            if constexpr(std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_vec>)
+            s.fix_variable(var, value);
+            else
+                throw std::runtime_error("fix variable not implemented");
+            }, *solver);
+    }
+
+    void bdd_solver::fix_variable(const std::string& var, const bool value)
+    {
+        const size_t var_index = options.ilp.get_var_index(var);
+        fix_variable(var_index, value);
     }
 
     double bdd_solver::lower_bound()

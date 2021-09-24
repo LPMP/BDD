@@ -63,4 +63,9 @@ namespace LPMP {
         return pimpl->mma.min_marginals();
     }
 
+    //void bdd_mma::fix_variable(const size_t var, const bool value)
+    //{
+    //    return pimpl->mma.fix_variable(var, value);
+    //} 
+
 }

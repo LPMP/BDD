@@ -101,7 +101,7 @@ namespace LPMP {
             m = std::min(m, high_branch_node->m + high_cost);
         }
 
-        assert(std::isfinite(m));
+        //assert(std::isfinite(m));
     }
 
     inline void bdd_branch_node_vec::prepare_forward_step()
@@ -157,7 +157,7 @@ namespace LPMP {
             mm[1] = m + high_cost + high_branch_node->m;
         }
 
-        assert(std::isfinite(std::min(mm[0],mm[1])));
+        //assert(std::isfinite(std::min(mm[0],mm[1])));
         return mm;
     }
 
@@ -191,12 +191,16 @@ namespace LPMP {
 
     inline void bdd_branch_node_vec::set_marginal(std::array<float,2>* reduced_min_marginals, const std::array<float,2> avg_marginals)
     {
-        assert(std::isfinite(avg_marginals[0]));
-        assert(std::isfinite(avg_marginals[1]));
-        assert(std::isfinite(reduced_min_marginals[bdd_index][0]));
-        low_cost += -reduced_min_marginals[bdd_index][0] + avg_marginals[0];
-        assert(std::isfinite(reduced_min_marginals[bdd_index][1]));
-        high_cost += -reduced_min_marginals[bdd_index][1] + avg_marginals[1]; 
+        //assert(std::isfinite(avg_marginals[0]));
+        //assert(std::isfinite(avg_marginals[1]));
+        if(std::isfinite(reduced_min_marginals[bdd_index][0]))
+            low_cost += -reduced_min_marginals[bdd_index][0] + avg_marginals[0];
+        else
+            low_cost = std::numeric_limits<float>::infinity();
+        if(std::isfinite(reduced_min_marginals[bdd_index][1]))
+            high_cost += -reduced_min_marginals[bdd_index][1] + avg_marginals[1]; 
+        else
+            high_cost = std::numeric_limits<float>::infinity();
     }
 
     // bdds are stored in variable groups. Each variable group is a set of variables that can be processed in parallel.
@@ -236,6 +240,7 @@ namespace LPMP {
             void solve(const size_t max_iter, const double tolerance, const double time_limit); 
             double lower_bound() const { return lower_bound_; }
             void set_cost(const double c, const size_t var);
+            void fix_variable(const size_t var, const bool value);
 
             // get variable costs from bdd
             std::vector<float> get_costs(const size_t bdd_nr);
@@ -478,15 +483,15 @@ namespace LPMP {
         std::array<float,2> avg_margs = {0.0,0.0};
         for(size_t i=0; i<nr_marginals; ++i)
         {
-            assert(std::isfinite(marginals[i][0]));
-            assert(std::isfinite(marginals[i][1]));
+            //assert(std::isfinite(marginals[i][0])); // need not hold true after fix_variable
+            //assert(std::isfinite(marginals[i][1]));
             avg_margs[0] += marginals[i][0];
             avg_margs[1] += marginals[i][1];
         }
         avg_margs[0] /= float(nr_marginals);
         avg_margs[1] /= float(nr_marginals);
-        assert(std::isfinite(avg_margs[0]));
-        assert(std::isfinite(avg_margs[1]));
+        //assert(std::isfinite(avg_margs[0]));
+        //assert(std::isfinite(avg_margs[1]));
         return avg_margs;
     } 
 
@@ -702,6 +707,22 @@ namespace LPMP {
         }
     }
 
+    inline void bdd_mma_base_vec::fix_variable(const size_t var, const bool value)
+    {
+        assert(nr_bdds(var) > 0);
+
+        lower_bound_ = -std::numeric_limits<double>::infinity();
+        message_passing_state_ = message_passing_state::none;
+
+        for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
+        {
+            if(value == 0)
+                bdd_branch_nodes_[i].high_cost = std::numeric_limits<float>::infinity();
+            else
+                bdd_branch_nodes_[i].low_cost = std::numeric_limits<float>::infinity();
+        }
+    }
+
     template<typename ITERATOR>
         void bdd_mma_base_vec::update_arc_costs(const size_t first_node, ITERATOR begin, ITERATOR end)
         {
@@ -886,8 +907,8 @@ namespace LPMP {
             std::array<double,2> min_marginals_double[_nr_bdds];
             for(size_t i=0; i<_nr_bdds; ++i)
             {
-                assert(std::isfinite(min_marginals[i][0]));
-                assert(std::isfinite(min_marginals[i][1]));
+                //assert(std::isfinite(min_marginals[i][0]));
+                //assert(std::isfinite(min_marginals[i][1]));
                 min_marginals_double[i][0] = min_marginals[i][0];
                 min_marginals_double[i][1] = min_marginals[i][1];
             }
