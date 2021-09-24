@@ -204,7 +204,7 @@ void test_problem(const char* instance, const double expected_lb)
     for(size_t i=0; i<solver.nr_variables(); ++i)
         solver.set_cost(ilp.objective()[i], i);
 
-    for(size_t iter=0; iter<30; ++iter)
+    for(size_t iter=0; iter<100; ++iter)
     {
         solver.iteration();
         std::cout<<"\t Iteration: "<<iter<<", LB:"<<solver.lower_bound()<<"\n";

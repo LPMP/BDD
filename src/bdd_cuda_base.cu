@@ -61,12 +61,10 @@ namespace LPMP {
             for(size_t bdd_node_idx=0; bdd_node_idx < bdd_col.nr_bdd_nodes(bdd_idx); ++bdd_node_idx)
             {
                 const auto cur_instr = bdd_col(bdd_idx, bdd_node_idx + storage_offset);
-                if(cur_instr.is_terminal())
-                    continue;
                 const size_t var = cur_instr.index;
                 if(prev_var != var)
                 {
-                    assert(prev_var < var);
+                    assert(prev_var < var || cur_instr.is_terminal());
                     prev_var = var;
                     if(!cur_instr.is_topsink())
                         cur_hop_dist++; // both terminal nodes can have same hop distance.
@@ -108,6 +106,13 @@ namespace LPMP {
             num_vars_per_bdd.push_back(cur_bdd_variables.size());
             num_dual_variables_ += cur_bdd_variables.size();
         }
+        const size_t nr_vars = [&]() {
+            size_t max_v=0;
+            for(size_t bdd_nr=0; bdd_nr<bdd_col.nr_bdds(); ++bdd_nr)
+                max_v = std::max(max_v, bdd_col.min_max_variables(bdd_nr)[1]);
+            return max_v+1;
+        }();
+
         // copy to GPU
         // per BDD data:
         primal_variable_index_ = thrust::device_vector<int>(primal_variable_index.begin(), primal_variable_index.end());
@@ -162,6 +167,13 @@ namespace LPMP {
         thrust::inclusive_scan(cum_nr_bdd_nodes_per_hop_dist_.begin(), cum_nr_bdd_nodes_per_hop_dist_.end(), cum_nr_bdd_nodes_per_hop_dist_.begin());
 
         nr_vars_ = *thrust::max_element(primal_variable_index_.begin(), primal_variable_index_.end()) + 1;
+        assert(nr_vars_ == nr_vars);
+
+        for (int var = 0; var < nr_vars_; var++)
+        {
+            assert(primal_var_count.find(var) != primal_var_count.end());
+        }
+
         nr_bdds_ = bdd_col.nr_bdds();
         nr_bdd_nodes_ = lo_bdd_node_index.size();
 
@@ -290,6 +302,7 @@ namespace LPMP {
 
     void bdd_cuda_base::forward_run()
     {
+        MEASURE_FUNCTION_EXECUTION_TIME
         if (forward_state_valid_)
             return;
 
@@ -374,6 +387,7 @@ namespace LPMP {
 
     void bdd_cuda_base::backward_run()
     {
+        MEASURE_FUNCTION_EXECUTION_TIME
         if (backward_state_valid_)
             return;
 
@@ -423,6 +437,7 @@ namespace LPMP {
     std::tuple<thrust::device_vector<int>, thrust::device_vector<int>, thrust::device_vector<float>, thrust::device_vector<float>> 
         bdd_cuda_base::min_marginals_cuda()
     {
+        MEASURE_FUNCTION_EXECUTION_TIME
         forward_run();
         backward_run();
 
