@@ -61,6 +61,9 @@ namespace LPMP {
             for(size_t bdd_node_idx=0; bdd_node_idx < bdd_col.nr_bdd_nodes(bdd_idx); ++bdd_node_idx)
             {
                 const auto cur_instr = bdd_col(bdd_idx, bdd_node_idx + storage_offset);
+                //assert(!cur_instr.is_terminal());
+                if(cur_instr.is_terminal())
+                    continue;
                 const size_t var = cur_instr.index;
                 if(prev_var != var)
                 {

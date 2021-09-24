@@ -54,7 +54,7 @@ endif()
 add_library(bdd_cuda bdd_cuda.cpp)
 target_link_libraries(bdd_cuda LPMP-BDD)
 if(WITH_CUDA)
-    target_link_libraries(bdd_cuda bdd_cuda_base)
+    target_link_libraries(bdd_cuda bdd_cuda_parallel_mma_sorting)
 endif()
 
 add_library(bdd_fix bdd_fix.cpp)

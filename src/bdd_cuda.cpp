@@ -10,7 +10,9 @@ namespace LPMP {
         public:
             impl(BDD::bdd_collection& bdd_col);
 
+#ifdef WITH_CUDA
             bdd_cuda_parallel_mma_sorting pmma;
+#endif
     };
 
     bdd_cuda::impl::impl(BDD::bdd_collection& bdd_col)
