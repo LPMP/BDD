@@ -300,17 +300,17 @@ public:
        assert(p >= &data_[0]);
        assert(p < &data_[0] + data_.size());
 
-       const std::size_t first_index = first_index(p);
+       const size_t first_idx = first_index(p);
 
        // binary search for second index
        const std::size_t second_index = [&]() {
            std::size_t lower = 0;
-           std::size_t upper = (*this)[first_index].size()-1;
+           std::size_t upper = (*this)[first_idx].size()-1;
            while(lower <= upper) {
                const std::size_t middle = (lower+upper)/2;
-               if(&(*this)(first_index,middle) < p)
+               if(&(*this)(first_idx,middle) < p)
                    lower = middle+1; 
-               else if(&(*this)(first_index,middle) > p)
+               else if(&(*this)(first_idx,middle) > p)
                    upper = middle-1;
                else
                    return middle;
@@ -319,8 +319,8 @@ public:
            return std::numeric_limits<std::size_t>::max();
        }();
 
-       assert(p == &(*this)(first_index, second_index));
-       return {first_index, second_index};
+       assert(p == &(*this)(first_idx, second_index));
+       return {first_idx, second_index};
    }
 
    std::size_t index(const std::size_t first_index, const std::size_t second_index) const
