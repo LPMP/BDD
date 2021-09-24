@@ -40,7 +40,7 @@ namespace LPMP {
             // TODO: not fast!
             auto cost_it = cost_begin;
             for(size_t i=0; i<std::distance(cost_begin, cost_end); ++i, ++cost_it)
-                set_cost(i, *cost_it); 
+                set_cost(*cost_it, i); 
 
         }
 };

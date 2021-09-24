@@ -20,7 +20,8 @@ namespace LPMP {
         public:
             bdd_cuda_base(BDD::bdd_collection& bdd_col);
 
-            void initialize_costs();
+            void flush_forward_states();
+            void flush_backward_states();
 
             double lower_bound();
 
@@ -37,6 +38,19 @@ namespace LPMP {
             void forward_run(); //TODO: Should these functions be called from outside?
             void backward_run();
 
+            template<typename T>
+            void print_vector(const thrust::device_vector<T>& v, const char* name, const int num = 0)
+            {
+                std::cout<<name<<": ";
+                if (num == 0)
+                    thrust::copy(v.begin(), v.end(), std::ostream_iterator<T>(std::cout, " "));
+                else
+                {
+                    int size = std::distance(v.begin(), v.end());
+                    thrust::copy(v.begin(), v.begin() + std::min(size, num), std::ostream_iterator<T>(std::cout, " "));
+                }
+                std::cout<<"\n";
+            }
         protected:
             // Following arrays are allocated for each bdd node:
             thrust::device_vector<int> primal_variable_index_;
@@ -53,11 +67,13 @@ namespace LPMP {
             // Other information:
             size_t nr_vars_, nr_bdds_, nr_bdd_nodes_;
             int num_dual_variables_;
-            thrust::device_vector<int> primal_variable_counts_; // In how many BDDs does a primal variable appear.
             thrust::device_vector<int> cum_nr_bdd_nodes_per_hop_dist_; // How many BDD nodes (cumulative) are present with a given hop distance away from root node.
+            thrust::device_vector<int> num_bdds_per_var_; // In how many BDDs does a primal variable appear.
             thrust::device_vector<int> num_vars_per_bdd_;
+            thrust::device_vector<int> bdd_layer_width_; // Counts number of repetitions of a primal variable in a BDD. 
             thrust::device_vector<int> root_indices_, bot_sink_indices_, top_sink_indices_;
 
+        private:
             bool forward_state_valid_ = false;
             bool backward_state_valid_ = false;
 

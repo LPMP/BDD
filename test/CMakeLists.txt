@@ -72,4 +72,8 @@ if(WITH_CUDA)
     add_executable(test_bdd_cuda_base test_bdd_cuda_base.cpp)
     target_link_libraries(test_bdd_cuda_base LPMP-BDD bdd_cuda_base)
     add_test(test_bdd_cuda_base test_bdd_cuda_base)
+
+    add_executable(test_bdd_cuda_parallel_mma_sorting test_bdd_cuda_parallel_mma_sorting.cpp)
+    target_link_libraries(test_bdd_cuda_parallel_mma_sorting LPMP-BDD bdd_cuda_parallel_mma_sorting)
+    add_test(test_bdd_cuda_parallel_mma_sorting test_bdd_cuda_parallel_mma_sorting)
 endif()
