@@ -163,7 +163,7 @@ namespace LPMP {
         // Convert to cumulative:
         thrust::inclusive_scan(cum_nr_bdd_nodes_per_hop_dist_.begin(), cum_nr_bdd_nodes_per_hop_dist_.end(), cum_nr_bdd_nodes_per_hop_dist_.begin());
 
-        assert(nr_vars_ == *thrust::max_element(primal_variable_index_.begin(), primal_variable_index_.end()) + 1;);
+        assert(nr_vars_ == *thrust::max_element(primal_variable_index_.begin(), primal_variable_index_.end()) + 1);
 
         nr_bdds_ = bdd_col.nr_bdds();
         nr_bdd_nodes_ = lo_bdd_node_index.size();
