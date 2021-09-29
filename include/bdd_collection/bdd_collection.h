@@ -153,6 +153,7 @@ namespace BDD {
             size_t topsink_index(const size_t bdd_nr) const;
 
             size_t offset(const bdd_instruction& instr) const;
+            size_t offset(const size_t bdd_nr) const { assert(bdd_nr < nr_bdds()); return bdd_delimiters[bdd_nr]; }
             template<typename ITERATOR>
                 bool evaluate(const size_t bdd_nr, ITERATOR var_begin, ITERATOR var_end) const;
             template<typename ITERATOR>
