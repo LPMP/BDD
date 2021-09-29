@@ -68,6 +68,10 @@ add_executable(test_bdd_sequential_base test_bdd_sequential_base.cpp)
 target_link_libraries(test_bdd_sequential_base LPMP-BDD)
 add_test(test_bdd_sequential_base test_bdd_sequential_base)
 
+add_executable(test_bdd_parallel_mma test_bdd_parallel_mma.cpp)
+target_link_libraries(test_bdd_parallel_mma LPMP-BDD)
+add_test(test_bdd_parallel_mma test_bdd_parallel_mma)
+
 if(WITH_CUDA)
     add_executable(test_bdd_cuda_base test_bdd_cuda_base.cpp)
     target_link_libraries(test_bdd_cuda_base LPMP-BDD bdd_cuda_base)

@@ -83,6 +83,7 @@ namespace LPMP {
             {"mma_agg",bdd_solver_impl::mma_agg},
             {"anisotropic_mma",bdd_solver_impl::anisotropic_mma},
             {"mma_vec",bdd_solver_impl::mma_vec},
+            {"parallel_mma",bdd_solver_impl::parallel_mma},
             {"mma_cuda",bdd_solver_impl::mma_cuda}
         };
 
@@ -290,6 +291,11 @@ namespace LPMP {
         {
             solver = std::move(bdd_mma_vec(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
             std::cout << "constructed vectorized mma solver\n"; 
+        }
+        else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::parallel_mma)
+        {
+            solver = std::move(bdd_parallel_mma(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
+            std::cout << "constructed parallel mma solver\n"; 
         }
         else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::mma_cuda)
         {

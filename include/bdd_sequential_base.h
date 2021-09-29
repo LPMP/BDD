@@ -16,6 +16,7 @@ namespace LPMP {
     template<typename BDD_BRANCH_NODE>
         class bdd_sequential_base {
             public:
+            using value_type = typename BDD_BRANCH_NODE::value_type;
             //bdd_sequential_base(const bdd_storage& stor) { init(stor); }
             bdd_sequential_base(BDD::bdd_collection& bdd_col) { add_bdds(bdd_col); }
 
@@ -48,6 +49,13 @@ namespace LPMP {
 
             // make a step that is guaranteed to be non-decreasing in the lower bound.
             void diffusion_step(const two_dim_variable_array<std::array<float,2>>& min_margs, const float damping_step = 1.0);
+
+            // compute incremental min marginals and perform min-marginal averaging subsequently
+            void parallel_mma();
+            template<typename ITERATOR>
+                void forward_mms(ITERATOR mm_begin, const float omega);
+            template<typename ITERATOR>
+                void backward_mms(ITERATOR mm_begin, const float omega);
 
             // Both operations below are inverses of each other
             // Given elements in order bdd_nr/bdd_index, transpose to variable/bdd_index with same variable.
@@ -394,7 +402,7 @@ namespace LPMP {
             for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
             {
                 const auto [first,last] = bdd_index_range(bdd_nr, nr_variables(bdd_nr)-1);
-                float bdd_lb = std::numeric_limits<float>::infinity();
+                value_type bdd_lb = std::numeric_limits<value_type>::infinity();
                 for(size_t idx=first; idx<last; ++idx)
                 {
                     const auto mm = bdd_branch_nodes_[idx].min_marginals();
@@ -435,7 +443,7 @@ namespace LPMP {
             for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
             {
                 const auto [first,last] = bdd_index_range(bdd_nr, nr_variables(bdd_nr)-1);
-                float bdd_lb = std::numeric_limits<float>::infinity();
+                value_type bdd_lb = std::numeric_limits<value_type>::infinity();
                 for(size_t idx=first; idx<last; ++idx)
                 {
                     const auto mm = bdd_branch_nodes_[idx].min_marginals();
@@ -474,8 +482,11 @@ namespace LPMP {
             {
                 const auto [first_bdd_node, last_bdd_node] = bdd_range(bdd_nr);
                 // TODO: This only works for non-split BDDs with exactly one root node
+                {
                 assert(first_bdd_node + 1 == last_bdd_node);
                 bdd_branch_nodes_[first_bdd_node].m = 0.0;
+                }
+                // TODO: can be replaced by explicitly running over bdds of next variable
                 for(size_t i=first_bdd_node; i<last_bdd_node; ++i)
                     bdd_branch_nodes_[i].prepare_forward_step(); 
                 for(size_t i=first_bdd_node; i<last_bdd_node; ++i)
@@ -804,6 +815,153 @@ namespace LPMP {
                     } 
                 } 
             } 
+        }
+
+    template<typename BDD_BRANCH_NODE>
+    template<typename ITERATOR>
+        void bdd_sequential_base<BDD_BRANCH_NODE>::forward_mms(ITERATOR mm_begin, const float omega)
+        {
+            const double lb_before = lower_bound();
+            assert(omega > 0.0 && omega <= 1.0);
+            backward_run();
+
+            message_passing_state_ = message_passing_state::none;
+            lower_bound_state_ = lower_bound_state::invalid;
+
+            for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
+            {
+                {
+                    const auto [first_bdd_node, last_bdd_node] = bdd_index_range(bdd_nr, 0);
+                    assert(first_bdd_node + 1 == last_bdd_node);
+                    bdd_branch_nodes_[first_bdd_node].m = 0.0;
+                }
+
+                for(size_t bdd_idx=0; bdd_idx<nr_variables(bdd_nr); ++bdd_idx)
+                {
+                    const auto [first_bdd_node, last_bdd_node] = bdd_index_range(bdd_nr, bdd_idx);
+                    std::array<value_type,2> cur_mm = {std::numeric_limits<value_type>::infinity(), std::numeric_limits<value_type>::infinity()};
+                    for(size_t i=first_bdd_node; i<last_bdd_node; ++i)
+                    {
+                        const auto bdd_mm = bdd_branch_nodes_[i].min_marginals();
+                        cur_mm[0] = std::min(bdd_mm[0], cur_mm[0]);
+                        cur_mm[1] = std::min(bdd_mm[1], cur_mm[1]);
+                    }
+
+                    const size_t var = variable(bdd_nr, bdd_idx);
+                    if(cur_mm[0] < cur_mm[1])
+                        mm_begin[var][1] += omega*(cur_mm[1] - cur_mm[0]);
+                    else
+                        mm_begin[var][0] += omega*(cur_mm[0] - cur_mm[1]);
+                    assert(mm_begin[var][0] >= 0.0);
+                    assert(mm_begin[var][1] >= 0.0);
+
+                    for(size_t i=first_bdd_node; i<last_bdd_node; ++i)
+                        if(cur_mm[0] < cur_mm[1])
+                            bdd_branch_nodes_[i].high_cost += omega*(cur_mm[0] - cur_mm[1]);
+                        else
+                            bdd_branch_nodes_[i].low_cost += omega*(cur_mm[1] - cur_mm[0]);
+
+                    if(bdd_idx+1<nr_variables(bdd_nr))
+                    {
+                        const auto [next_first_bdd_node, next_last_bdd_node] = bdd_index_range(bdd_nr, bdd_idx+1);
+                        for(size_t i=next_first_bdd_node; i<next_last_bdd_node; ++i)
+                            bdd_branch_nodes_[i].m = std::numeric_limits<value_type>::infinity(); 
+                    }
+                    for(size_t i=first_bdd_node; i<last_bdd_node; ++i)
+                        bdd_branch_nodes_[i].forward_step(); 
+                }
+            }
+
+            message_passing_state_ = message_passing_state::after_forward_pass;
+
+            const double lb_after = lower_bound();
+            std::cout << "lb before forward mms computation: " << lb_before << ", after: " << lb_after << "\n";
+        }
+
+    template<typename BDD_BRANCH_NODE>
+    template<typename ITERATOR>
+        void bdd_sequential_base<BDD_BRANCH_NODE>::backward_mms(ITERATOR mm_begin, const float omega)
+        {
+            const double lb_before = lower_bound();
+            assert(omega > 0.0 && omega <= 1.0);
+            forward_run();
+
+            message_passing_state_ = message_passing_state::none;
+            lower_bound_state_ = lower_bound_state::invalid;
+
+            for(std::ptrdiff_t bdd_nr=nr_bdds()-1; bdd_nr>=0; --bdd_nr)
+            {
+                for(std::ptrdiff_t bdd_idx=nr_variables(bdd_nr)-1; bdd_idx>=0; --bdd_idx)
+                {
+                    const auto [first_bdd_node, last_bdd_node] = bdd_index_range(bdd_nr, bdd_idx);
+                    std::array<value_type,2> cur_mm = {std::numeric_limits<value_type>::infinity(), std::numeric_limits<value_type>::infinity()};
+                    for(std::ptrdiff_t i=std::ptrdiff_t(last_bdd_node)-1; i>=std::ptrdiff_t(first_bdd_node); --i)
+                    {
+                        const auto bdd_mm = bdd_branch_nodes_[i].min_marginals();
+                        cur_mm[0] = std::min(bdd_mm[0], cur_mm[0]);
+                        cur_mm[1] = std::min(bdd_mm[1], cur_mm[1]);
+                    }
+
+                    const size_t var = variable(bdd_nr, bdd_idx);
+                    if(cur_mm[0] < cur_mm[1])
+                        mm_begin[var][1] += omega*(cur_mm[1] - cur_mm[0]);
+                    else
+                        mm_begin[var][0] += omega*(cur_mm[0] - cur_mm[1]);
+                    assert(mm_begin[var][0] >= 0.0);
+                    assert(mm_begin[var][1] >= 0.0);
+
+                    for(std::ptrdiff_t i=std::ptrdiff_t(last_bdd_node)-1; i>=std::ptrdiff_t(first_bdd_node); --i)
+                    {
+                        if(cur_mm[0] < cur_mm[1])
+                            bdd_branch_nodes_[i].high_cost += omega*(cur_mm[0] - cur_mm[1]);
+                        else
+                            bdd_branch_nodes_[i].low_cost += omega*(cur_mm[1] - cur_mm[0]);
+                    }
+
+                    for(std::ptrdiff_t i=std::ptrdiff_t(last_bdd_node)-1; i>=std::ptrdiff_t(first_bdd_node); --i)
+                        bdd_branch_nodes_[i].backward_step(); 
+                }
+            }
+            message_passing_state_ = message_passing_state::after_backward_pass;
+
+            const double lb_after = lower_bound();
+            std::cout << "lb before backward mms computation: " << lb_before << ", after: " << lb_after << "\n";
+        }
+
+    template<typename BDD_BRANCH_NODE>
+        void bdd_sequential_base<BDD_BRANCH_NODE>::parallel_mma()
+        {
+            std::vector<std::array<value_type,2>> mms(nr_variables(), {0.0,0.0});
+            forward_mms(mms.begin(), 0.5);
+            backward_mms(mms.begin(), 0.5);
+
+            // average min-marginals
+            for(size_t var=0; var<nr_variables(); ++var)
+            {
+                assert(nr_bdds(var) > 0);
+                mms[var][0] /= value_type(nr_bdds(var));
+                mms[var][1] /= value_type(nr_bdds(var));
+            }
+
+            message_passing_state_ = message_passing_state::none;
+            lower_bound_state_ = lower_bound_state::invalid; 
+
+            // distribute min-marginals
+            for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
+            {
+                for(size_t bdd_idx=0; bdd_idx<nr_variables(bdd_nr); ++bdd_idx)
+                {
+                    const auto [first_bdd_node, last_bdd_node] = bdd_index_range(bdd_nr, bdd_idx);
+                    const size_t var = variable(bdd_nr, bdd_idx);
+                    for(size_t i=first_bdd_node; i<last_bdd_node; ++i)
+                    {
+                        assert(mms[var][0] >= 0.0);
+                        assert(mms[var][1] >= 0.0);
+                        bdd_branch_nodes_[i].low_cost += mms[var][0];
+                        bdd_branch_nodes_[i].high_cost += mms[var][1];
+                    }
+                }
+            }
         }
 
     template<typename BDD_BRANCH_NODE>
