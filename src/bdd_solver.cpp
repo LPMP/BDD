@@ -317,6 +317,7 @@ namespace LPMP {
 
     void bdd_solver::solve()
     {
+        MEASURE_FUNCTION_EXECUTION_TIME;
         if(options.time_limit < 0)
         {
             std::cout << "Time limit exceeded." << std::endl;

@@ -31,7 +31,8 @@ int main(int argc, char** argv)
     solver.backward_run();
 
     std::vector<std::array<float,2>> mms(ilp.nr_variables(), {0.0,0.0});
-    solver.forward_mms(mms.begin(), 0.5);
+    for(size_t bdd_nr=0; bdd_nr<solver.nr_bdds(); ++bdd_nr)
+        solver.forward_mm(bdd_nr, 0.5, mms.begin());
 
     for(size_t i=0; i<mms.size(); ++i)
     {
