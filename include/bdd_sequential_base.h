@@ -915,7 +915,7 @@ namespace LPMP {
         {
             backward_run();
             std::vector<std::array<value_type,2>> mms(nr_variables(), {0.0,0.0});
-#pragma omp parallel for schedule(guided,128)
+#pragma omp parallel for schedule(static,256)
             for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
             {
                 forward_mm(bdd_nr, 0.5, mms.begin());
@@ -935,7 +935,7 @@ namespace LPMP {
             lower_bound_state_ = lower_bound_state::invalid; 
 
             // distribute min-marginals
-#pragma omp parallel for schedule(guided,128)
+#pragma omp parallel for schedule(static,256)
             for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
             {
                 for(size_t bdd_idx=0; bdd_idx<nr_variables(bdd_nr); ++bdd_idx)
