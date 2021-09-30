@@ -320,7 +320,7 @@ namespace LPMP {
         MEASURE_FUNCTION_EXECUTION_TIME;
         if(options.time_limit < 0)
         {
-            std::cout << "Time limit exceeded." << std::endl;
+            std::cout << "[bdd_solver] Time limit exceeded." << std::endl;
             return;
         }
         std::visit([&](auto&& s) {
@@ -328,7 +328,7 @@ namespace LPMP {
                 const auto start_time = std::chrono::steady_clock::now();
                 double lb_prev = s.lower_bound();
                 double lb_post = lb_prev;
-                std::cout << "initial lower bound = " << lb_prev;
+                std::cout << "[bdd_solver] initial lower bound = " << lb_prev;
                 auto time = std::chrono::steady_clock::now();
                 std::cout << ", time = " << (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000 << " s";
                 std::cout << "\n";
@@ -337,23 +337,23 @@ namespace LPMP {
                     s.iteration();
                     lb_prev = lb_post;
                     lb_post = s.lower_bound();
-                    std::cout << "iteration " << iter << ", lower bound = " << lb_post;
+                    std::cout << "[bdd_solver] iteration " << iter << ", lower bound = " << lb_post;
                     time = std::chrono::steady_clock::now();
                     double time_spent = (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000;
                      std::cout << ", time = " << time_spent << " s";
                      std::cout << "\n";
                      if (time_spent > options.time_limit)
                      {
-                        std::cout << "Time limit reached." << std::endl;
+                        std::cout << "[bdd_solver] Time limit reached." << std::endl;
                         break;
                      }
                      if (std::abs(lb_prev-lb_post) < std::abs(options.tolerance*lb_prev))
                      {
-                         std::cout << "Relative progress less than tolerance (" << options.tolerance << ")\n";
+                         std::cout << "[bdd_solver] Relative progress less than tolerance (" << options.tolerance << ")\n";
                          break;
                      }
                 }
-                std::cout << "final lower bound = " << s.lower_bound() << "\n"; 
+                std::cout << "[bdd_solver] final lower bound = " << s.lower_bound() << "\n"; 
                 }, *solver);
 
         // TODO: improve, do periodic tightening

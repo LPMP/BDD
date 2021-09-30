@@ -8,6 +8,7 @@
 #include <fstream>
 #include <cstdlib>
 #include <filesystem>
+#include "time_measure_util.h"
 
 namespace LPMP {
 
@@ -35,6 +36,7 @@ namespace LPMP {
 
             void forward_run();
             void backward_run();
+            void backward_run(const size_t bdd_nr);
             two_dim_variable_array<std::array<float,2>> min_marginals();
             using min_marginal_type = Eigen::Matrix<typename BDD_BRANCH_NODE::value_type, Eigen::Dynamic, 2>;
             std::tuple<min_marginal_type, std::vector<char>> min_marginals_stacked();
@@ -478,7 +480,7 @@ namespace LPMP {
             if(message_passing_state_ == message_passing_state::after_forward_pass)
                 return;
             message_passing_state_ = message_passing_state::none;
-#pragma omp parallel for schedule(guided,128)
+#pragma omp parallel for schedule(static,512)
             for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
             {
                 const auto [first_bdd_node, last_bdd_node] = bdd_range(bdd_nr);
@@ -497,18 +499,23 @@ namespace LPMP {
         }
 
     template<typename BDD_BRANCH_NODE>
+        void bdd_sequential_base<BDD_BRANCH_NODE>::backward_run(const size_t bdd_nr)
+        {
+            const auto [first_bdd_node, last_bdd_node] = bdd_range(bdd_nr);
+            for(std::ptrdiff_t i=last_bdd_node-1; i>=std::ptrdiff_t(first_bdd_node); --i)
+                bdd_branch_nodes_[i].backward_step(); 
+        }
+
+    template<typename BDD_BRANCH_NODE>
         void bdd_sequential_base<BDD_BRANCH_NODE>::backward_run()
         {
+            MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME2("parallel mma backward_run");
             if(message_passing_state_ == message_passing_state::after_backward_pass)
                 return;
             message_passing_state_ = message_passing_state::none;
-#pragma omp parallel for schedule(guided,128)
+#pragma omp parallel for schedule(static,512)
             for(std::ptrdiff_t bdd_nr=nr_bdds()-1; bdd_nr>=0; --bdd_nr)
-            {
-                const auto [first_bdd_node, last_bdd_node] = bdd_range(bdd_nr);
-                for(std::ptrdiff_t i=last_bdd_node-1; i>=std::ptrdiff_t(first_bdd_node); --i)
-                    bdd_branch_nodes_[i].backward_step(); 
-            }
+                backward_run(bdd_nr);
 
             message_passing_state_ = message_passing_state::after_backward_pass;
         }
@@ -736,7 +743,7 @@ namespace LPMP {
             message_passing_state_ = message_passing_state::none;
             assert(delta.size() == nr_bdds());
             const auto delta_t = transpose_to_bdd_order(delta);
-#pragma omp parallel for schedule(guided,128)
+#pragma omp parallel for schedule(static,512)
             for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
             {
                 for(size_t bdd_idx=0; bdd_idx<nr_variables(bdd_nr); ++bdd_idx)
@@ -915,14 +922,20 @@ namespace LPMP {
         {
             backward_run();
             std::vector<std::array<value_type,2>> mms(nr_variables(), {0.0,0.0});
+            {
+                MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME2("parallel mma incremental marginal computation");
 #pragma omp parallel for schedule(static,256)
             for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
             {
+                //backward_run(bdd_nr);
                 forward_mm(bdd_nr, 0.5, mms.begin());
                 backward_mm(bdd_nr, 0.5, mms.begin());
             }
+            }
 
             // average min-marginals
+            {
+                MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME2("parallel mma marginal averaging");
 #pragma omp parallel for
             for(size_t var=0; var<nr_variables(); ++var)
             {
@@ -930,11 +943,14 @@ namespace LPMP {
                 mms[var][0] /= value_type(nr_bdds(var));
                 mms[var][1] /= value_type(nr_bdds(var));
             }
+            }
 
             message_passing_state_ = message_passing_state::none;
             lower_bound_state_ = lower_bound_state::invalid; 
 
             // distribute min-marginals
+            {
+                MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME2("parallel mma marginal distribution");
 #pragma omp parallel for schedule(static,256)
             for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
             {
@@ -950,6 +966,7 @@ namespace LPMP {
                         bdd_branch_nodes_[i].high_cost += mms[var][1];
                     }
                 }
+            }
             }
         }
 
