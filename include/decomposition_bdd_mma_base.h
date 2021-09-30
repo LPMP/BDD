@@ -22,6 +22,7 @@ namespace LPMP {
             void set_cost(const double c, const size_t var);
             void backward_run();
             void solve(const size_t max_iter, const double tolerance, const double time_limit);
+            void iteration();
             double lower_bound();
 
             two_dim_variable_array<std::array<double,2>> min_marginals();

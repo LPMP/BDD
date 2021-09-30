@@ -4,11 +4,11 @@
 #include "ILP_parser.h"
 #include "bdd_preprocessor.h"
 #include "bdd_storage.h"
-#include "bdd_mma.h"
-#include "bdd_mma_srmp.h"
-#include "bdd_mma_agg.h"
+//#include "bdd_mma.h"
+//#include "bdd_mma_srmp.h"
+//#include "bdd_mma_agg.h"
 #include "decomposition_bdd_mma.h"
-#include "bdd_mma_anisotropic.h"
+//#include "bdd_mma_anisotropic.h"
 #include "bdd_mma_vec.h"
 #include "bdd_cuda.h"
 #include "bdd_parallel_mma.h"
@@ -41,7 +41,7 @@ namespace LPMP {
         size_t max_iter = 1000;
         double tolerance = 1e-6;
         double time_limit = 3600;
-        enum class bdd_solver_impl { mma, mma_srmp, mma_agg, decomposition_mma, anisotropic_mma, mma_vec, mma_cuda, parallel_mma } bdd_solver_impl_;
+        enum class bdd_solver_impl { sequential_mma, decomposition_mma, mma_cuda, parallel_mma } bdd_solver_impl_;
         decomposition_mma_options decomposition_mma_options_;
         bool solution_statistics = false;
 
@@ -77,7 +77,7 @@ namespace LPMP {
             void construct_solver(bdd_storage& bs);
 
             bdd_solver_options options;
-            using solver_type = std::variant<bdd_mma, bdd_mma_srmp, bdd_mma_agg, decomposition_bdd_mma, bdd_mma_anisotropic, bdd_mma_vec, bdd_cuda, bdd_parallel_mma>;
+            using solver_type = std::variant<bdd_mma_vec, decomposition_bdd_mma, bdd_cuda, bdd_parallel_mma>;
             std::optional<solver_type> solver;
             std::vector<double> costs;
             std::optional<bdd_fix> primal_heuristic;

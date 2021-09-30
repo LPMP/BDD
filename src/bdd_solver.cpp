@@ -75,14 +75,11 @@ namespace LPMP {
         app.add_option("-l, --time_limit", time_limit, "time limit in seconds, default value = 3600")
             ->check(CLI::PositiveNumber);
 
-        //enum class bdd_solver_impl { mma, mma_srmp, mma_agg, decomposition_mma, anisotropic_mma, mma_vec } bdd_solver_impl_;
         std::unordered_map<std::string, bdd_solver_impl> bdd_solver_impl_map{
-            {"mma",bdd_solver_impl::mma},
+            {"mma",bdd_solver_impl::sequential_mma},
+            {"mma_vec",bdd_solver_impl::sequential_mma}, // legacy name
+            {"sequential_mma",bdd_solver_impl::sequential_mma},
             {"decomposition_mma",bdd_solver_impl::decomposition_mma},
-            {"mma_srmp",bdd_solver_impl::mma_srmp},
-            {"mma_agg",bdd_solver_impl::mma_agg},
-            {"anisotropic_mma",bdd_solver_impl::anisotropic_mma},
-            {"mma_vec",bdd_solver_impl::mma_vec},
             {"parallel_mma",bdd_solver_impl::parallel_mma},
             {"mma_cuda",bdd_solver_impl::mma_cuda}
         };
@@ -262,35 +259,15 @@ namespace LPMP {
             }
             exit(0);
         }
-        else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::mma)
+        else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::sequential_mma)
         {
-            solver = std::move(bdd_mma(stor, options.ilp.objective().begin(), options.ilp.objective().end()));
-            std::cout << "constructed mma solver\n";
+            solver = std::move(bdd_mma_vec(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
+            std::cout << "constructed sequential mma solver\n"; 
         } 
-        else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::mma_srmp)
-        {
-            solver = std::move(bdd_mma_srmp(stor, options.ilp.objective().begin(), options.ilp.objective().end()));
-            std::cout << "constructed srmp mma solver\n";
-        }
-        else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::mma_agg)
-        {
-            solver = std::move(bdd_mma_agg(stor, options.ilp.objective().begin(), options.ilp.objective().end()));
-            std::cout << "constructed aggressive mma solver\n";
-        }
         else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::decomposition_mma)
         {
             solver = std::move(decomposition_bdd_mma(stor, options.ilp.objective().begin(), options.ilp.objective().end(), options.decomposition_mma_options_));
             std::cout << "constructed decomposition mma solver\n";
-        }
-        else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::anisotropic_mma)
-        {
-            solver = std::move(bdd_mma_anisotropic(stor, options.ilp.objective().begin(), options.ilp.objective().end()));
-            std::cout << "constructed anisotropic mma solver\n"; 
-        }
-        else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::mma_vec)
-        {
-            solver = std::move(bdd_mma_vec(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
-            std::cout << "constructed vectorized mma solver\n"; 
         }
         else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::parallel_mma)
         {
@@ -346,7 +323,36 @@ namespace LPMP {
             return;
         }
         std::visit([&](auto&& s) {
-                s.solve(options.max_iter, options.tolerance, options.time_limit);
+
+                const auto start_time = std::chrono::steady_clock::now();
+                double lb_prev = s.lower_bound();
+                double lb_post = lb_prev;
+                std::cout << "initial lower bound = " << lb_prev;
+                auto time = std::chrono::steady_clock::now();
+                std::cout << ", time = " << (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000 << " s";
+                std::cout << "\n";
+                for(size_t iter=0; iter<options.max_iter; ++iter)
+                {
+                    s.iteration();
+                    lb_prev = lb_post;
+                    lb_post = s.lower_bound();
+                    std::cout << "iteration " << iter << ", lower bound = " << lb_post;
+                    time = std::chrono::steady_clock::now();
+                    double time_spent = (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000;
+                     std::cout << ", time = " << time_spent << " s";
+                     std::cout << "\n";
+                     if (time_spent > options.time_limit)
+                     {
+                        std::cout << "Time limit reached." << std::endl;
+                        break;
+                     }
+                     if (std::abs(lb_prev-lb_post) < std::abs(options.tolerance*lb_prev))
+                     {
+                         std::cout << "Relative progress less than tolerance (" << options.tolerance << ")\n";
+                         break;
+                     }
+                }
+                std::cout << "final lower bound = " << s.lower_bound() << "\n"; 
                 }, *solver);
 
         // TODO: improve, do periodic tightening
@@ -356,7 +362,8 @@ namespace LPMP {
             {
             tighten();
             std::visit([&](auto&& s) {
-                    s.solve(10, 1e-9, options.time_limit);
+                    for(size_t iter=0; iter<10; ++iter)
+                        s.iteration();
                     }, *solver);
             }
         }

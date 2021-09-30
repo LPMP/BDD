@@ -186,6 +186,25 @@ namespace LPMP {
         std::cout << "final lower bound = " << lower_bound() << "\n"; 
     }
 
+    void decomposition_bdd_base::iteration()
+    {
+#pragma omp parallel for
+            for(size_t t=0; t<intervals.nr_intervals(); ++t)
+            {
+                min_marginal_averaging_forward(t);
+            }
+#pragma omp parallel for
+            for(size_t t=0; t<intervals.nr_intervals(); ++t)
+            {
+                min_marginal_averaging_backward(t);
+            }
+#pragma omp parallel for
+            for(size_t t=0; t<intervals.nr_intervals(); ++t)
+            {
+                bdd_bases[t].base.compute_lower_bound();
+            }
+    }
+
     void decomposition_bdd_base::bdd_sub_base::read_in_Lagrange_multipliers(typename decomposition_bdd_base::Lagrange_multiplier_queue& q)
     {
         //std::cout << "read in queue of size " << q.queue.size() << "\n";

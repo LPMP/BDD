@@ -52,18 +52,9 @@ namespace LPMP {
         pimpl->base.backward_run();
     }
 
-    void bdd_parallel_mma::solve(const size_t max_iter, const double tolerance, const double time_limit)
+    void bdd_parallel_mma::iteration()
     {
-        MEASURE_FUNCTION_EXECUTION_TIME;
-        const double initial_lb = lower_bound();
-        std::cout << "Initial lb " << initial_lb << "\n";
-        for(size_t i=0; i<max_iter; ++i)
-        {
-            pimpl->base.parallel_mma();
-            const double lb = lower_bound();
-            std::cout << "Iteration " << i << ", lower bound " << lb << "\n";
-        }
-        // TODO: exit early
+        pimpl->base.parallel_mma();
     }
 
     double bdd_parallel_mma::lower_bound()

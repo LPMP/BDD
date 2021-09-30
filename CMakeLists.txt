@@ -28,9 +28,10 @@ target_include_directories(LPMP-BDD INTERFACE external/thrust/)
 target_include_directories(LPMP-BDD INTERFACE external/thrust/dependencies/cub)
 
 find_package(OpenMP)
-if(OpenMP_Found)
+if(OpenMP_CXX_FOUND)
     message("Compile with OpenMP")
-    target_link_libraries(LPMP-BDD INTERFACE ${OpenMP_CXX_LIBRARIES})
+    target_link_libraries(LPMP-BDD INTERFACE OpenMP::OpenMP_CXX)
+
 else()
     message("No OpenMP found")
 endif()

@@ -478,6 +478,7 @@ namespace LPMP {
             if(message_passing_state_ == message_passing_state::after_forward_pass)
                 return;
             message_passing_state_ = message_passing_state::none;
+#pragma omp parallel for schedule(guided,128)
             for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
             {
                 const auto [first_bdd_node, last_bdd_node] = bdd_range(bdd_nr);
@@ -501,7 +502,7 @@ namespace LPMP {
             if(message_passing_state_ == message_passing_state::after_backward_pass)
                 return;
             message_passing_state_ = message_passing_state::none;
-//#pragma omp parallel for schedule(guided,128)
+#pragma omp parallel for schedule(guided,128)
             for(std::ptrdiff_t bdd_nr=nr_bdds()-1; bdd_nr>=0; --bdd_nr)
             {
                 const auto [first_bdd_node, last_bdd_node] = bdd_range(bdd_nr);
@@ -821,13 +822,13 @@ namespace LPMP {
     template<typename ITERATOR>
         void bdd_sequential_base<BDD_BRANCH_NODE>::forward_mms(ITERATOR mm_begin, const float omega)
         {
-            const double lb_before = lower_bound();
             assert(omega > 0.0 && omega <= 1.0);
             backward_run();
 
             message_passing_state_ = message_passing_state::none;
             lower_bound_state_ = lower_bound_state::invalid;
 
+#pragma omp parallel for schedule(guided,128)
             for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
             {
                 {
@@ -849,8 +850,10 @@ namespace LPMP {
 
                     const size_t var = variable(bdd_nr, bdd_idx);
                     if(cur_mm[0] < cur_mm[1])
+#pragma omp atomic
                         mm_begin[var][1] += omega*(cur_mm[1] - cur_mm[0]);
                     else
+#pragma omp atomic
                         mm_begin[var][0] += omega*(cur_mm[0] - cur_mm[1]);
                     assert(mm_begin[var][0] >= 0.0);
                     assert(mm_begin[var][1] >= 0.0);
@@ -873,22 +876,19 @@ namespace LPMP {
             }
 
             message_passing_state_ = message_passing_state::after_forward_pass;
-
-            const double lb_after = lower_bound();
-            std::cout << "lb before forward mms computation: " << lb_before << ", after: " << lb_after << "\n";
         }
 
     template<typename BDD_BRANCH_NODE>
     template<typename ITERATOR>
         void bdd_sequential_base<BDD_BRANCH_NODE>::backward_mms(ITERATOR mm_begin, const float omega)
         {
-            const double lb_before = lower_bound();
             assert(omega > 0.0 && omega <= 1.0);
             forward_run();
 
             message_passing_state_ = message_passing_state::none;
             lower_bound_state_ = lower_bound_state::invalid;
 
+#pragma omp parallel for schedule(guided,128)
             for(std::ptrdiff_t bdd_nr=nr_bdds()-1; bdd_nr>=0; --bdd_nr)
             {
                 for(std::ptrdiff_t bdd_idx=nr_variables(bdd_nr)-1; bdd_idx>=0; --bdd_idx)
@@ -904,8 +904,10 @@ namespace LPMP {
 
                     const size_t var = variable(bdd_nr, bdd_idx);
                     if(cur_mm[0] < cur_mm[1])
+#pragma omp atomic
                         mm_begin[var][1] += omega*(cur_mm[1] - cur_mm[0]);
                     else
+#pragma omp atomic
                         mm_begin[var][0] += omega*(cur_mm[0] - cur_mm[1]);
                     assert(mm_begin[var][0] >= 0.0);
                     assert(mm_begin[var][1] >= 0.0);
@@ -923,9 +925,6 @@ namespace LPMP {
                 }
             }
             message_passing_state_ = message_passing_state::after_backward_pass;
-
-            const double lb_after = lower_bound();
-            std::cout << "lb before backward mms computation: " << lb_before << ", after: " << lb_after << "\n";
         }
 
     template<typename BDD_BRANCH_NODE>
@@ -936,6 +935,7 @@ namespace LPMP {
             backward_mms(mms.begin(), 0.5);
 
             // average min-marginals
+#pragma omp parallel for
             for(size_t var=0; var<nr_variables(); ++var)
             {
                 assert(nr_bdds(var) > 0);
@@ -947,6 +947,7 @@ namespace LPMP {
             lower_bound_state_ = lower_bound_state::invalid; 
 
             // distribute min-marginals
+#pragma omp parallel for schedule(guided,128)
             for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
             {
                 for(size_t bdd_idx=0; bdd_idx<nr_variables(bdd_nr); ++bdd_idx)

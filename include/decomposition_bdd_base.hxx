@@ -24,8 +24,8 @@ namespace LPMP {
 
             void set_cost(const double c, const size_t var);
             void backward_run();
-            void iteration();
             void solve(const size_t max_iter, const double tolerance);
+            void iteration();
             double lower_bound();
             std::vector<double> total_min_marginals();
 
@@ -269,31 +269,18 @@ namespace LPMP {
 
     void decomposition_bdd_base::iteration()
     {
-        throw std::runtime_error("not supported\n");
         std::vector<std::thread> threads;
-        threads.reserve(intervals.nr_intervals());
+        auto mma = [&](const size_t thread_nr) {
+            this->min_marginal_averaging_forward(thread_nr);
+            this->min_marginal_averaging_backward(thread_nr);
+            bdd_bases[thread_nr].base.compute_lower_bound();
+        };
+
         for(size_t t=0; t<intervals.nr_intervals(); ++t)
-        {
-            auto forward_mma = [&](const size_t thread_nr) {
-                this->min_marginal_averaging_forward(thread_nr);
-                this->min_marginal_averaging_backward(thread_nr);
-                bdd_bases[thread_nr].base.compute_lower_bound();
-                //std::cout << "lower bound for interval " << thread_nr << ": " << bdd_bases[thread_nr].base.lower_bound() << "\n";
-            };
-            threads.push_back(std::thread(forward_mma, t)); 
-        }
+            threads.push_back(std::thread(mma, t));
 
         for(auto& t : threads)
             t.join(); 
-
-        /*
-        for(size_t t=0; t<intervals.nr_intervals(); ++t)
-                this->min_marginal_averaging_forward(t);
-        for(std::ptrdiff_t t=intervals.nr_intervals()-1; t>=0; --t)
-                this->min_marginal_averaging_backward(t);
-        for(std::ptrdiff_t t=intervals.nr_intervals()-1; t>=0; --t)
-                bdd_bases[t].base.compute_lower_bound();
-                */
     }
 
     void decomposition_bdd_base::bdd_sub_base::read_in_Lagrange_multipliers_from_queue(std::mutex& queue_mutex, std::queue<typename decomposition_bdd_base::bdd_sub_base::Lagrange_multiplier>& queue)

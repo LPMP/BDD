@@ -36,10 +36,9 @@ namespace LPMP {
         return pimpl->backward_run();
     }
 
-    void decomposition_bdd_mma::solve(const size_t max_iter, const double tolerance, const double time_limit)
+    void decomposition_bdd_mma::iteration()
     {
-        MEASURE_FUNCTION_EXECUTION_TIME;
-        pimpl->solve(max_iter, tolerance, time_limit);
+        pimpl->iteration();
     }
 
     double decomposition_bdd_mma::lower_bound()

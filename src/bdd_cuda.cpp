@@ -62,11 +62,10 @@ namespace LPMP {
 #endif
     }
 
-    void bdd_cuda::solve(const size_t max_iter, const double tolerance, const double time_limit)
+    void bdd_cuda::iteration()
     {
 #ifdef WITH_CUDA
-        MEASURE_FUNCTION_EXECUTION_TIME;
-        pimpl->pmma.solve(max_iter, tolerance, time_limit);
+        pimpl->pmma.iteration();
 #endif
     }
 

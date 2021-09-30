@@ -19,7 +19,7 @@ namespace LPMP {
                 void set_costs(ITERATOR cost_begin, ITERATOR cost_end);
             double lower_bound();
             two_dim_variable_array<std::array<double,2>> min_marginals();
-            void solve(const size_t max_iter, const double tolerance, const double time_limit);
+            void iteration();
             void backward_run(); 
         private:
 
