@@ -42,6 +42,7 @@ namespace LPMP {
         double tolerance = 1e-6;
         double time_limit = 3600;
         enum class bdd_solver_impl { sequential_mma, decomposition_mma, mma_cuda, parallel_mma } bdd_solver_impl_;
+        enum class bdd_solver_precision { single_prec, double_prec } bdd_solver_precision_;
         decomposition_mma_options decomposition_mma_options_;
         bool solution_statistics = false;
 
@@ -77,7 +78,7 @@ namespace LPMP {
             void construct_solver(bdd_storage& bs);
 
             bdd_solver_options options;
-            using solver_type = std::variant<bdd_mma_vec, decomposition_bdd_mma, bdd_cuda, bdd_parallel_mma>;
+            using solver_type = std::variant<bdd_mma_vec, decomposition_bdd_mma, bdd_cuda, bdd_parallel_mma<float>, bdd_parallel_mma<double>>;
             std::optional<solver_type> solver;
             std::vector<double> costs;
             std::optional<bdd_fix> primal_heuristic;

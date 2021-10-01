@@ -38,25 +38,25 @@ namespace LPMP {
             void forward_run();
             void backward_run();
             void backward_run(const size_t bdd_nr);
-            two_dim_variable_array<std::array<float,2>> min_marginals();
+            two_dim_variable_array<std::array<value_type,2>> min_marginals();
             using min_marginal_type = Eigen::Matrix<typename BDD_BRANCH_NODE::value_type, Eigen::Dynamic, 2>;
             std::tuple<min_marginal_type, std::vector<char>> min_marginals_stacked();
 
             template<typename COST_ITERATOR>
                 void set_costs(COST_ITERATOR begin, COST_ITERATOR end);
-            void update_costs(const two_dim_variable_array<std::array<float,2>>& delta);
+            void update_costs(const two_dim_variable_array<std::array<value_type,2>>& delta);
             void update_costs(const min_marginal_type& delta);
 
             vector_type get_costs();
             void update_costs(const vector_type& delta);
 
             // make a step that is guaranteed to be non-decreasing in the lower bound.
-            void diffusion_step(const two_dim_variable_array<std::array<float,2>>& min_margs, const float damping_step = 1.0);
+            void diffusion_step(const two_dim_variable_array<std::array<value_type,2>>& min_margs, const value_type damping_step = 1.0);
 
             // compute incremental min marginals and perform min-marginal averaging subsequently
             void parallel_mma();
-            void forward_mm(const size_t bdd_nr, const float omega, std::vector<std::array<std::atomic<float>,2>>& mm_begin);
-            void backward_mm(const size_t bdd_nr, const float omega, std::vector<std::array<std::atomic<float>,2>>& mm_begin);
+            void forward_mm(const size_t bdd_nr, const value_type omega, std::vector<std::array<std::atomic<value_type>,2>>& mm_begin);
+            void backward_mm(const size_t bdd_nr, const value_type omega, std::vector<std::array<std::atomic<value_type>,2>>& mm_begin);
 
             // Both operations below are inverses of each other
             // Given elements in order bdd_nr/bdd_index, transpose to variable/bdd_index with same variable.
@@ -66,7 +66,7 @@ namespace LPMP {
             template<typename T>
                 two_dim_variable_array<T> transpose_to_bdd_order(const two_dim_variable_array<T>& m) const;
 
-            Eigen::SparseMatrix<float> Lagrange_constraint_matrix() const;
+            Eigen::SparseMatrix<value_type> Lagrange_constraint_matrix() const;
 
             void export_graphviz(const char* filename);
             void export_graphviz(const std::string& filename);
@@ -545,7 +545,7 @@ namespace LPMP {
         }
 
     template<typename BDD_BRANCH_NODE>
-        two_dim_variable_array<std::array<float,2>> bdd_sequential_base<BDD_BRANCH_NODE>::min_marginals()
+        two_dim_variable_array<std::array<typename BDD_BRANCH_NODE::value_type,2>> bdd_sequential_base<BDD_BRANCH_NODE>::min_marginals()
         {
             backward_run();
             export_graphviz("bdd_sequential_base.dot");
@@ -553,7 +553,7 @@ namespace LPMP {
             nr_bdd_variables.reserve(nr_bdds());
             for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
                 nr_bdd_variables.push_back(nr_variables(bdd_nr));
-            two_dim_variable_array<std::array<float,2>> min_margs(nr_bdd_variables);
+            two_dim_variable_array<std::array<value_type,2>> min_margs(nr_bdd_variables);
 
 //#pragma omp parallel for schedule(guided,128)
             for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
@@ -565,11 +565,11 @@ namespace LPMP {
 
                 for(size_t idx=0; idx<nr_variables(bdd_nr); ++idx)
                 {
-                    std::array<float,2> mm = {std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity()};
+                    std::array<value_type,2> mm = {std::numeric_limits<value_type>::infinity(), std::numeric_limits<value_type>::infinity()};
                     const auto [first,last] = bdd_index_range(bdd_nr, idx);
                     for(size_t i=first; i<last; ++i)
                     {
-                        const std::array<float,2> cur_mm = bdd_branch_nodes_[i].min_marginals();
+                        const std::array<value_type,2> cur_mm = bdd_branch_nodes_[i].min_marginals();
                         mm[0] = std::min(mm[0], cur_mm[0]);
                         mm[1] = std::min(mm[1], cur_mm[1]); 
                     }
@@ -603,18 +603,18 @@ namespace LPMP {
                 // intialize
                 const auto [first,last] = bdd_index_range(bdd_nr, 0);
                 assert(first + 1 == last);
-                const float bdd_lb = bdd_branch_nodes_[first].m; 
+                const value_type bdd_lb = bdd_branch_nodes_[first].m; 
                 bdd_branch_nodes_[first].m = 0.0;
 
                 size_t next_node = first;
                 for(size_t idx=0; idx<nr_variables(bdd_nr); ++idx, ++c)
                 {
-                    std::array<float,2> mm = {std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity()};
+                    std::array<value_type,2> mm = {std::numeric_limits<value_type>::infinity(), std::numeric_limits<value_type>::infinity()};
 
                     const auto [first,last] = bdd_index_range(bdd_nr, idx);
                     for(size_t i=first; i<last; ++i)
                     {
-                        const std::array<float,2> cur_mm = bdd_branch_nodes_[i].min_marginals();
+                        const std::array<value_type,2> cur_mm = bdd_branch_nodes_[i].min_marginals();
                         mm[0] = std::min(mm[0], cur_mm[0]);
                         mm[1] = std::min(mm[1], cur_mm[1]); 
 
@@ -741,7 +741,7 @@ namespace LPMP {
         }
 
     template<typename BDD_BRANCH_NODE>
-        void bdd_sequential_base<BDD_BRANCH_NODE>::update_costs(const two_dim_variable_array<std::array<float,2>>& delta)
+        void bdd_sequential_base<BDD_BRANCH_NODE>::update_costs(const two_dim_variable_array<std::array<typename BDD_BRANCH_NODE::value_type,2>>& delta)
         {
             message_passing_state_ = message_passing_state::none;
             assert(delta.size() == nr_bdds());
@@ -805,7 +805,7 @@ namespace LPMP {
         }
 
     template<typename BDD_BRANCH_NODE>
-        void bdd_sequential_base<BDD_BRANCH_NODE>::diffusion_step(const two_dim_variable_array<std::array<float,2>>& min_margs, const float damping_step)
+        void bdd_sequential_base<BDD_BRANCH_NODE>::diffusion_step(const two_dim_variable_array<std::array<typename BDD_BRANCH_NODE::value_type,2>>& min_margs, const value_type damping_step)
         {
             throw std::runtime_error("not correct yet");
             message_passing_state_ = message_passing_state::none;
@@ -817,7 +817,7 @@ namespace LPMP {
                 for(size_t bdd_idx=0; bdd_idx<nr_bdd_variables(bdd_nr); ++bdd_idx)
                 {
                     const size_t var = variable(bdd_nr, bdd_idx);
-                    float denom = 1.0 / (nr_bdds(var)-1);
+                    const value_type denom = 1.0 / (nr_bdds(var)-1);
                     const auto [first_bdd_node, last_bdd_node] = bdd_index_range(bdd_nr, bdd_idx);
                     for(size_t i=first_bdd_node; i<last_bdd_node; ++i)
                     {
@@ -828,19 +828,19 @@ namespace LPMP {
             } 
         }
 
-    void atomic_addf(std::atomic<float>& f, const float d) 
+    template<typename REAL>
+    void atomic_addf(std::atomic<REAL>& f, const REAL d) 
     {
-        float old = f.load(std::memory_order_consume);
-        float desired = old + d;
-        while (!f.compare_exchange_weak(old, desired,
-                    std::memory_order_release, std::memory_order_consume))
+        REAL old = f.load(std::memory_order_consume);
+        REAL desired = old + d;
+        while (!f.compare_exchange_weak(old, desired, std::memory_order_release, std::memory_order_consume))
         {
             desired = old + d;
         }
     }
 
     template<typename BDD_BRANCH_NODE>
-        void bdd_sequential_base<BDD_BRANCH_NODE>::forward_mm(const size_t bdd_nr, const float omega, std::vector<std::array<std::atomic<float>,2>>& mms)
+        void bdd_sequential_base<BDD_BRANCH_NODE>::forward_mm(const size_t bdd_nr, const typename BDD_BRANCH_NODE::value_type omega, std::vector<std::array<std::atomic<typename BDD_BRANCH_NODE::value_type>,2>>& mms)
         {
             assert(omega > 0.0 && omega <= 1.0);
             assert(bdd_nr < nr_bdds());
@@ -895,7 +895,7 @@ namespace LPMP {
         }
 
     template<typename BDD_BRANCH_NODE>
-        void bdd_sequential_base<BDD_BRANCH_NODE>::backward_mm(const size_t bdd_nr, const float omega, std::vector<std::array<std::atomic<float>,2>>& mms)
+        void bdd_sequential_base<BDD_BRANCH_NODE>::backward_mm(const size_t bdd_nr, const typename BDD_BRANCH_NODE::value_type omega, std::vector<std::array<std::atomic<typename BDD_BRANCH_NODE::value_type>,2>>& mms)
         {
             assert(omega > 0.0 && omega <= 1.0);
             assert(bdd_nr < nr_bdds());
@@ -944,7 +944,7 @@ namespace LPMP {
             backward_run();
 
             // TODO: use atomic ref after switching to C++20
-            std::vector<std::array<std::atomic<float>,2>> mms(nr_variables());
+            std::vector<std::array<std::atomic<value_type>,2>> mms(nr_variables());
 #pragma omp parallel for schedule(static,256)
             for(size_t i=0; i<mms.size(); ++i)
             {
@@ -958,7 +958,7 @@ namespace LPMP {
                 for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
                 {
                     forward_mm(bdd_nr, 0.5, mms);
-                    backward_mm(bdd_nr, 1.0, mms);
+                    backward_mm(bdd_nr, 0.5, mms);
                 }
             }
 
@@ -969,9 +969,9 @@ namespace LPMP {
                 for(size_t var=0; var<nr_variables(); ++var)
                 {
                     assert(nr_bdds(var) > 0);
-                    const float d0 = mms[var][0] / value_type(nr_bdds(var));
+                    const value_type d0 = mms[var][0] / value_type(nr_bdds(var));
                     mms[var][0].store(d0);
-                    const float d1 = mms[var][1] / value_type(nr_bdds(var));
+                    const value_type d1 = mms[var][1] / value_type(nr_bdds(var));
                     mms[var][1].store(d1);
                 }
             }
@@ -1057,9 +1057,9 @@ namespace LPMP {
         }
 
     template<typename BDD_BRANCH_NODE>
-        Eigen::SparseMatrix<float> bdd_sequential_base<BDD_BRANCH_NODE>::Lagrange_constraint_matrix() const
+        Eigen::SparseMatrix<typename BDD_BRANCH_NODE::value_type> bdd_sequential_base<BDD_BRANCH_NODE>::Lagrange_constraint_matrix() const
         {
-            using T = Eigen::Triplet<float>;
+            using T = Eigen::Triplet<value_type>;
             std::vector<T> coefficients;
             size_t c = 0;
             for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
@@ -1071,7 +1071,7 @@ namespace LPMP {
                 }
             }
 
-            Eigen::SparseMatrix<float> A(nr_variables(), nr_bdd_variables());
+            Eigen::SparseMatrix<value_type> A(nr_variables(), nr_bdd_variables());
             A.setFromTriplets(coefficients.begin(), coefficients.end());
             return A; 
         }

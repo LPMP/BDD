@@ -6,6 +6,7 @@
 
 namespace LPMP {
 
+    template<typename REAL>
     class bdd_parallel_mma {
         public:
             bdd_parallel_mma(BDD::bdd_collection& bdd_col);
@@ -31,15 +32,18 @@ namespace LPMP {
             std::unique_ptr<impl> pimpl;
     };
 
+    template<typename REAL>
     template<typename ITERATOR>
-        bdd_parallel_mma::bdd_parallel_mma(BDD::bdd_collection& bdd_col, ITERATOR cost_begin, ITERATOR cost_end)
+        bdd_parallel_mma<REAL>::bdd_parallel_mma(BDD::bdd_collection& bdd_col, ITERATOR cost_begin, ITERATOR cost_end)
         : bdd_parallel_mma(bdd_col)
         {
             set_costs(cost_begin, cost_end);
             backward_run();
         }
-
 };
+
+
+
 
 
 

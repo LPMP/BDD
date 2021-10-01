@@ -90,6 +90,15 @@ namespace LPMP {
 
         auto solution_statistics_arg = app.add_flag("--solution_statistics", solution_statistics, "list min marginals and, objective after solving dual problem");
 
+        std::unordered_map<std::string, bdd_solver_precision> bdd_solver_precision_map{
+            {"float",bdd_solver_precision::single_prec},
+            {"single",bdd_solver_precision::single_prec},
+            {"double",bdd_solver_precision::double_prec}
+        };
+
+        auto bdd_solver_precision_arg = app.add_option("--precision", bdd_solver_precision_, "floating point precision used in solver")
+            ->transform(CLI::CheckedTransformer(bdd_solver_precision_map, CLI::ignore_case));
+
         //bool primal_rounding = false;
         auto primal_arg = app.add_flag("-p, --primal", primal_rounding, "primal rounding flag");
 
@@ -271,7 +280,12 @@ namespace LPMP {
         }
         else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::parallel_mma)
         {
-            solver = std::move(bdd_parallel_mma(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
+            if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::single_prec)
+                solver = std::move(bdd_parallel_mma<float>(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
+            else if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::double_prec)
+                solver = std::move(bdd_parallel_mma<double>(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
+            else
+                throw std::runtime_error("only float and double precision allowed");
             std::cout << "constructed parallel mma solver\n"; 
         }
         else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::mma_cuda)
