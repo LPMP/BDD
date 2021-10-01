@@ -6,40 +6,69 @@
 
 using namespace LPMP;
 
-const char * matching_3x3 = 
+const char * two_simplex_problem = 
 R"(Minimize
--2 x_11 - 1 x_12 - 1 x_13
--1 x_21 - 2 x_22 - 1 x_23
--1 x_31 - 1 x_32 - 2 x_33
+2 x_1 + 1 x_2 + 1 x_3
++1 x_4 + 2 x_5 - 1 x_6
 Subject To
-x_11 + x_12 + x_13 = 1
-x_21 + x_22 + x_23 = 1
-x_31 + x_32 + x_33 = 1
-x_11 + x_21 + x_31 = 1
-x_12 + x_22 + x_32 = 1
-x_13 + x_23 + x_33 = 1
+x_1 + x_2 + x_3 = 1
+x_4 + x_5 + x_6 = 2
 End)";
 
 int main(int argc, char** argv)
 {
     using bdd_base_type = bdd_sequential_base<bdd_branch_instruction<float>>;
-    const ILP_input ilp = ILP_parser::parse_string(matching_3x3);
+    const ILP_input ilp = ILP_parser::parse_string(two_simplex_problem);
     bdd_preprocessor pre(ilp);
-    bdd_base_type solver(pre.get_bdd_collection());
-    solver.set_costs(ilp.objective().begin(), ilp.objective().end());
 
-    solver.backward_run();
-
-    std::vector<std::array<float,2>> mms(ilp.nr_variables(), {0.0,0.0});
-    for(size_t bdd_nr=0; bdd_nr<solver.nr_bdds(); ++bdd_nr)
-        solver.forward_mm(bdd_nr, 0.5, mms.begin());
-
-    for(size_t i=0; i<mms.size(); ++i)
+    // forward incremental mm
     {
-        std::cout << "var " << i << ", mms = (" << mms[i][0] << "," << mms[i][1] << ")\n";
+        bdd_base_type solver(pre.get_bdd_collection());
+        solver.set_costs(ilp.objective().begin(), ilp.objective().end());
+
+        solver.backward_run();
+        const double lb_before = solver.lower_bound();
+
+        std::vector<std::array<float,2>> mms(ilp.nr_variables(), {0.0,0.0});
+        for(size_t bdd_nr=0; bdd_nr<solver.nr_bdds(); ++bdd_nr)
+            solver.forward_mm(bdd_nr, 1.0, mms.begin());
+
+        const double lb_after = solver.lower_bound();
+        test(std::abs(lb_before - lb_after) <= 1e-6);
+
+        for(size_t i=0; i<mms.size(); ++i)
+            test(mms[i][0] >= 0.0 && mms[i][1] >= 0.0);
+
+        test(std::abs(mms[0][1] - mms[0][0] - (1 - 0)) <= 1e-6);
+        test(std::abs(mms[1][1] - mms[1][0] - (1 - 1)) <= 1e-6);
+        test(std::abs(mms[2][1] - mms[2][0] - (1 - 1)) <= 1e-6);
+
+        test(std::abs(mms[3][1] - mms[3][0] - (1-1 - (2-1))) <= 1e-6); // cost of x_4 becomes 2
+        test(std::abs(mms[4][1] - mms[4][0] - (2-1 - (2-1))) <= 1e-6);
+        test(std::abs(mms[5][1] - mms[5][0] - (2-1 - (2+2))) <= 1e-6);
     }
 
-    for(size_t i=0; i<mms.size(); ++i)
-        test(mms[i][0] >= 0.0 && mms[i][1] >= 0.0);
+    // backward incremental mm
+    {
+        bdd_base_type solver(pre.get_bdd_collection());
+        solver.set_costs(ilp.objective().begin(), ilp.objective().end());
 
+        solver.forward_run();
+        const double lb_before = solver.lower_bound();
+
+        std::vector<std::array<float,2>> mms(ilp.nr_variables(), {0.0,0.0});
+        for(size_t bdd_nr=0; bdd_nr<solver.nr_bdds(); ++bdd_nr)
+            solver.backward_mm(bdd_nr, 1.0, mms.begin());
+
+        const double lb_after = solver.lower_bound();
+        test(std::abs(lb_before - lb_after) <= 1e-6);
+
+        test(std::abs(mms[2][1] - mms[2][0] - (1 - 1)) <= 1e-6);
+        test(std::abs(mms[1][1] - mms[1][0] - (1 - 1)) <= 1e-6);
+        test(std::abs(mms[0][1] - mms[0][0] - (1 - 0)) <= 1e-6);
+
+        test(std::abs(mms[5][1] - mms[5][0] - (1-1 - (2+1))) <= 1e-6); // x_6 has now cost 1
+        test(std::abs(mms[4][1] - mms[4][0] - (2+1 - (2+1))) <= 1e-6);
+        test(std::abs(mms[3][1] - mms[3][0] - (1+1 - (2+1))) <= 1e-6);
+    }
 }

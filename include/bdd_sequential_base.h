@@ -380,6 +380,7 @@ namespace LPMP {
     template<typename BDD_BRANCH_NODE>
         double bdd_sequential_base<BDD_BRANCH_NODE>::compute_lower_bound_after_backward_pass()
         {
+            MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME;
             assert(message_passing_state_ == message_passing_state::after_backward_pass);
             double lb = 0.0;
 
@@ -397,6 +398,7 @@ namespace LPMP {
     template<typename BDD_BRANCH_NODE>
         double bdd_sequential_base<BDD_BRANCH_NODE>::compute_lower_bound_after_forward_pass()
         {
+            MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME;
             assert(message_passing_state_ == message_passing_state::after_forward_pass);
             double lb = 0.0;
 
@@ -480,16 +482,18 @@ namespace LPMP {
             if(message_passing_state_ == message_passing_state::after_forward_pass)
                 return;
             message_passing_state_ = message_passing_state::none;
+
 #pragma omp parallel for schedule(static,512)
             for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
             {
-                const auto [first_bdd_node, last_bdd_node] = bdd_range(bdd_nr);
                 // TODO: This only works for non-split BDDs with exactly one root node
                 {
-                assert(first_bdd_node + 1 == last_bdd_node);
-                bdd_branch_nodes_[first_bdd_node].m = 0.0;
+                    const auto [first_bdd_node, last_bdd_node] = bdd_index_range(bdd_nr,0);
+                    assert(first_bdd_node + 1 == last_bdd_node);
+                    bdd_branch_nodes_[first_bdd_node].m = 0.0;
                 }
-                // TODO: can be replaced by explicitly running over bdds of next variable
+
+                const auto [first_bdd_node, last_bdd_node] = bdd_range(bdd_nr);
                 for(size_t i=first_bdd_node; i<last_bdd_node; ++i)
                     bdd_branch_nodes_[i].prepare_forward_step(); 
                 for(size_t i=first_bdd_node; i<last_bdd_node; ++i)
@@ -851,10 +855,10 @@ namespace LPMP {
 
                 const size_t var = variable(bdd_nr, bdd_idx);
                 if(cur_mm[0] < cur_mm[1])
-#pragma omp atomic
+#pragma omp atomic update
                     mm_begin[var][1] += omega*(cur_mm[1] - cur_mm[0]);
                 else
-#pragma omp atomic
+#pragma omp atomic update
                     mm_begin[var][0] += omega*(cur_mm[0] - cur_mm[1]);
                 assert(mm_begin[var][0] >= 0.0);
                 assert(mm_begin[var][1] >= 0.0);
@@ -896,10 +900,10 @@ namespace LPMP {
 
                 const size_t var = variable(bdd_nr, bdd_idx);
                 if(cur_mm[0] < cur_mm[1])
-#pragma omp atomic
+#pragma omp atomic update
                     mm_begin[var][1] += omega*(cur_mm[1] - cur_mm[0]);
                 else
-#pragma omp atomic
+#pragma omp atomic update
                     mm_begin[var][0] += omega*(cur_mm[0] - cur_mm[1]);
                 assert(mm_begin[var][0] >= 0.0);
                 assert(mm_begin[var][1] >= 0.0);
@@ -921,53 +925,75 @@ namespace LPMP {
         void bdd_sequential_base<BDD_BRANCH_NODE>::parallel_mma()
         {
             backward_run();
+
+            struct mm_add {
+                std::array<float,2> operator()(const std::array<float,2>& a, const std::array<float,2>& b)  
+                {
+                    return {a[0] + b[0], a[1] + b[1]};
+                }
+            };
+
+            // reduction operator for min-marginal addition from individual threads
+#pragma omp declare reduction(vec_float_plus : std::vector<std::array<float,2>> : \
+                              std::transform(omp_out.begin(), omp_out.end(), omp_in.begin(), omp_out.begin(), mm_add())) \
+                    initializer(omp_priv = omp_orig)
+
             std::vector<std::array<value_type,2>> mms(nr_variables(), {0.0,0.0});
             {
                 MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME2("parallel mma incremental marginal computation");
-#pragma omp parallel for schedule(static,256)
-            for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
-            {
-                //backward_run(bdd_nr);
-                forward_mm(bdd_nr, 0.5, mms.begin());
-                backward_mm(bdd_nr, 0.5, mms.begin());
-            }
+#pragma omp parallel for schedule(static,256) reduction(vec_float_plus : mms)
+                for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
+                {
+                    forward_mm(bdd_nr, 0.5, mms.begin());
+                    backward_mm(bdd_nr, 0.5, mms.begin());
+                }
             }
 
             // average min-marginals
             {
                 MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME2("parallel mma marginal averaging");
 #pragma omp parallel for
-            for(size_t var=0; var<nr_variables(); ++var)
-            {
-                assert(nr_bdds(var) > 0);
-                mms[var][0] /= value_type(nr_bdds(var));
-                mms[var][1] /= value_type(nr_bdds(var));
-            }
+                for(size_t var=0; var<nr_variables(); ++var)
+                {
+                    assert(nr_bdds(var) > 0);
+                    mms[var][0] /= value_type(nr_bdds(var));
+                    mms[var][1] /= value_type(nr_bdds(var));
+                }
             }
 
             message_passing_state_ = message_passing_state::none;
             lower_bound_state_ = lower_bound_state::invalid; 
 
-            // distribute min-marginals
+            // distribute min-marginals and do interleaved backward steps
             {
+                double cur_lb = 0.0;
                 MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME2("parallel mma marginal distribution");
-#pragma omp parallel for schedule(static,256)
-            for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
-            {
-                for(size_t bdd_idx=0; bdd_idx<nr_variables(bdd_nr); ++bdd_idx)
+#pragma omp parallel for schedule(static,256) reduction (+:cur_lb)
+                for(std::ptrdiff_t bdd_nr=nr_bdds()-1; bdd_nr>=0; --bdd_nr)
                 {
-                    const auto [first_bdd_node, last_bdd_node] = bdd_index_range(bdd_nr, bdd_idx);
-                    const size_t var = variable(bdd_nr, bdd_idx);
-                    for(size_t i=first_bdd_node; i<last_bdd_node; ++i)
+                    for(std::ptrdiff_t bdd_idx=nr_variables(bdd_nr)-1; bdd_idx>=0; --bdd_idx)
                     {
-                        assert(mms[var][0] >= 0.0);
-                        assert(mms[var][1] >= 0.0);
-                        bdd_branch_nodes_[i].low_cost += mms[var][0];
-                        bdd_branch_nodes_[i].high_cost += mms[var][1];
+                        const size_t var = variable(bdd_nr, bdd_idx);
+                        const auto [first_bdd_node, last_bdd_node] = bdd_index_range(bdd_nr, bdd_idx);
+                        for(std::ptrdiff_t i=std::ptrdiff_t(last_bdd_node)-1; i>=std::ptrdiff_t(first_bdd_node); --i)
+                        {
+                            assert(mms[var][0] >= 0.0);
+                            assert(mms[var][1] >= 0.0);
+                            bdd_branch_nodes_[i].low_cost += mms[var][0];
+                            bdd_branch_nodes_[i].high_cost += mms[var][1];
+                        }
+                        for(std::ptrdiff_t i=std::ptrdiff_t(last_bdd_node)-1; i>=std::ptrdiff_t(first_bdd_node); --i)
+                            bdd_branch_nodes_[i].backward_step(); 
                     }
+                    cur_lb += bdd_branch_nodes_[bdd_index_range(bdd_nr,0)[0]].m;
                 }
+                lower_bound_ = cur_lb;
+                //std::cout << "parallel lb computation gives " << cur_lb << "\n";
             }
-            }
+
+            message_passing_state_ = message_passing_state::after_backward_pass;
+            // TODO: make above lb computation thread safe by reduction as OpenMP pragma, change below state also.
+            lower_bound_state_ = lower_bound_state::invalid; 
         }
 
     template<typename BDD_BRANCH_NODE>
