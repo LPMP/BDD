@@ -5,6 +5,7 @@
 #include <Eigen/SparseCore>
 #include "bdd_collection/bdd_collection.h"
 #include "two_dimensional_variable_array.hxx"
+#include <atomic>
 #include <fstream>
 #include <cstdlib>
 #include <filesystem>
@@ -54,10 +55,8 @@ namespace LPMP {
 
             // compute incremental min marginals and perform min-marginal averaging subsequently
             void parallel_mma();
-            template<typename ITERATOR>
-                void forward_mm(const size_t bdd_nr, const float omega, ITERATOR mm_begin);
-            template<typename ITERATOR>
-                void backward_mm(const size_t bdd_nr, const float omega, ITERATOR mm_begin);
+            void forward_mm(const size_t bdd_nr, const float omega, std::vector<std::array<std::atomic<float>,2>>& mm_begin);
+            void backward_mm(const size_t bdd_nr, const float omega, std::vector<std::array<std::atomic<float>,2>>& mm_begin);
 
             // Both operations below are inverses of each other
             // Given elements in order bdd_nr/bdd_index, transpose to variable/bdd_index with same variable.
@@ -829,9 +828,19 @@ namespace LPMP {
             } 
         }
 
+    void atomic_addf(std::atomic<float>& f, const float d) 
+    {
+        float old = f.load(std::memory_order_consume);
+        float desired = old + d;
+        while (!f.compare_exchange_weak(old, desired,
+                    std::memory_order_release, std::memory_order_consume))
+        {
+            desired = old + d;
+        }
+    }
+
     template<typename BDD_BRANCH_NODE>
-        template<typename ITERATOR>
-        void bdd_sequential_base<BDD_BRANCH_NODE>::forward_mm(const size_t bdd_nr, const float omega, ITERATOR mm_begin)
+        void bdd_sequential_base<BDD_BRANCH_NODE>::forward_mm(const size_t bdd_nr, const float omega, std::vector<std::array<std::atomic<float>,2>>& mms)
         {
             assert(omega > 0.0 && omega <= 1.0);
             assert(bdd_nr < nr_bdds());
@@ -854,12 +863,17 @@ namespace LPMP {
                 }
 
                 const size_t var = variable(bdd_nr, bdd_idx);
+
                 if(cur_mm[0] < cur_mm[1])
-#pragma omp atomic update
-                    mm_begin[var][1] += omega*(cur_mm[1] - cur_mm[0]);
+                {
+                    //mm[var][1] += omega*(cur_mm[1] - cur_mm[0]);
+                    atomic_addf(mms[var][1], omega*(cur_mm[1] - cur_mm[0]));
+                }
                 else
-#pragma omp atomic update
-                    mm_begin[var][0] += omega*(cur_mm[0] - cur_mm[1]);
+                {
+                    //mm[var][0] += omega*(cur_mm[0] - cur_mm[1]);
+                    atomic_addf(mms[var][0], omega*(cur_mm[0] - cur_mm[1]));
+                }
                 assert(mm_begin[var][0] >= 0.0);
                 assert(mm_begin[var][1] >= 0.0);
 
@@ -881,8 +895,7 @@ namespace LPMP {
         }
 
     template<typename BDD_BRANCH_NODE>
-        template<typename ITERATOR>
-        void bdd_sequential_base<BDD_BRANCH_NODE>::backward_mm(const size_t bdd_nr, const float omega, ITERATOR mm_begin)
+        void bdd_sequential_base<BDD_BRANCH_NODE>::backward_mm(const size_t bdd_nr, const float omega, std::vector<std::array<std::atomic<float>,2>>& mms)
         {
             assert(omega > 0.0 && omega <= 1.0);
             assert(bdd_nr < nr_bdds());
@@ -900,11 +913,15 @@ namespace LPMP {
 
                 const size_t var = variable(bdd_nr, bdd_idx);
                 if(cur_mm[0] < cur_mm[1])
-#pragma omp atomic update
-                    mm_begin[var][1] += omega*(cur_mm[1] - cur_mm[0]);
+                {
+                    //mm_begin[var][1] += omega*(cur_mm[1] - cur_mm[0]);
+                    atomic_addf(mms[var][1], omega*(cur_mm[1] - cur_mm[0]));
+                }
                 else
-#pragma omp atomic update
-                    mm_begin[var][0] += omega*(cur_mm[0] - cur_mm[1]);
+                {
+                    //mm_begin[var][0] += omega*(cur_mm[0] - cur_mm[1]);
+                    atomic_addf(mms[var][0], omega*(cur_mm[0] - cur_mm[1]));
+                }
                 assert(mm_begin[var][0] >= 0.0);
                 assert(mm_begin[var][1] >= 0.0);
 
@@ -938,14 +955,24 @@ namespace LPMP {
                               std::transform(omp_out.begin(), omp_out.end(), omp_in.begin(), omp_out.begin(), mm_add())) \
                     initializer(omp_priv = omp_orig)
 
-            std::vector<std::array<value_type,2>> mms(nr_variables(), {0.0,0.0});
+            //std::vector<std::array<value_type,2>> mms(nr_variables(), {0.0,0.0});
+            // TODO: use atomic ref after switching to C++20
+            std::vector<std::array<std::atomic<float>,2>> mms(nr_variables());
+#pragma omp parallel for schedule(static,256)
+            for(size_t i=0; i<mms.size(); ++i)
+            {
+                mms[i][0] = 0.0;
+                mms[i][1] = 0.0;
+            }
+
             {
                 MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME2("parallel mma incremental marginal computation");
-#pragma omp parallel for schedule(static,256) reduction(vec_float_plus : mms)
+//#pragma omp parallel for schedule(static,256) reduction(vec_float_plus : mms)
+#pragma omp parallel for schedule(static,256)
                 for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
                 {
-                    forward_mm(bdd_nr, 0.5, mms.begin());
-                    backward_mm(bdd_nr, 0.5, mms.begin());
+                    forward_mm(bdd_nr, 0.5, mms);
+                    backward_mm(bdd_nr, 0.5, mms);
                 }
             }
 
@@ -956,8 +983,10 @@ namespace LPMP {
                 for(size_t var=0; var<nr_variables(); ++var)
                 {
                     assert(nr_bdds(var) > 0);
-                    mms[var][0] /= value_type(nr_bdds(var));
-                    mms[var][1] /= value_type(nr_bdds(var));
+                    const float d0 = mms[var][0] / value_type(nr_bdds(var));
+                    mms[var][0].store(d0);
+                    const float d1 = mms[var][1] / value_type(nr_bdds(var));
+                    mms[var][1].store(d1);
                 }
             }
 

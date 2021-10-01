@@ -29,9 +29,14 @@ int main(int argc, char** argv)
         solver.backward_run();
         const double lb_before = solver.lower_bound();
 
-        std::vector<std::array<float,2>> mms(ilp.nr_variables(), {0.0,0.0});
+        std::vector<std::array<std::atomic<float>,2>> mms(ilp.nr_variables());
+        for(auto& x : mms)
+        {
+            x[0] = 0.0;
+            x[1] = 0.0;
+        }
         for(size_t bdd_nr=0; bdd_nr<solver.nr_bdds(); ++bdd_nr)
-            solver.forward_mm(bdd_nr, 1.0, mms.begin());
+            solver.forward_mm(bdd_nr, 1.0, mms);
 
         const double lb_after = solver.lower_bound();
         test(std::abs(lb_before - lb_after) <= 1e-6);
@@ -56,9 +61,15 @@ int main(int argc, char** argv)
         solver.forward_run();
         const double lb_before = solver.lower_bound();
 
-        std::vector<std::array<float,2>> mms(ilp.nr_variables(), {0.0,0.0});
+        std::vector<std::array<std::atomic<float>,2>> mms(ilp.nr_variables());
+        for(auto& x : mms)
+        {
+            x[0] = 0.0;
+            x[1] = 0.0;
+        }
+
         for(size_t bdd_nr=0; bdd_nr<solver.nr_bdds(); ++bdd_nr)
-            solver.backward_mm(bdd_nr, 1.0, mms.begin());
+            solver.backward_mm(bdd_nr, 1.0, mms);
 
         const double lb_after = solver.lower_bound();
         test(std::abs(lb_before - lb_after) <= 1e-6);
