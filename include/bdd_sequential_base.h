@@ -943,19 +943,6 @@ namespace LPMP {
         {
             backward_run();
 
-            struct mm_add {
-                std::array<float,2> operator()(const std::array<float,2>& a, const std::array<float,2>& b)  
-                {
-                    return {a[0] + b[0], a[1] + b[1]};
-                }
-            };
-
-            // reduction operator for min-marginal addition from individual threads
-#pragma omp declare reduction(vec_float_plus : std::vector<std::array<float,2>> : \
-                              std::transform(omp_out.begin(), omp_out.end(), omp_in.begin(), omp_out.begin(), mm_add())) \
-                    initializer(omp_priv = omp_orig)
-
-            //std::vector<std::array<value_type,2>> mms(nr_variables(), {0.0,0.0});
             // TODO: use atomic ref after switching to C++20
             std::vector<std::array<std::atomic<float>,2>> mms(nr_variables());
 #pragma omp parallel for schedule(static,256)
@@ -967,12 +954,11 @@ namespace LPMP {
 
             {
                 MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME2("parallel mma incremental marginal computation");
-//#pragma omp parallel for schedule(static,256) reduction(vec_float_plus : mms)
 #pragma omp parallel for schedule(static,256)
                 for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
                 {
                     forward_mm(bdd_nr, 0.5, mms);
-                    backward_mm(bdd_nr, 0.5, mms);
+                    backward_mm(bdd_nr, 1.0, mms);
                 }
             }
 
@@ -1017,12 +1003,10 @@ namespace LPMP {
                     cur_lb += bdd_branch_nodes_[bdd_index_range(bdd_nr,0)[0]].m;
                 }
                 lower_bound_ = cur_lb;
-                //std::cout << "parallel lb computation gives " << cur_lb << "\n";
             }
 
             message_passing_state_ = message_passing_state::after_backward_pass;
-            // TODO: make above lb computation thread safe by reduction as OpenMP pragma, change below state also.
-            lower_bound_state_ = lower_bound_state::invalid; 
+            lower_bound_state_ = lower_bound_state::valid; 
         }
 
     template<typename BDD_BRANCH_NODE>
