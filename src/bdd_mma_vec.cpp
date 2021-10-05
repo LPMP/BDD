@@ -1,75 +1,87 @@
 #include "bdd_mma_vec.h"
 #include "bdd_branch_node_vector.h"
-//#include "bdd_branch_node_vec8f.h"
+#include "bdd_branch_instruction.h"
 #include "bdd_tightening.h"
 #include "time_measure_util.h"
 
 namespace LPMP {
 
-    class bdd_mma_vec::impl {
+    template<typename REAL>
+    class bdd_mma_vec<REAL>::impl {
         public:
             impl(BDD::bdd_collection& bdd_col)
                 : mma(bdd_col)
             {};
 
-            bdd_mma_base_vec mma;
-            //bdd_mma_base_8f mma;
+            bdd_mma_base<bdd_branch_instruction_bdd_index<REAL>> mma;
     };
 
-    bdd_mma_vec::bdd_mma_vec(BDD::bdd_collection& bdd_col)
+    template<typename REAL>
+    bdd_mma_vec<REAL>::bdd_mma_vec(BDD::bdd_collection& bdd_col)
     {
         MEASURE_FUNCTION_EXECUTION_TIME; 
         pimpl = std::make_unique<impl>(bdd_col);
     }
 
-    bdd_mma_vec::bdd_mma_vec(bdd_mma_vec&& o)
+    template<typename REAL>
+    bdd_mma_vec<REAL>::bdd_mma_vec(bdd_mma_vec&& o)
         : pimpl(std::move(o.pimpl))
     {}
 
-    bdd_mma_vec& bdd_mma_vec::operator=(bdd_mma_vec&& o)
+    template<typename REAL>
+    bdd_mma_vec<REAL>& bdd_mma_vec<REAL>::operator=(bdd_mma_vec<REAL>&& o)
     { 
         pimpl = std::move(o.pimpl);
         return *this;
     }
 
-    bdd_mma_vec::~bdd_mma_vec()
+    template<typename REAL>
+    bdd_mma_vec<REAL>::~bdd_mma_vec()
     {}
 
-    void bdd_mma_vec::set_cost(const double c, const size_t var)
+    template<typename REAL>
+    void bdd_mma_vec<REAL>::set_cost(const double c, const size_t var)
     {
         pimpl->mma.set_cost(c, var);
     }
 
-    void bdd_mma_vec::backward_run()
+    template<typename REAL>
+    void bdd_mma_vec<REAL>::backward_run()
     {
         pimpl->mma.backward_run();
     }
 
-    void bdd_mma_vec::iteration()
+    template<typename REAL>
+    void bdd_mma_vec<REAL>::iteration()
     {
         pimpl->mma.iteration();
     }
 
-    double bdd_mma_vec::lower_bound()
+    template<typename REAL>
+    double bdd_mma_vec<REAL>::lower_bound()
     {
         return pimpl->mma.lower_bound();
     }
 
-    two_dim_variable_array<std::array<double,2>> bdd_mma_vec::min_marginals()
+    template<typename REAL>
+    two_dim_variable_array<std::array<double,2>> bdd_mma_vec<REAL>::min_marginals()
     {
         return pimpl->mma.min_marginals();
     }
 
-    void bdd_mma_vec::fix_variable(const size_t var, const bool value)
+    template<typename REAL>
+    void bdd_mma_vec<REAL>::fix_variable(const size_t var, const bool value)
     {
         pimpl->mma.fix_variable(var, value);
     }
 
-    void bdd_mma_vec::tighten()
+    template<typename REAL>
+    void bdd_mma_vec<REAL>::tighten()
     {
         return LPMP::tighten(pimpl->mma, 0.1); 
     }
 
+    // explicitly instantiate templates
+    template class bdd_mma_vec<float>;
+    template class bdd_mma_vec<double>;
 }
-
-

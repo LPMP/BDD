@@ -874,8 +874,8 @@ namespace LPMP {
                     //mm[var][0] += omega*(cur_mm[0] - cur_mm[1]);
                     atomic_addf(mms[var][0], omega*(cur_mm[0] - cur_mm[1]));
                 }
-                assert(mm_begin[var][0] >= 0.0);
-                assert(mm_begin[var][1] >= 0.0);
+                assert(mms[var][0] >= 0.0);
+                assert(mms[var][1] >= 0.0);
 
                 for(size_t i=first_bdd_node; i<last_bdd_node; ++i)
                     if(cur_mm[0] < cur_mm[1])
@@ -922,8 +922,8 @@ namespace LPMP {
                     //mm_begin[var][0] += omega*(cur_mm[0] - cur_mm[1]);
                     atomic_addf(mms[var][0], omega*(cur_mm[0] - cur_mm[1]));
                 }
-                assert(mm_begin[var][0] >= 0.0);
-                assert(mm_begin[var][1] >= 0.0);
+                assert(mms[var][0] >= 0.0);
+                assert(mms[var][1] >= 0.0);
 
                 for(std::ptrdiff_t i=std::ptrdiff_t(last_bdd_node)-1; i>=std::ptrdiff_t(first_bdd_node); --i)
                 {
@@ -957,8 +957,8 @@ namespace LPMP {
 #pragma omp parallel for schedule(static,256)
                 for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
                 {
-                    forward_mm(bdd_nr, 0.5, mms);
-                    backward_mm(bdd_nr, 0.5, mms);
+                    forward_mm(bdd_nr, 0.8, mms);
+                    backward_mm(bdd_nr, 1.0, mms);
                 }
             }
 

@@ -305,8 +305,10 @@ namespace BDD {
             assert(std::is_sorted(bdd_it_begin, bdd_it_end));
             assert(std::unique(bdd_it_begin, bdd_it_end) == bdd_it_end);
 
-            if(bdd_it_begin == bdd_it_end)
+            if(nr_bdds_remove == 0)
                 return;
+
+            assert(*(bdd_it_begin+nr_bdds_remove-1) < nr_bdds());
 
             std::vector<size_t> new_bdd_delimiters;
             new_bdd_delimiters.reserve(bdd_delimiters.size() - nr_bdds_remove);
@@ -318,11 +320,11 @@ namespace BDD {
                 new_bdd_instructions.push_back(bdd_instructions[i]);
 
             auto bdd_it = bdd_it_begin;
-            for(size_t bdd_nr=*bdd_it; bdd_nr<nr_bdds(); ++bdd_nr)
+            for(size_t bdd_nr=*bdd_it_begin; bdd_nr<nr_bdds(); ++bdd_nr)
             {
                 if(bdd_nr == *bdd_it) // skip bdd
                 {
-                    ++bdd_it;
+                    bdd_it++;
                 }
                 else // move bdd
                 {
@@ -489,7 +491,11 @@ namespace BDD {
                 if(positive_variables.count(instr.index) > 0)
                     instr.hi = topsink_idx; 
                 if(negative_variables.count(instr.index) > 0)
+                {
+                    // TODO: what about botsink_idx
+                    throw std::runtime_error("possible bug here");
                     instr.lo = topsink_idx; 
+                }
             }
 
             reduce(); 

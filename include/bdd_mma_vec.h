@@ -6,6 +6,7 @@
 
 namespace LPMP {
 
+    template<typename REAL>
     class bdd_mma_vec {
         public:
             enum class averaging_type { classic, vec };
@@ -31,8 +32,9 @@ namespace LPMP {
             std::unique_ptr<impl> pimpl;
     };
 
+    template<typename REAL>
     template<typename ITERATOR>
-        bdd_mma_vec::bdd_mma_vec(BDD::bdd_collection& bdd_col, ITERATOR cost_begin, ITERATOR cost_end)
+        bdd_mma_vec<REAL>::bdd_mma_vec(BDD::bdd_collection& bdd_col, ITERATOR cost_begin, ITERATOR cost_end)
         : bdd_mma_vec(bdd_col)
         {
             size_t var = 0;

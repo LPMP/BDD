@@ -1,8 +1,6 @@
 #pragma once
 
 // TODO: rename file and classes
-// TODO: allow float and double via templates
-// TODO: templatize to allow for different bdd branch nodes
 
 #include <tsl/robin_map.h>
 #include <vector>
@@ -25,215 +23,38 @@
 
 namespace LPMP {
 
-    // TODO: add const to appropriate functions
-    class bdd_branch_node_vec {
-        public:
-            // offsets are added to the address of the current bdd_branch_node_vec. The compute address points to the bdd_branch_node_vec
-            uint32_t offset_low = 0;
-            uint32_t offset_high = 0;
-            float m = std::numeric_limits<float>::infinity();
-            float low_cost = 0.0;
-            float high_cost = 0.0;
-
-            constexpr static uint32_t inactive_bdd_index = std::numeric_limits<uint32_t>::max();
-            uint32_t bdd_index = inactive_bdd_index;
-
-            void prepare_forward_step();
-            void forward_step();
-            void backward_step();
-
-            std::array<float,2> min_marginals();
-            void min_marginal(std::array<float,2>* reduced_min_marginals);
-            void set_marginal(std::array<float,2>* min_marginals, const std::array<float,2> avg_marginals);
-
-            constexpr static uint32_t terminal_0_offset = std::numeric_limits<uint32_t>::max();
-            constexpr static uint32_t terminal_1_offset = std::numeric_limits<uint32_t>::max()-1;
-
-            bdd_branch_node_vec* address(uint32_t offset);
-            uint32_t synthesize_address(bdd_branch_node_vec* node);
-
-            ~bdd_branch_node_vec()
-            {
-                static_assert(sizeof(float) == 4, "float must be quadword");
-                static_assert(sizeof(uint32_t) == 4, "uint32_t must be quadword");
-            }
-    };
-
-    inline bdd_branch_node_vec* bdd_branch_node_vec::address(uint32_t offset)
-    {
-        assert(offset != terminal_0_offset && offset != terminal_1_offset);
-        return this + offset;
-    }
-
-    inline uint32_t bdd_branch_node_vec::synthesize_address(bdd_branch_node_vec* node)
-    {
-        assert(this < node);
-        assert(std::distance(this, node) < std::numeric_limits<uint32_t>::max());
-        assert(std::distance(this, node) > 0);
-        return std::distance(this, node);
-    }
-
-    inline void bdd_branch_node_vec::backward_step()
-    {
-        if(offset_low == terminal_0_offset)
-            assert(low_cost == std::numeric_limits<float>::infinity());
-
-        if(offset_low == terminal_0_offset || offset_low == terminal_1_offset)
-        {
-            m = low_cost;
-        }
-        else
-        {
-            const auto low_branch_node = address(offset_low);
-            m = low_branch_node->m + low_cost;
-        }
-
-        if(offset_high == terminal_0_offset)
-            assert(high_cost == std::numeric_limits<float>::infinity());
-
-        if(offset_high == terminal_0_offset || offset_high == terminal_1_offset)
-        {
-            m = std::min(m, high_cost);
-        }
-        else
-        {
-            const auto high_branch_node = address(offset_high);
-            m = std::min(m, high_branch_node->m + high_cost);
-        }
-
-        //assert(std::isfinite(m));
-    }
-
-    inline void bdd_branch_node_vec::prepare_forward_step()
-    {
-        if(offset_low != terminal_0_offset && offset_low != terminal_1_offset)
-        {
-            const auto low_branch_node = address(offset_low);
-            low_branch_node->m = std::numeric_limits<float>::infinity(); 
-        }
-
-        if(offset_high != terminal_0_offset && offset_high != terminal_1_offset)
-        {
-            const auto high_branch_node = address(offset_high);
-            high_branch_node->m = std::numeric_limits<float>::infinity();
-        }
-    }
-
-    inline void bdd_branch_node_vec::forward_step()
-    {
-        if(offset_low != terminal_0_offset && offset_low != terminal_1_offset)
-        {
-            const auto low_branch_node = address(offset_low);
-            low_branch_node->m = std::min(low_branch_node->m, m + low_cost);
-        }
-
-        if(offset_high != terminal_0_offset && offset_high != terminal_1_offset)
-        {
-            const auto high_branch_node = address(offset_high);
-            high_branch_node->m = std::min(high_branch_node->m, m + high_cost);
-        }
-    }
-
-    inline std::array<float,2> bdd_branch_node_vec::min_marginals()
-    {
-        std::array<float,2> mm;
-        if(offset_low == terminal_0_offset || offset_low == terminal_1_offset)
-        {
-            mm[0] = m + low_cost;
-        }
-        else
-        {
-            const auto low_branch_node = address(offset_low);
-            mm[0] = m + low_cost + low_branch_node->m;
-        }
-
-        if(offset_high == terminal_0_offset || offset_high == terminal_1_offset)
-        {
-            mm[1] = m + high_cost;
-        }
-        else
-        {
-            const auto high_branch_node = address(offset_high);
-            mm[1] = m + high_cost + high_branch_node->m;
-        }
-
-        //assert(std::isfinite(std::min(mm[0],mm[1])));
-        return mm;
-    }
-
-    inline void bdd_branch_node_vec::min_marginal(std::array<float,2>* reduced_min_marginals)
-    {
-        // TODO: use above min marginal
-        const auto mm = min_marginals();
-        reduced_min_marginals[bdd_index][0] = std::min(mm[0], reduced_min_marginals[bdd_index][0]);
-        reduced_min_marginals[bdd_index][1] = std::min(mm[1], reduced_min_marginals[bdd_index][1]);
-        return;
-        if(offset_low == terminal_0_offset || offset_low == terminal_1_offset)
-        {
-            reduced_min_marginals[bdd_index][0] = std::min(m + low_cost, reduced_min_marginals[bdd_index][0]);
-        }
-        else
-        {
-            const auto low_branch_node = address(offset_low);
-            reduced_min_marginals[bdd_index][0] = std::min(m + low_cost + low_branch_node->m, reduced_min_marginals[bdd_index][0]);
-        }
-
-        if(offset_high == terminal_0_offset || offset_high == terminal_1_offset)
-        {
-            reduced_min_marginals[bdd_index][1] = std::min(m + high_cost, reduced_min_marginals[bdd_index][1]);
-        }
-        else
-        {
-            const auto high_branch_node = address(offset_high);
-            reduced_min_marginals[bdd_index][1] = std::min(m + high_cost + high_branch_node->m, reduced_min_marginals[bdd_index][1]);
-        }
-    }
-
-    inline void bdd_branch_node_vec::set_marginal(std::array<float,2>* reduced_min_marginals, const std::array<float,2> avg_marginals)
-    {
-        //assert(std::isfinite(avg_marginals[0]));
-        //assert(std::isfinite(avg_marginals[1]));
-        if(std::isfinite(reduced_min_marginals[bdd_index][0]))
-            low_cost += -reduced_min_marginals[bdd_index][0] + avg_marginals[0];
-        else
-            low_cost = std::numeric_limits<float>::infinity();
-        if(std::isfinite(reduced_min_marginals[bdd_index][1]))
-            high_cost += -reduced_min_marginals[bdd_index][1] + avg_marginals[1]; 
-        else
-            high_cost = std::numeric_limits<float>::infinity();
-    }
-
     // bdds are stored in variable groups. Each variable group is a set of variables that can be processed in parallel.
-    class bdd_mma_base_vec {
-        public:
-            bdd_mma_base_vec() {}
-            bdd_mma_base_vec(const bdd_storage& bdd_storage_) { add_bdds(bdd_storage_); } 
-            bdd_mma_base_vec(BDD::bdd_collection& bdd_col) { add_bdds(bdd_col); } 
-            size_t nr_variables() const;
-            size_t nr_variable_groups() const;
-            size_t nr_bdd_vectors(const size_t var_group) const;
-            size_t nr_bdds(const size_t var) const { assert(var < nr_variables()); return nr_bdds_[var]; }
-            size_t nr_bdd_nodes() const { return bdd_branch_nodes_.size(); }
-            size_t nr_bdd_nodes(const size_t v) const { assert(v < nr_variables()); return bdd_branch_node_offsets_[v+1] - bdd_branch_node_offsets_[v]; }
-            size_t nr_bdds() const { return first_bdd_node_indices_.size(); }
+    template<typename BDD_BRANCH_NODE>
+        class bdd_mma_base {
+            public:
+                using value_type = typename BDD_BRANCH_NODE::value_type;
+                bdd_mma_base() {}
+                bdd_mma_base(BDD::bdd_collection& bdd_col) { add_bdds(bdd_col); } 
+                size_t nr_variables() const;
+                size_t nr_variable_groups() const;
+                size_t nr_bdd_vectors(const size_t var_group) const;
+                size_t nr_bdds(const size_t var) const { assert(var < nr_variables()); return nr_bdds_[var]; }
+                size_t nr_bdd_nodes() const { return bdd_branch_nodes_.size(); }
+                size_t nr_bdd_nodes(const size_t v) const { assert(v < nr_variables()); return bdd_branch_node_offsets_[v+1] - bdd_branch_node_offsets_[v]; }
+                size_t nr_bdds() const { return first_bdd_node_indices_.size(); }
 
-            void forward_step(const size_t var_group);
-            void min_marginal_averaging_forward();
-            void min_marginal_averaging_step_forward(const size_t var_group);
+                void forward_step(const size_t var_group);
+                void min_marginal_averaging_forward();
+                void min_marginal_averaging_step_forward(const size_t var_group);
 
-            void backward_step(const size_t var_group);
-            void min_marginal_averaging_backward();
-            void min_marginal_averaging_step_backward(const size_t var_group);
+                void backward_step(const size_t var_group);
+                void min_marginal_averaging_backward();
+                void min_marginal_averaging_step_backward(const size_t var_group);
 
-            std::array<float,2> average_marginals(std::array<float,2>* marginals, const size_t nr_marginals);
+                std::array<value_type,2> average_marginals(std::array<value_type,2>* marginals, const size_t nr_marginals);
 
-            void iteration();
-            void backward_run();
-            void forward_run();
+                void iteration();
+                void backward_run();
+                void forward_run();
 
-            void compute_lower_bound(); 
-            void compute_lower_bound_after_forward_pass(); 
-            void compute_lower_bound_after_backward_pass(); 
+                void compute_lower_bound(); 
+                void compute_lower_bound_after_forward_pass(); 
+                void compute_lower_bound_after_backward_pass(); 
 
             //std::vector<double> total_min_marginals();
             two_dim_variable_array<std::array<double,2>> min_marginals();
@@ -243,7 +64,7 @@ namespace LPMP {
             void fix_variable(const size_t var, const bool value);
 
             // get variable costs from bdd
-            std::vector<float> get_costs(const size_t bdd_nr);
+            std::vector<value_type> get_costs(const size_t bdd_nr);
             // add costs from cost iterator to costs of bdd. Assume that variables given are subset of variables of bdd
             template<typename COST_ITERATOR, typename VARIABLE_ITERATOR>
                 void update_costs(const size_t bdd_nr,
@@ -264,10 +85,12 @@ namespace LPMP {
                 void export_graphviz(STREAM& s, const size_t bdd_nr);
 
         protected:
-            std::vector<bdd_branch_node_vec> bdd_branch_nodes_;
+            std::vector<BDD_BRANCH_NODE> bdd_branch_nodes_;
             std::vector<size_t> bdd_branch_node_offsets_; // offsets into where bdd branch nodes belonging to a variable start 
+            // TODO: remove all group stuff
             std::vector<size_t> bdd_branch_node_group_offsets_; // offsets into where bdd branch nodes belonging to a variable group start 
             std::vector<size_t> nr_bdds_; // nr bdds per variable
+            // TODO: use std::vector<std::array<size_t,2>> for range of first resp. last bdd nodes of each BDD. Also sort them for faster access time
             two_dim_variable_array<size_t> first_bdd_node_indices_;  // used for computing lower bound
             two_dim_variable_array<size_t> last_bdd_node_indices_;  // used for computing lower bound
             double lower_bound_ = -std::numeric_limits<double>::infinity();
@@ -295,7 +118,6 @@ namespace LPMP {
             //two_dim_variable_array<std::array<float,2>> min_marginals();
             // export BDDs that cover the given variables
             // TODO: unify with init?
-            std::vector<size_t> add_bdds(const bdd_storage& stor);
             void add_bdds(BDD::bdd_collection& bdd_col);
             template<typename BDD_NR_ITERATOR>
                 std::vector<size_t> add_bdds(BDD::bdd_collection& bdd_col, BDD_NR_ITERATOR bdd_nrs_begin, BDD_NR_ITERATOR bdd_nrs_end);
@@ -307,169 +129,45 @@ namespace LPMP {
 
     };
 
-
-    inline size_t bdd_mma_base_vec::nr_variables() const
+    template<typename BDD_BRANCH_NODE>
+    size_t bdd_mma_base<BDD_BRANCH_NODE>::nr_variables() const
     {
         return nr_bdds_.size(); 
     }
 
-    inline size_t bdd_mma_base_vec::nr_variable_groups() const
+    template<typename BDD_BRANCH_NODE>
+    size_t bdd_mma_base<BDD_BRANCH_NODE>::nr_variable_groups() const
     {
         throw std::runtime_error("not usable");
         return bdd_branch_node_group_offsets_.size()-1; 
     } 
 
-    inline size_t bdd_mma_base_vec::nr_bdd_vectors(const size_t var) const
+    template<typename BDD_BRANCH_NODE>
+    size_t bdd_mma_base<BDD_BRANCH_NODE>::nr_bdd_vectors(const size_t var) const
     {
         assert(var < nr_variables());
         return bdd_branch_node_offsets_[var+1] - bdd_branch_node_offsets_[var];
     } 
 
-    /*
-    inline void bdd_mma_base_vec::init(const bdd_storage& bdd_storage_)
-    {
-        bdd_branch_nodes_.clear();
-        bdd_branch_node_offsets_.clear();
-        nr_bdds_.clear();
-        std::vector<size_t> cur_first_bdd_node_indices;
-        std::vector<size_t> cur_last_bdd_node_indices;
-        first_bdd_node_indices_.clear();
-        last_bdd_node_indices_.clear();
-        lower_bound_ = -std::numeric_limits<double>::infinity();
-
-        // count bdd branch nodes per variable
-        std::vector<size_t> bdd_branch_nodes_per_var(bdd_storage_.nr_variables(), 0);
-        for(const auto& stored_bdd_node : bdd_storage_.bdd_nodes())
-            ++bdd_branch_nodes_per_var[stored_bdd_node.variable]; 
-
-        bdd_branch_node_offsets_.reserve(bdd_storage_.nr_variables()+1);
-        bdd_branch_node_offsets_.push_back(0);
-        for(const size_t i : bdd_branch_nodes_per_var)
-            bdd_branch_node_offsets_.push_back(bdd_branch_node_offsets_.back() + i);
-
-        bdd_branch_nodes_.resize(bdd_branch_node_offsets_.back());
-        std::vector<size_t> bdd_branch_nodes_counter(bdd_storage_.nr_variables(), 0);
-
-        std::vector<bdd_branch_node_vec*> stored_bdd_index_to_bdd_offset(bdd_storage_.bdd_nodes().size(), nullptr);
-
-        for(size_t bdd_index=0; bdd_index<bdd_storage_.nr_bdds(); ++bdd_index)
-        {
-            cur_first_bdd_node_indices.clear();
-            cur_last_bdd_node_indices.clear();
-            const size_t first_stored_bdd_node = bdd_storage_.bdd_delimiters()[bdd_index]; 
-            const size_t last_stored_bdd_node = bdd_storage_.bdd_delimiters()[bdd_index+1];
-            const size_t first_var = bdd_storage_.bdd_nodes()[last_stored_bdd_node-1].variable;
-            const size_t last_var = bdd_storage_.bdd_nodes()[first_stored_bdd_node].variable;
-            for(size_t i=first_stored_bdd_node; i<last_stored_bdd_node; ++i)
-            {
-                assert(first_var <= bdd_storage_.bdd_nodes()[i].variable);
-                assert(last_var >= bdd_storage_.bdd_nodes()[i].variable);
-            }
-
-            for(size_t stored_bdd_node_index=first_stored_bdd_node; stored_bdd_node_index<last_stored_bdd_node; ++stored_bdd_node_index)
-            {
-                const auto& stored_bdd = bdd_storage_.bdd_nodes()[stored_bdd_node_index];
-                const size_t v = stored_bdd.variable;
-                const size_t bdd_branch_index = bdd_branch_node_offsets_[v] + bdd_branch_nodes_counter[v];
-                ++bdd_branch_nodes_counter[v];
-
-                if(v == first_var)
-                    cur_first_bdd_node_indices.push_back(bdd_branch_index);
-                if(v == last_var)
-                    cur_last_bdd_node_indices.push_back(bdd_branch_index);
-
-                if(stored_bdd.low == bdd_storage::bdd_node::terminal_0)
-                {
-                    bdd_branch_nodes_[bdd_branch_index].offset_low = bdd_branch_node_vec::terminal_0_offset;
-                    bdd_branch_nodes_[bdd_branch_index].low_cost = std::numeric_limits<float>::infinity();
-                }
-                else if(stored_bdd.low == bdd_storage::bdd_node::terminal_1)
-                {
-                    assert(bdd_branch_nodes_[bdd_branch_index].low_cost == 0.0);
-                    bdd_branch_nodes_[bdd_branch_index].offset_low = bdd_branch_node_vec::terminal_1_offset;
-                }
-                else
-                {
-                    assert(bdd_branch_nodes_[bdd_branch_index].low_cost == 0.0);
-                    assert(stored_bdd_index_to_bdd_offset[stored_bdd.low] != nullptr);
-                    bdd_branch_node_vec* low_ptr = stored_bdd_index_to_bdd_offset[stored_bdd.low];
-                    bdd_branch_nodes_[bdd_branch_index].offset_low = bdd_branch_nodes_[bdd_branch_index].synthesize_address(low_ptr);
-                }
-
-                if(stored_bdd.high == bdd_storage::bdd_node::terminal_0)
-                {
-                    bdd_branch_nodes_[bdd_branch_index].offset_high = bdd_branch_node_vec::terminal_0_offset;
-                    bdd_branch_nodes_[bdd_branch_index].high_cost = std::numeric_limits<float>::infinity();
-                }
-                else if(stored_bdd.high == bdd_storage::bdd_node::terminal_1)
-                {
-                    assert(bdd_branch_nodes_[bdd_branch_index].high_cost == 0.0);
-                    bdd_branch_nodes_[bdd_branch_index].offset_high = bdd_branch_node_vec::terminal_1_offset;
-                }
-                else
-                {
-                    assert(bdd_branch_nodes_[bdd_branch_index].high_cost == 0.0);
-                    assert(stored_bdd_index_to_bdd_offset[stored_bdd.high] != nullptr);
-                    bdd_branch_node_vec* high_ptr = stored_bdd_index_to_bdd_offset[stored_bdd.high];
-                    bdd_branch_nodes_[bdd_branch_index].offset_high = bdd_branch_nodes_[bdd_branch_index].synthesize_address(high_ptr);
-                }
-
-                assert(bdd_index <= std::numeric_limits<uint32_t>::max()); // TODO: write alternative mechanism for this case
-                bdd_branch_nodes_[bdd_branch_index].bdd_index = bdd_index;
-                assert(stored_bdd_index_to_bdd_offset[stored_bdd_node_index] == nullptr);
-
-                stored_bdd_index_to_bdd_offset[stored_bdd_node_index] = &bdd_branch_nodes_[bdd_branch_index];
-            }
-
-            assert(cur_first_bdd_node_indices.size() > 0);
-            first_bdd_node_indices_.push_back(cur_first_bdd_node_indices.begin(), cur_first_bdd_node_indices.end()); 
-            assert(cur_last_bdd_node_indices.size() > 0);
-            last_bdd_node_indices_.push_back(cur_last_bdd_node_indices.begin(), cur_last_bdd_node_indices.end()); 
-        }
-
-        assert(first_bdd_node_indices_.size() == bdd_storage_.nr_bdds());
-        assert(last_bdd_node_indices_.size() == bdd_storage_.nr_bdds());
-
-        nr_bdds_.clear();
-        nr_bdds_.reserve(nr_variables());
-        // TODO: replace by vector?
-        tsl::robin_map<uint32_t, uint32_t> bdd_index_redux;
-        for(size_t i=0; i<bdd_storage_.nr_variables(); ++i)
-        {
-            bdd_index_redux.clear();
-            for(size_t vec_idx=bdd_branch_node_offsets_[i]; vec_idx<bdd_branch_node_offsets_[i+1]; ++vec_idx)
-            {
-                auto& bdd_vec = bdd_branch_nodes_[vec_idx]; 
-                const uint32_t bdd_index = bdd_vec.bdd_index;
-                assert(bdd_index != bdd_branch_node_vec::inactive_bdd_index);
-                if(bdd_index_redux.count(bdd_index) == 0)
-                    bdd_index_redux.insert({bdd_index, bdd_index_redux.size()}); 
-            }
-            for(size_t vec_idx=bdd_branch_node_offsets_[i]; vec_idx<bdd_branch_node_offsets_[i+1]; ++vec_idx)
-            {
-                auto& bdd_vec = bdd_branch_nodes_[vec_idx]; 
-                bdd_vec.bdd_index = bdd_index_redux.find(bdd_vec.bdd_index)->second;
-            }
-            nr_bdds_.push_back(bdd_index_redux.size());
-        }
-
-        std::cout << "nr bdd nodes = " << bdd_branch_nodes_.size() << "\n";
-    }
-*/
-
-    inline void bdd_mma_base_vec::forward_step(const size_t var)
+    template<typename BDD_BRANCH_NODE>
+    void bdd_mma_base<BDD_BRANCH_NODE>::forward_step(const size_t var)
     {
         assert(var < nr_variables());
 
+        assert(var+1 < bdd_branch_node_offsets_.size());
         for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
+        {
+            assert(i < bdd_branch_nodes_.size());
             bdd_branch_nodes_[i].prepare_forward_step();
+        }
 
         for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
             bdd_branch_nodes_[i].forward_step();
     }
 
 
-    inline void bdd_mma_base_vec::backward_step(const size_t var)
+    template<typename BDD_BRANCH_NODE>
+    void bdd_mma_base<BDD_BRANCH_NODE>::backward_step(const size_t var)
     {
         assert(var < nr_variables());
 
@@ -478,9 +176,10 @@ namespace LPMP {
             bdd_branch_nodes_[i].backward_step();
     } 
 
-    inline std::array<float,2> bdd_mma_base_vec::average_marginals(std::array<float,2>* marginals, const size_t nr_marginals)
+    template<typename BDD_BRANCH_NODE>
+    std::array<typename BDD_BRANCH_NODE::value_type,2> bdd_mma_base<BDD_BRANCH_NODE>::average_marginals(std::array<typename BDD_BRANCH_NODE::value_type,2>* marginals, const size_t nr_marginals)
     {
-        std::array<float,2> avg_margs = {0.0,0.0};
+        std::array<value_type,2> avg_margs = {0.0,0.0};
         for(size_t i=0; i<nr_marginals; ++i)
         {
             //assert(std::isfinite(marginals[i][0])); // need not hold true after fix_variable
@@ -488,27 +187,28 @@ namespace LPMP {
             avg_margs[0] += marginals[i][0];
             avg_margs[1] += marginals[i][1];
         }
-        avg_margs[0] /= float(nr_marginals);
-        avg_margs[1] /= float(nr_marginals);
+        avg_margs[0] /= value_type(nr_marginals);
+        avg_margs[1] /= value_type(nr_marginals);
         //assert(std::isfinite(avg_margs[0]));
         //assert(std::isfinite(avg_margs[1]));
         return avg_margs;
     } 
 
-    inline void bdd_mma_base_vec::min_marginal_averaging_step_forward(const size_t var)
+    template<typename BDD_BRANCH_NODE>
+    void bdd_mma_base<BDD_BRANCH_NODE>::min_marginal_averaging_step_forward(const size_t var)
     {
-        // TODO: pad to four so that SIMD instructions can be applied?
+        assert(var < nr_variables());
         const size_t _nr_bdds = nr_bdds(var);
         if(_nr_bdds == 0)
             return;
 
-        std::array<float,2> min_marginals[_nr_bdds];
-        std::fill(min_marginals, min_marginals + _nr_bdds, std::array<float,2>{std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity()});
+        std::array<value_type,2> min_marginals[_nr_bdds];
+        std::fill(min_marginals, min_marginals + _nr_bdds, std::array<value_type,2>{std::numeric_limits<value_type>::infinity(), std::numeric_limits<value_type>::infinity()});
 
         for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
             bdd_branch_nodes_[i].min_marginal(min_marginals);
 
-        std::array<float,2> avg_marginals = average_marginals(min_marginals, _nr_bdds);
+        std::array<value_type,2> avg_marginals = average_marginals(min_marginals, _nr_bdds);
 
         for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
             bdd_branch_nodes_[i].set_marginal(min_marginals, avg_marginals);
@@ -516,19 +216,20 @@ namespace LPMP {
         forward_step(var);
     }
 
-    inline void bdd_mma_base_vec::min_marginal_averaging_step_backward(const size_t var)
+    template<typename BDD_BRANCH_NODE>
+    void bdd_mma_base<BDD_BRANCH_NODE>::min_marginal_averaging_step_backward(const size_t var)
     {
         // TODO: pad to four so that SIMD instructions can be applied?
         const size_t _nr_bdds = nr_bdds(var);
         if(_nr_bdds == 0)
             return;
-        std::array<float,2> min_marginals[_nr_bdds];
-        std::fill(min_marginals, min_marginals + _nr_bdds, std::array<float,2>{std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity()});
+        std::array<value_type,2> min_marginals[_nr_bdds];
+        std::fill(min_marginals, min_marginals + _nr_bdds, std::array<value_type,2>{std::numeric_limits<value_type>::infinity(), std::numeric_limits<value_type>::infinity()});
 
         for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
             bdd_branch_nodes_[i].min_marginal(min_marginals);
 
-        std::array<float,2> avg_marginals = average_marginals(min_marginals, _nr_bdds);
+        std::array<value_type,2> avg_marginals = average_marginals(min_marginals, _nr_bdds);
 
         //std::cout << "backward step for var " << var << ", offset = " << bdd_branch_node_offsets_[var] << ", #nodes = " << bdd_branch_nodes_.size() << "\n";
         for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
@@ -538,7 +239,8 @@ namespace LPMP {
         }
     }
 
-    inline void bdd_mma_base_vec::min_marginal_averaging_forward()
+    template<typename BDD_BRANCH_NODE>
+    void bdd_mma_base<BDD_BRANCH_NODE>::min_marginal_averaging_forward()
     {
         if(message_passing_state_ != message_passing_state::after_backward_pass)
             backward_run();
@@ -553,7 +255,8 @@ namespace LPMP {
         message_passing_state_ = message_passing_state::after_forward_pass;
     }
 
-    inline void bdd_mma_base_vec::min_marginal_averaging_backward()
+    template<typename BDD_BRANCH_NODE>
+    void bdd_mma_base<BDD_BRANCH_NODE>::min_marginal_averaging_backward()
     {
         if(message_passing_state_ != message_passing_state::after_forward_pass)
             forward_run();
@@ -564,49 +267,8 @@ namespace LPMP {
         message_passing_state_ = message_passing_state::after_backward_pass;
     }
 
-    inline void bdd_mma_base_vec::solve(const size_t max_iter, const double tolerance, const double time_limit)
-    {
-        const auto start_time = std::chrono::steady_clock::now();
-        double lb_prev = this->lower_bound();
-        double lb_post = lb_prev;
-        std::cout << "initial lower bound = " << lb_prev;
-        auto time = std::chrono::steady_clock::now();
-        std::cout << ", time = " << (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000 << " s";
-        std::cout << "\n";
-        for(size_t iter=0; iter<max_iter; ++iter)
-        {
-            iteration();
-            lb_prev = lb_post;
-            lb_post = this->lower_bound();
-            std::cout << "iteration " << iter << ", lower bound = " << lb_post;
-            time = std::chrono::steady_clock::now();
-            double time_spent = (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000;
-            std::cout << ", time = " << time_spent << " s";
-            std::cout << "\n";
-            if (time_spent > time_limit)
-            {
-                std::cout << "Time limit reached." << std::endl;
-                break;
-            }
-            if (std::abs(lb_prev-lb_post) < std::abs(tolerance*lb_prev))
-            {
-                std::cout << "Relative progress less than tolerance (" << tolerance << ")\n";
-                break;
-            }
-        }
-        std::cout << "final lower bound = " << this->lower_bound() << "\n"; 
-
-        const auto mms = min_marginals();
-
-        const auto mmd = min_marginal_differences(mms, 0.001);
-        std::vector<char> tighten_variables(nr_variables(), false);
-        for(size_t i=0; i<mmd.size(); ++i)
-            if(std::abs(mmd[i]) < 1e-3)
-                tighten_variables[i] = true;
-        tighten_bdd_groups(tighten_variables);
-    }
-
-    inline void bdd_mma_base_vec::iteration()
+    template<typename BDD_BRANCH_NODE>
+    void bdd_mma_base<BDD_BRANCH_NODE>::iteration()
     {
         min_marginal_averaging_forward();
         compute_lower_bound();
@@ -614,7 +276,8 @@ namespace LPMP {
         compute_lower_bound();
     }
 
-    inline void bdd_mma_base_vec::backward_run()
+    template<typename BDD_BRANCH_NODE>
+    void bdd_mma_base<BDD_BRANCH_NODE>::backward_run()
     {
         MEASURE_FUNCTION_EXECUTION_TIME;
         // TODO: if we already have done a backward_run, we do not need to do it again. Check state!
@@ -625,7 +288,8 @@ namespace LPMP {
         compute_lower_bound();
     }
 
-    inline void bdd_mma_base_vec::forward_run()
+    template<typename BDD_BRANCH_NODE>
+    void bdd_mma_base<BDD_BRANCH_NODE>::forward_run()
     {
         if(message_passing_state_ == message_passing_state::after_forward_pass)
             return;
@@ -642,7 +306,8 @@ namespace LPMP {
         compute_lower_bound();
     }
 
-    inline void bdd_mma_base_vec::compute_lower_bound()
+    template<typename BDD_BRANCH_NODE>
+    void bdd_mma_base<BDD_BRANCH_NODE>::compute_lower_bound()
     {
         if(message_passing_state_ == message_passing_state::after_forward_pass)
             compute_lower_bound_after_forward_pass();
@@ -652,13 +317,14 @@ namespace LPMP {
             throw std::runtime_error("Cannot compute valid lower bound");
     }
 
-    inline void bdd_mma_base_vec::compute_lower_bound_after_backward_pass()
+    template<typename BDD_BRANCH_NODE>
+    void bdd_mma_base<BDD_BRANCH_NODE>::compute_lower_bound_after_backward_pass()
     {
         tkahan<double> lb;
         //double lb = 0.0;
         for(size_t i=0; i<first_bdd_node_indices_.size(); ++i)
         {
-            float bdd_lb = std::numeric_limits<float>::infinity();
+            value_type bdd_lb = std::numeric_limits<value_type>::infinity();
             for(size_t j=0; j<first_bdd_node_indices_.size(i); ++j)
                 bdd_lb = std::min(bdd_branch_nodes_[first_bdd_node_indices_(i,j)].m, bdd_lb);
             lb += bdd_lb;
@@ -668,18 +334,19 @@ namespace LPMP {
         lower_bound_ = lb.value();
     }
 
-    inline void bdd_mma_base_vec::compute_lower_bound_after_forward_pass()
+    template<typename BDD_BRANCH_NODE>
+    void bdd_mma_base<BDD_BRANCH_NODE>::compute_lower_bound_after_forward_pass()
     {
         tkahan<double> lb;
         //double lb = 0.0;
         for(size_t i=0; i<last_bdd_node_indices_.size(); ++i)
         {
-            float bdd_lb = std::numeric_limits<float>::infinity();
+            value_type bdd_lb = std::numeric_limits<value_type>::infinity();
             for(size_t j=0; j<last_bdd_node_indices_.size(i); ++j)
             {
-                auto& bdd_node = bdd_branch_nodes_[last_bdd_node_indices_(i,j)];
-                assert(bdd_node.offset_low == bdd_branch_node_vec::terminal_0_offset || bdd_node.offset_low == bdd_branch_node_vec::terminal_1_offset);
-                assert(bdd_node.offset_high == bdd_branch_node_vec::terminal_0_offset || bdd_node.offset_high == bdd_branch_node_vec::terminal_1_offset);
+                const auto& bdd_node = bdd_branch_nodes_[last_bdd_node_indices_(i,j)];
+                assert(bdd_node.offset_low == BDD_BRANCH_NODE::terminal_0_offset || bdd_node.offset_low == BDD_BRANCH_NODE::terminal_1_offset);
+                assert(bdd_node.offset_high == BDD_BRANCH_NODE::terminal_0_offset || bdd_node.offset_high == BDD_BRANCH_NODE::terminal_1_offset);
                 //bdd_lb = std::min({bdd_node.m + bdd_node.low_cost, bdd_node.m + bdd_node.high_cost, bdd_lb});
                 const auto mm = bdd_node.min_marginals();
                 bdd_lb = std::min({mm[0], mm[1], bdd_lb});
@@ -691,7 +358,8 @@ namespace LPMP {
         lower_bound_ = lb.value();
     }
 
-    inline void bdd_mma_base_vec::set_cost(const double c, const size_t var)
+    template<typename BDD_BRANCH_NODE>
+    void bdd_mma_base<BDD_BRANCH_NODE>::set_cost(const double c, const size_t var)
     {
         assert(nr_bdds(var) > 0);
         assert(std::isfinite(c));
@@ -701,13 +369,14 @@ namespace LPMP {
 
         for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
         {
-            assert(bdd_branch_nodes_[i].high_cost  == 0.0 || bdd_branch_nodes_[i].offset_high == bdd_branch_node_vec::terminal_0_offset);
-            assert(bdd_branch_nodes_[i].low_cost  == 0.0 || bdd_branch_nodes_[i].offset_low == bdd_branch_node_vec::terminal_0_offset);
-            bdd_branch_nodes_[i].high_cost += c / float(nr_bdds(var));
+            assert(bdd_branch_nodes_[i].high_cost  == 0.0 || bdd_branch_nodes_[i].offset_high == BDD_BRANCH_NODE::terminal_0_offset);
+            assert(bdd_branch_nodes_[i].low_cost  == 0.0 || bdd_branch_nodes_[i].offset_low == BDD_BRANCH_NODE::terminal_0_offset);
+            bdd_branch_nodes_[i].high_cost += c / value_type(nr_bdds(var));
         }
     }
 
-    inline void bdd_mma_base_vec::fix_variable(const size_t var, const bool value)
+    template<typename BDD_BRANCH_NODE>
+    void bdd_mma_base<BDD_BRANCH_NODE>::fix_variable(const size_t var, const bool value)
     {
         assert(nr_bdds(var) > 0);
 
@@ -717,14 +386,15 @@ namespace LPMP {
         for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
         {
             if(value == 0)
-                bdd_branch_nodes_[i].high_cost = std::numeric_limits<float>::infinity();
+                bdd_branch_nodes_[i].high_cost = std::numeric_limits<value_type>::infinity();
             else
-                bdd_branch_nodes_[i].low_cost = std::numeric_limits<float>::infinity();
+                bdd_branch_nodes_[i].low_cost = std::numeric_limits<value_type>::infinity();
         }
     }
 
+    template<typename BDD_BRANCH_NODE>
     template<typename ITERATOR>
-        void bdd_mma_base_vec::update_arc_costs(const size_t first_node, ITERATOR begin, ITERATOR end)
+        void bdd_mma_base<BDD_BRANCH_NODE>::update_arc_costs(const size_t first_node, ITERATOR begin, ITERATOR end)
         {
             assert(std::distance(begin,end) % 2 == 0);
             assert(first_node + std::distance(begin,end)/2 <= bdd_branch_nodes_.size());
@@ -732,17 +402,18 @@ namespace LPMP {
             for(auto it=begin; it!=end; ++l)
             {
                 assert(bdd_branch_nodes_[first_node].bdd_index == bdd_branch_nodes_[l].bdd_index);
-                if(bdd_branch_nodes_[l].offset_low != bdd_branch_node_vec::terminal_0_offset)
+                if(bdd_branch_nodes_[l].offset_low != BDD_BRANCH_NODE::terminal_0_offset)
                     bdd_branch_nodes_[l].low_cost += *it; 
                 ++it;
-                if(bdd_branch_nodes_[l].offset_high != bdd_branch_node_vec::terminal_0_offset)
+                if(bdd_branch_nodes_[l].offset_high != BDD_BRANCH_NODE::terminal_0_offset)
                     bdd_branch_nodes_[l].high_cost += *it; 
                 ++it;
             }
         }
 
+    template<typename BDD_BRANCH_NODE>
     template<typename LAMBDA>
-        void bdd_mma_base_vec::visit_nodes(const size_t bdd_nr, LAMBDA&& f)
+        void bdd_mma_base<BDD_BRANCH_NODE>::visit_nodes(const size_t bdd_nr, LAMBDA&& f)
         {
             assert(bdd_nr < nr_bdds());
             std::deque<size_t> dq;
@@ -760,8 +431,8 @@ namespace LPMP {
 
                 f(i);
 
-                auto calculate_offset = [&](bdd_branch_node_vec& bdd, const size_t offset) {
-                    assert(offset != bdd_branch_node_vec::terminal_0_offset && offset != bdd_branch_node_vec::terminal_1_offset);
+                auto calculate_offset = [&](BDD_BRANCH_NODE& bdd, const size_t offset) {
+                    assert(offset != BDD_BRANCH_NODE::terminal_0_offset && offset != BDD_BRANCH_NODE::terminal_1_offset);
                     assert(&bdd >= &bdd_branch_nodes_[0]);
                     assert(std::distance(&bdd_branch_nodes_[0], &bdd) < bdd_branch_nodes_.size());
                     const size_t translated_offset = std::distance(&bdd_branch_nodes_[0], bdd.address(offset)); 
@@ -770,27 +441,28 @@ namespace LPMP {
                 };
 
                 auto& bdd = bdd_branch_nodes_[i];
-                if(bdd.offset_low != bdd_branch_node_vec::terminal_0_offset && bdd.offset_low != bdd_branch_node_vec::terminal_1_offset)
+                if(bdd.offset_low != BDD_BRANCH_NODE::terminal_0_offset && bdd.offset_low != BDD_BRANCH_NODE::terminal_1_offset)
                     dq.push_back(calculate_offset(bdd, bdd.offset_low));
-                if(bdd.offset_high != bdd_branch_node_vec::terminal_0_offset && bdd.offset_high != bdd_branch_node_vec::terminal_1_offset)
+                if(bdd.offset_high != BDD_BRANCH_NODE::terminal_0_offset && bdd.offset_high != BDD_BRANCH_NODE::terminal_1_offset)
                     dq.push_back(calculate_offset(bdd, bdd.offset_high));
             } 
         }
 
-    inline std::vector<float> bdd_mma_base_vec::get_costs(const size_t bdd_nr)
+    template<typename BDD_BRANCH_NODE>
+    std::vector<typename BDD_BRANCH_NODE::value_type> bdd_mma_base<BDD_BRANCH_NODE>::get_costs(const size_t bdd_nr)
     {
-        std::vector<float> costs;
+        std::vector<value_type> costs;
 
         size_t cur_var = std::numeric_limits<size_t>::max();
-        float hi_cost = std::numeric_limits<float>::infinity();
-        float lo_cost = std::numeric_limits<float>::infinity();
+        value_type hi_cost = std::numeric_limits<value_type>::infinity();
+        value_type lo_cost = std::numeric_limits<value_type>::infinity();
         visit_nodes(bdd_nr, [&](const size_t i) {
-                bdd_branch_node_vec& bdd = bdd_branch_nodes_[i];
+                const BDD_BRANCH_NODE& bdd = bdd_branch_nodes_[i];
                 if(cur_var != this->variable(i) && cur_var != std::numeric_limits<size_t>::max())
                 {
                 costs.push_back(hi_cost - lo_cost); 
-                hi_cost = std::numeric_limits<float>::infinity();
-                lo_cost = std::numeric_limits<float>::infinity();
+                hi_cost = std::numeric_limits<value_type>::infinity();
+                lo_cost = std::numeric_limits<value_type>::infinity();
                 }
                 hi_cost = std::min(hi_cost, bdd.high_cost);
                 lo_cost = std::min(lo_cost, bdd.low_cost);
@@ -798,15 +470,16 @@ namespace LPMP {
                 });
         costs.push_back(hi_cost - lo_cost);
 
-        for(const float x : costs)
+        for(const value_type x : costs)
             assert(std::isfinite(x));
         assert(costs.size() == variables(bdd_nr).size());
 
         return costs; 
     }
 
+    template<typename BDD_BRANCH_NODE>
     template<typename COST_ITERATOR, typename VARIABLE_ITERATOR>
-        void bdd_mma_base_vec::update_costs(const size_t bdd_nr,
+        void bdd_mma_base<BDD_BRANCH_NODE>::update_costs(const size_t bdd_nr,
                 COST_ITERATOR cost_begin, COST_ITERATOR cost_end,
                 VARIABLE_ITERATOR variable_begin, VARIABLE_ITERATOR variable_end)
         {
@@ -820,7 +493,6 @@ namespace LPMP {
             auto var_it = variable_begin;
 
             visit_nodes(bdd_nr, [&](const size_t i) {
-                    bdd_branch_node_vec& bdd = bdd_branch_nodes_[i];
                     if(variable(i) < *var_it)
                     return;
                     if(variable(i) > *var_it && var_it < variable_end)
@@ -834,7 +506,8 @@ namespace LPMP {
                     });
         }
 
-    inline void bdd_mma_base_vec::get_arc_marginals(const size_t first_node, const size_t last_node, std::vector<double>& arc_marginals)
+    template<typename BDD_BRANCH_NODE>
+    void bdd_mma_base<BDD_BRANCH_NODE>::get_arc_marginals(const size_t first_node, const size_t last_node, std::vector<double>& arc_marginals)
     {
         arc_marginals.clear();
         assert(first_node < bdd_branch_nodes_.size());
@@ -847,7 +520,8 @@ namespace LPMP {
         } 
     }
 
-    inline std::array<size_t,2> bdd_mma_base_vec::bdd_branch_node_offset(const size_t var, const size_t bdd_index) const
+    template<typename BDD_BRANCH_NODE>
+    std::array<size_t,2> bdd_mma_base<BDD_BRANCH_NODE>::bdd_branch_node_offset(const size_t var, const size_t bdd_index) const
     {
         assert(var < nr_variables());
         std::array<size_t,2> offsets;
@@ -869,7 +543,8 @@ namespace LPMP {
         return offsets;
     }
 
-    inline size_t bdd_mma_base_vec::variable(const size_t bdd_offset) const
+    template<typename BDD_BRANCH_NODE>
+    size_t bdd_mma_base<BDD_BRANCH_NODE>::variable(const size_t bdd_offset) const
     {
         assert(bdd_offset < bdd_branch_nodes_.size());
         if(bdd_branch_instruction_variables_.size() != bdd_branch_nodes_.size())
@@ -878,8 +553,8 @@ namespace LPMP {
         return bdd_branch_instruction_variables_[bdd_offset]; 
     }
 
-    //inline std::vector<double> bdd_mma_base_vec::total_min_marginals()
-    inline two_dim_variable_array<std::array<double,2>> bdd_mma_base_vec::min_marginals()
+    template<typename BDD_BRANCH_NODE>
+    two_dim_variable_array<std::array<double,2>> bdd_mma_base<BDD_BRANCH_NODE>::min_marginals()
     {
         std::cout << "compute min marginals in mma_vec\n";
         if(message_passing_state_ != message_passing_state::after_backward_pass)
@@ -899,8 +574,8 @@ namespace LPMP {
         for(size_t var=0; var<this->nr_variables(); ++var)
         {
             const size_t _nr_bdds = nr_bdds(var);
-            std::array<float,2> min_marginals[_nr_bdds];
-            std::fill(min_marginals, min_marginals + _nr_bdds, std::array<float,2>{std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity()});
+            std::array<value_type,2> min_marginals[_nr_bdds];
+            std::fill(min_marginals, min_marginals + _nr_bdds, std::array<value_type,2>{std::numeric_limits<value_type>::infinity(), std::numeric_limits<value_type>::infinity()});
             for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
                 bdd_branch_nodes_[i].min_marginal(min_marginals);
 
@@ -921,7 +596,8 @@ namespace LPMP {
         return mms;
     }
 
-    inline std::vector<size_t> bdd_mma_base_vec::compute_bdd_branch_instruction_variables() const
+    template<typename BDD_BRANCH_NODE>
+    std::vector<size_t> bdd_mma_base<BDD_BRANCH_NODE>::compute_bdd_branch_instruction_variables() const
     {
         std::vector<size_t> vars;
         vars.reserve(bdd_branch_nodes_.size());
@@ -931,7 +607,8 @@ namespace LPMP {
         return vars;
     }
 
-    inline void bdd_mma_base_vec::tighten_bdd(const float epsilon)
+    template<typename BDD_BRANCH_NODE>
+    void bdd_mma_base<BDD_BRANCH_NODE>::tighten_bdd(const float epsilon)
     {
         backward_run();
         for(size_t bdd_index=0; bdd_index<first_bdd_node_indices_.size(); ++bdd_index)
@@ -953,8 +630,8 @@ namespace LPMP {
         for(size_t bdd_index=0; bdd_index<first_bdd_node_indices_.size(); ++bdd_index)
         {
             // first compute optimal value of current BDD
-            const float bdd_lb = [&]() {
-                float lb = std::numeric_limits<float>::infinity();
+            const value_type bdd_lb = [&]() {
+                value_type lb = std::numeric_limits<value_type>::infinity();
                 for(size_t j=0; j<first_bdd_node_indices_.size(bdd_index); ++j)
                 {
                     const auto mm = bdd_branch_nodes_[first_bdd_node_indices_(bdd_index, j)].min_marginals(); 
@@ -986,7 +663,7 @@ namespace LPMP {
                 if(prev_var != var)
                 {
                     // tmp: check if lower bound correct.
-                    float check_lb = std::numeric_limits<float>::infinity();
+                    value_type check_lb = std::numeric_limits<value_type>::infinity();
                     for(const size_t i : last_var_bdd_nodes)
                     {
                         const auto mm = bdd_branch_nodes_[i].min_marginals();
@@ -1010,14 +687,14 @@ namespace LPMP {
                 bdd_node n;
                 n.var = var;
 
-                auto calculate_offset = [&](const float min_marg, const size_t offset) {
+                auto calculate_offset = [&](const value_type min_marg, const size_t offset) {
                     assert(min_marg >= bdd_lb - 1e-3);
                     // check if low resp. high arc min-marginal is within epsilon of lower bound
-                    if(min_marg <= bdd_lb + epsilon || offset == bdd_branch_node_vec::terminal_0_offset) // leave arc as is
+                    if(min_marg <= bdd_lb + epsilon || offset == BDD_BRANCH_NODE::terminal_0_offset) // leave arc as is
                     {
-                        if(offset == bdd_branch_node_vec::terminal_0_offset)
+                        if(offset == BDD_BRANCH_NODE::terminal_0_offset)
                             return bdd_node::terminal_0;
-                        else if(offset == bdd_branch_node_vec::terminal_1_offset)
+                        else if(offset == BDD_BRANCH_NODE::terminal_1_offset)
                             return bdd_node::terminal_1;
                         else
                         {
@@ -1028,7 +705,7 @@ namespace LPMP {
                     }
                     else // reroute arc to true terminal if it is not a pointer to false terminal
                     {
-                        if(offset == bdd_branch_node_vec::terminal_0_offset)
+                        if(offset == BDD_BRANCH_NODE::terminal_0_offset)
                         {
                             assert(false);
                             return bdd_node::terminal_0;
@@ -1114,112 +791,8 @@ namespace LPMP {
         std::cout << "new bdd size = " << bdd_collection.nr_bdd_nodes(new_bdd_nr) << "\n";
     }
 
-    /*
-    inline std::vector<float> bdd_mma_base_vec::min_marginal_differences(const float eps)
-    {
-        // go over all variables and see where min-marginal difference
-        this->backward_run();
-        // prepare forward run
-        for(size_t bdd_index=0; bdd_index<first_bdd_node_indices_.size(); ++bdd_index)
-            for(size_t j=0; j<first_bdd_node_indices_.size(bdd_index); ++j)
-                bdd_branch_nodes_[first_bdd_node_indices_(bdd_index,j)].m = 0.0;
-
-        std::vector<float> min_marg_diffs;
-        min_marg_diffs.reserve(nr_variables());
-
-        for(size_t var=0; var<this->nr_variables(); ++var)
-        {
-            const size_t _nr_bdds = nr_bdds(var);
-            std::array<float,2> min_marginals[_nr_bdds];
-            std::fill(min_marginals, min_marginals + _nr_bdds, std::array<float,2>{std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity()});
-            for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
-                bdd_branch_nodes_[i].min_marginal(min_marginals);
-
-            float min_diff = 0.0; //std::numeric_limits<float>::infinity(); 
-            bool negative = true;
-            bool positive = true;
-            for(size_t i=0; i<_nr_bdds; ++i)
-            {
-                min_diff += std::abs(min_marginals[i][1] - min_marginals[i][0]);
-                assert(std::isfinite(min_marginals[i][0]));
-                assert(std::isfinite(min_marginals[i][1]));
-                if(min_marginals[i][1] - min_marginals[i][0] >= eps)
-                {
-                    negative = false; 
-                }
-                else if(min_marginals[i][1] - min_marginals[i][0] <= -eps)
-                {
-                    positive = false;
-                }
-                else
-                {
-                    negative = false;
-                    positive = false; 
-                }
-            }
-            assert(_nr_bdds == 0 || (!(positive == true && negative == true)));
-            if(negative)
-                min_marg_diffs.push_back(-min_diff);
-            else if(positive)
-                min_marg_diffs.push_back(min_diff);
-            else
-                min_marg_diffs.push_back(0.0);
-
-            this->forward_step(var);
-        }
-
-        const size_t nr_positive_min_marg_differences = std::count_if(min_marg_diffs.begin(), min_marg_diffs.end(), [&](const float x) { return x > eps; });
-        const size_t nr_negative_min_marg_differences = std::count_if(min_marg_diffs.begin(), min_marg_diffs.end(), [&](const float x) { return x < -eps; });
-        const size_t nr_zero_min_marg_differences = min_marg_diffs.size() - nr_positive_min_marg_differences - nr_negative_min_marg_differences;
-        std::cout << "%zero min margs = " << 100.0 * double(nr_zero_min_marg_differences) / double(min_marg_diffs.size()) << "\n";
-        std::cout << "#zero min margs = " << nr_zero_min_marg_differences << "\n";
-        std::cout << "%positive min margs = " << 100.0 * double(nr_positive_min_marg_differences) / double(min_marg_diffs.size()) << "\n";
-        std::cout << "#positive min margs = " << nr_positive_min_marg_differences << "\n";
-        std::cout << "%negative min margs = " << 100.0 * double(nr_negative_min_marg_differences) / double(min_marg_diffs.size()) << "\n";
-        std::cout << "#negative min margs = " << nr_negative_min_marg_differences << "\n";
-
-        //for(float x : min_marg_diffs)
-        //    std::cout << x << " ";
-        //std::cout << "\n";
-        
-        return min_marg_diffs;
-    }
-    */
-
-    /*
-    inline two_dim_variable_array<std::array<float,2>> bdd_mma_base_vec::min_marginals()
-    {
-        std::cout << "compute all min marginals in mma_vec\n";
-        two_dim_variable_array<std::array<float,2>> mm;
-
-        // TODO: seems not to work. Somewhere state is not set correctly!
-        if(message_passing_state_ != message_passing_state::after_backward_pass)
-            backward_run();
-        message_passing_state_ = message_passing_state::none;
-
-        for(size_t bdd_index=0; bdd_index<first_bdd_node_indices_.size(); ++bdd_index)
-            for(size_t j=0; j<first_bdd_node_indices_.size(bdd_index); ++j)
-                bdd_branch_nodes_[first_bdd_node_indices_(bdd_index,j)].m = 0.0;
-
-        for(size_t var=0; var<nr_variables(); ++var)
-        {
-            const size_t _nr_bdds = nr_bdds(var);
-            std::array<float,2> min_marginals[_nr_bdds];
-            std::fill(min_marginals, min_marginals + _nr_bdds, std::array<float,2>{std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity()});
-
-            for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
-                bdd_branch_nodes_[i].min_marginal(min_marginals);
-
-            mm.push_back(min_marginals, min_marginals + _nr_bdds);
-            this->forward_step(var);
-        }
-
-        message_passing_state_ = message_passing_state::after_forward_pass;
-        return mm;
-    }
-    */
-
-    inline two_dim_variable_array<size_t> bdd_mma_base_vec::tighten_bdd_groups(const std::vector<char>& tighten_variables)
+    template<typename BDD_BRANCH_NODE>
+    two_dim_variable_array<size_t> bdd_mma_base<BDD_BRANCH_NODE>::tighten_bdd_groups(const std::vector<char>& tighten_variables)
     {
         // (i) collect all BDDs that have support on at least one of the variables to participate in tightening.
         std::vector<size_t> tighten_bdds;
@@ -1242,12 +815,12 @@ namespace LPMP {
                 if(tighten_variables[var])
                     tighten_bdds.push_back(bdd_idx);
                 auto& bdd_node = bdd_branch_nodes_[i];
-                if(bdd_node.offset_low != bdd_branch_node_vec::terminal_0_offset && bdd_node.offset_low != bdd_branch_node_vec::terminal_1_offset)
+                if(bdd_node.offset_low != BDD_BRANCH_NODE::terminal_0_offset && bdd_node.offset_low != BDD_BRANCH_NODE::terminal_1_offset)
                 {
                     const size_t low_offset = std::distance(&bdd_branch_nodes_[0], bdd_node.address(bdd_node.offset_low)); 
                     dq.push_back(low_offset);
                 }
-                if(bdd_node.offset_high != bdd_branch_node_vec::terminal_0_offset && bdd_node.offset_high != bdd_branch_node_vec::terminal_1_offset)
+                if(bdd_node.offset_high != BDD_BRANCH_NODE::terminal_0_offset && bdd_node.offset_high != BDD_BRANCH_NODE::terminal_1_offset)
                 {
                     const size_t high_offset = std::distance(&bdd_branch_nodes_[0], bdd_node.address(bdd_node.offset_high)); 
                     dq.push_back(high_offset);
@@ -1279,12 +852,12 @@ namespace LPMP {
                 ++var_bdd_adjacencies_size[c];
                 ++var_bdd_adjacencies_size[tighten_bdds.size() + var];
                 auto& bdd_node = bdd_branch_nodes_[i];
-                if(bdd_node.offset_low != bdd_branch_node_vec::terminal_0_offset && bdd_node.offset_low != bdd_branch_node_vec::terminal_1_offset)
+                if(bdd_node.offset_low != BDD_BRANCH_NODE::terminal_0_offset && bdd_node.offset_low != BDD_BRANCH_NODE::terminal_1_offset)
                 {
                     const size_t low_offset = std::distance(&bdd_branch_nodes_[0], bdd_node.address(bdd_node.offset_low)); 
                     dq.push_back(low_offset);
                 }
-                if(bdd_node.offset_high != bdd_branch_node_vec::terminal_0_offset && bdd_node.offset_high != bdd_branch_node_vec::terminal_1_offset)
+                if(bdd_node.offset_high != BDD_BRANCH_NODE::terminal_0_offset && bdd_node.offset_high != BDD_BRANCH_NODE::terminal_1_offset)
                 {
                     const size_t high_offset = std::distance(&bdd_branch_nodes_[0], bdd_node.address(bdd_node.offset_high)); 
                     dq.push_back(high_offset); 
@@ -1342,7 +915,8 @@ namespace LPMP {
         return ccs;
     }
 
-    inline std::vector<size_t> bdd_mma_base_vec::variables(const size_t bdd_idx)
+    template<typename BDD_BRANCH_NODE>
+    std::vector<size_t> bdd_mma_base<BDD_BRANCH_NODE>::variables(const size_t bdd_idx)
     {
         assert(bdd_idx < nr_bdds());
         std::deque<size_t> dq;
@@ -1360,12 +934,12 @@ namespace LPMP {
             const size_t var = variable(i);
             vars.insert(var);
             auto& bdd_node = bdd_branch_nodes_[i];
-            if(bdd_node.offset_low != bdd_branch_node_vec::terminal_0_offset && bdd_node.offset_low != bdd_branch_node_vec::terminal_1_offset)
+            if(bdd_node.offset_low != BDD_BRANCH_NODE::terminal_0_offset && bdd_node.offset_low != BDD_BRANCH_NODE::terminal_1_offset)
             {
                 const size_t low_offset = std::distance(&bdd_branch_nodes_[0], bdd_node.address(bdd_node.offset_low)); 
                 dq.push_back(low_offset);
             }
-            if(bdd_node.offset_high != bdd_branch_node_vec::terminal_0_offset && bdd_node.offset_high != bdd_branch_node_vec::terminal_1_offset)
+            if(bdd_node.offset_high != BDD_BRANCH_NODE::terminal_0_offset && bdd_node.offset_high != BDD_BRANCH_NODE::terminal_1_offset)
             {
                 const size_t high_offset = std::distance(&bdd_branch_nodes_[0], bdd_node.address(bdd_node.offset_high)); 
                 dq.push_back(high_offset);
@@ -1376,7 +950,8 @@ namespace LPMP {
         return var_vec;
     }
 
-    inline std::vector<bdd_branch_instruction<float>> bdd_mma_base_vec::export_bdd(const size_t bdd_idx)
+    template<typename BDD_BRANCH_NODE>
+    std::vector<bdd_branch_instruction<float>> bdd_mma_base<BDD_BRANCH_NODE>::export_bdd(const size_t bdd_idx)
     {
         assert(bdd_idx < nr_bdds());
         std::vector<bdd_branch_instruction<float>> bdds;
@@ -1399,9 +974,9 @@ namespace LPMP {
 
             auto calculate_offset = [&](auto& bdd, const size_t offset) {
                 // check if low resp. high arc min-marginal is within epsilon of lower bound
-                if(offset == bdd_branch_node_vec::terminal_0_offset)
+                if(offset == BDD_BRANCH_NODE::terminal_0_offset)
                     return bdd_node::terminal_0;
-                else if(offset == bdd_branch_node_vec::terminal_1_offset)
+                else if(offset == BDD_BRANCH_NODE::terminal_1_offset)
                     return bdd_node::terminal_1;
                 else
                 {
@@ -1442,16 +1017,17 @@ namespace LPMP {
         return bdds;
     }
 
-    inline size_t bdd_mma_base_vec::export_bdd(BDD::bdd_collection& bdd_col, const size_t bdd_idx)
+    template<typename BDD_BRANCH_NODE>
+    size_t bdd_mma_base<BDD_BRANCH_NODE>::export_bdd(BDD::bdd_collection& bdd_col, const size_t bdd_idx)
     {
         const size_t new_bdd_nr = bdd_col.new_bdd();
         std::unordered_map<size_t, BDD::bdd_collection_node> bdd_col_nodes; // position in bdd_branch_nodes to node in bdd collection
 
-        auto calculate_offset = [&](bdd_branch_node_vec& bdd, const size_t offset) {
+        auto calculate_offset = [&](BDD_BRANCH_NODE& bdd, const size_t offset) {
             // check if low resp. high arc min-marginal is within epsilon of lower bound
-            if(offset == bdd_branch_node_vec::terminal_0_offset)
+            if(offset == BDD_BRANCH_NODE::terminal_0_offset)
                 return bdd_node::terminal_0;
-            else if(offset == bdd_branch_node_vec::terminal_1_offset)
+            else if(offset == BDD_BRANCH_NODE::terminal_1_offset)
                 return bdd_node::terminal_1;
             else
             {
@@ -1518,13 +1094,14 @@ namespace LPMP {
         return new_bdd_nr;
     }
 
-    inline std::tuple<BDD::node_ref, std::vector<size_t>> bdd_mma_base_vec::export_bdd(BDD::bdd_mgr& bdd_mgr, const size_t bdd_idx)
+    template<typename BDD_BRANCH_NODE>
+    std::tuple<BDD::node_ref, std::vector<size_t>> bdd_mma_base<BDD_BRANCH_NODE>::export_bdd(BDD::bdd_mgr& bdd_mgr, const size_t bdd_idx)
     {
         assert(bdd_idx < nr_bdds());
 
         // TODO: this should be its own function
-        auto calculate_offset = [&](bdd_branch_node_vec& bdd, const size_t offset) {
-            assert(offset != bdd_branch_node_vec::terminal_0_offset && offset != bdd_branch_node_vec::terminal_1_offset);
+        auto calculate_offset = [&](BDD_BRANCH_NODE& bdd, const size_t offset) {
+            assert(offset != BDD_BRANCH_NODE::terminal_0_offset && offset != BDD_BRANCH_NODE::terminal_1_offset);
             const size_t translated_offset = std::distance(&bdd_branch_nodes_[0], bdd.address(offset)); 
             assert(translated_offset > 0 && translated_offset < bdd_branch_nodes_.size());
             return translated_offset;
@@ -1549,10 +1126,10 @@ namespace LPMP {
             auto& instr = bdd_branch_nodes_[i];
             variable_vec.push_back(variable(i));
 
-            if(instr.offset_low != bdd_branch_node_vec::terminal_0_offset && instr.offset_low != bdd_branch_node_vec::terminal_1_offset)
+            if(instr.offset_low != BDD_BRANCH_NODE::terminal_0_offset && instr.offset_low != BDD_BRANCH_NODE::terminal_1_offset)
                 dq.push_back(calculate_offset(instr, instr.offset_low));
 
-            if(instr.offset_high != bdd_branch_node_vec::terminal_0_offset && instr.offset_high != bdd_branch_node_vec::terminal_1_offset)
+            if(instr.offset_high != BDD_BRANCH_NODE::terminal_0_offset && instr.offset_high != BDD_BRANCH_NODE::terminal_1_offset)
                 dq.push_back(calculate_offset(instr, instr.offset_high));
         }
 
@@ -1566,12 +1143,12 @@ namespace LPMP {
 
         for(const size_t i : bdd_nodes)
         {
-            bdd_branch_node_vec& instr = bdd_branch_nodes_[i];
+            BDD_BRANCH_NODE& instr = bdd_branch_nodes_[i];
             const size_t var = variable(i);
-            auto get_node_ref = [&](bdd_branch_node_vec& bdd, const size_t offset) {
-                if(offset == bdd_branch_node_vec::terminal_0_offset)
+            auto get_node_ref = [&](BDD_BRANCH_NODE& bdd, const size_t offset) {
+                if(offset == BDD_BRANCH_NODE::terminal_0_offset)
                     return bdd_mgr.botsink();
-                if(offset == bdd_branch_node_vec::terminal_1_offset)
+                if(offset == BDD_BRANCH_NODE::terminal_1_offset)
                     return bdd_mgr.topsink();
                 else
                 {
@@ -1592,238 +1169,21 @@ namespace LPMP {
         return {bdd_map.find(first_bdd_node_indices_(bdd_idx,0))->second, variable_vec};
     }
 
-    // TODO: replace by add_bdds with bdd collection
-    inline std::vector<size_t> bdd_mma_base_vec::add_bdds(const bdd_storage& bdd_storage_)
-    {
-        message_passing_state_ = message_passing_state::none;
-
-        std::vector<bdd_branch_node_vec> new_bdd_branch_nodes_;
-        std::vector<size_t> new_bdd_branch_node_offsets_;
-        std::vector<size_t> new_nr_bdds_;
-        two_dim_variable_array<size_t> new_first_bdd_node_indices_;
-        two_dim_variable_array<size_t> new_last_bdd_node_indices_;
-
-        std::vector<size_t> cur_first_bdd_node_indices;
-        std::vector<size_t> cur_last_bdd_node_indices;
-
-        const size_t new_nr_variables = std::max(nr_variables(), bdd_storage_.nr_variables());
-        // count bdd branch nodes per variable
-        std::vector<size_t> new_bdd_branch_nodes_per_var(new_nr_variables, 0);
-        for(const auto& stored_bdd_node : bdd_storage_.bdd_nodes())
-            ++new_bdd_branch_nodes_per_var[stored_bdd_node.variable]; 
-        for(size_t v=0; v<nr_variables(); ++v)
-            new_bdd_branch_nodes_per_var[v] += nr_bdd_nodes(v);
-
-        new_bdd_branch_node_offsets_.reserve(new_nr_variables+1);
-        new_bdd_branch_node_offsets_.push_back(0);
-        for(const size_t i : new_bdd_branch_nodes_per_var)
-            new_bdd_branch_node_offsets_.push_back(new_bdd_branch_node_offsets_.back() + i);
-
-        new_bdd_branch_nodes_.resize(new_bdd_branch_node_offsets_.back());
-        std::vector<size_t> new_bdd_branch_nodes_counter(new_nr_variables, 0); 
-
-        // fill in previous bdd nodes
-        for(size_t bdd_idx=0; bdd_idx<nr_bdds(); ++bdd_idx)
-        {
-            // TODO: put in front of loop and clear before use
-            std::deque<size_t> dq;
-            for(size_t j=0; j<first_bdd_node_indices_.size(bdd_idx); ++j)
-                dq.push_back(first_bdd_node_indices_(bdd_idx, j));
-            // TODO: more efficient: get variables from bdd storage
-            const size_t first_var = variable(first_bdd_node_indices_(bdd_idx, 0));
-            const size_t last_var = variable(last_bdd_node_indices_(bdd_idx, 0));
-            std::vector<size_t> new_cur_first_bdd_node_indices;
-            std::vector<size_t> new_cur_last_bdd_node_indices;
-            // TODO: same as above.
-            tsl::robin_map<size_t,size_t> index_map;
-            while(!dq.empty())
-            {
-                const size_t old_i = dq.front();
-                auto& old_bdd = bdd_branch_nodes_[old_i];
-                dq.pop_front();
-                if(index_map.count(old_i) > 0)
-                    continue;
-                const size_t var = variable(old_i);
-                const size_t new_i = new_bdd_branch_node_offsets_[var] + new_bdd_branch_nodes_counter[var];
-                ++new_bdd_branch_nodes_counter[var];
-                if(var == first_var)
-                    new_cur_first_bdd_node_indices.push_back(new_i);
-                if(var == last_var)
-                    new_cur_last_bdd_node_indices.push_back(new_i);
-                //assert(old_i <= new_i); // not necessarily true if we reorder bdd branch nodes belonging to same variable and bdd
-                index_map.insert({old_i, new_i});
-
-                if(old_bdd.offset_low != bdd_branch_node_vec::terminal_0_offset && old_bdd.offset_low != bdd_branch_node_vec::terminal_1_offset) 
-                {
-                    const size_t old_low_i = std::distance(&bdd_branch_nodes_[0], old_bdd.address(old_bdd.offset_low)); 
-                    dq.push_back(old_low_i);
-                }
-                if(old_bdd.offset_high != bdd_branch_node_vec::terminal_0_offset && old_bdd.offset_high != bdd_branch_node_vec::terminal_1_offset) 
-                {
-                    const size_t old_high_i = std::distance(&bdd_branch_nodes_[0], old_bdd.address(old_bdd.offset_high)); 
-                    dq.push_back(old_high_i);
-                }
-            }
-
-            new_first_bdd_node_indices_.push_back(new_cur_first_bdd_node_indices.begin(), new_cur_first_bdd_node_indices.end());
-            new_last_bdd_node_indices_.push_back(new_cur_last_bdd_node_indices.begin(), new_cur_last_bdd_node_indices.end());
-
-            // set address offsets right
-            for(const auto [old_i, new_i] : index_map)
-            {
-                bdd_branch_node_vec& old_bdd = bdd_branch_nodes_[old_i];
-                bdd_branch_node_vec& new_bdd = new_bdd_branch_nodes_[new_i];
-                new_bdd = old_bdd;
-                std::cout << "old i " << old_i << ", old i " << old_i << "\n";
-
-                if(old_bdd.offset_low != bdd_branch_node_vec::terminal_0_offset && old_bdd.offset_low != bdd_branch_node_vec::terminal_1_offset) 
-                {
-                    const size_t old_low_i = std::distance(&bdd_branch_nodes_[0], old_bdd.address(old_bdd.offset_low)); 
-                    assert(index_map.count(old_low_i) > 0);
-                    const size_t new_low_i = index_map.find(old_low_i)->second;
-                    std::cout << "new low i " << new_low_i << ", old low i " << old_low_i << "\n";
-                    new_bdd.offset_low = new_bdd.synthesize_address(&new_bdd_branch_nodes_[new_low_i]); 
-                }
-
-                if(old_bdd.offset_high != bdd_branch_node_vec::terminal_0_offset && old_bdd.offset_high != bdd_branch_node_vec::terminal_1_offset) 
-                {
-                    const size_t old_high_i = std::distance(&bdd_branch_nodes_[0], old_bdd.address(old_bdd.offset_high)); 
-                    assert(index_map.count(old_high_i) > 0);
-                    const size_t new_high_i = index_map.find(old_high_i)->second;
-                    new_bdd.offset_high = new_bdd.synthesize_address(&new_bdd_branch_nodes_[new_high_i]); 
-                }
-            } 
-        }
-
-        std::vector<bdd_branch_node_vec*> stored_bdd_index_to_bdd_offset(bdd_branch_nodes_.size() + bdd_storage_.bdd_nodes().size(), nullptr);
-        std::vector<size_t> new_bdd_nrs;
-        // fill in bdds from bdd_storage_
-        for(size_t bdd_index=0; bdd_index<bdd_storage_.nr_bdds(); ++bdd_index)
-        {
-            new_bdd_nrs.push_back(bdd_index + nr_bdds());
-            cur_first_bdd_node_indices.clear();
-            cur_last_bdd_node_indices.clear();
-            const size_t first_stored_bdd_node = bdd_storage_.bdd_delimiters()[bdd_index]; 
-            const size_t last_stored_bdd_node = bdd_storage_.bdd_delimiters()[bdd_index+1];
-            const size_t first_var = bdd_storage_.bdd_nodes()[last_stored_bdd_node-1].variable;
-            const size_t last_var = bdd_storage_.bdd_nodes()[first_stored_bdd_node].variable;
-            for(size_t i=first_stored_bdd_node; i<last_stored_bdd_node; ++i)
-            {
-                assert(first_var <= bdd_storage_.bdd_nodes()[i].variable);
-                assert(last_var >= bdd_storage_.bdd_nodes()[i].variable);
-            }
-
-            for(size_t stored_bdd_node_index=first_stored_bdd_node; stored_bdd_node_index<last_stored_bdd_node; ++stored_bdd_node_index)
-            {
-                const auto& stored_bdd = bdd_storage_.bdd_nodes()[stored_bdd_node_index];
-                const size_t v = stored_bdd.variable;
-                const size_t bdd_branch_index = new_bdd_branch_node_offsets_[v] + new_bdd_branch_nodes_counter[v];
-                assert(new_bdd_branch_nodes_[bdd_branch_index].offset_low == 0 && new_bdd_branch_nodes_[bdd_branch_index].offset_high == 0 && new_bdd_branch_nodes_[bdd_branch_index].bdd_index == bdd_branch_node_vec::inactive_bdd_index);
-                ++new_bdd_branch_nodes_counter[v];
-
-                if(v == first_var)
-                    cur_first_bdd_node_indices.push_back(bdd_branch_index);
-                if(v == last_var)
-                    cur_last_bdd_node_indices.push_back(bdd_branch_index);
-
-                if(stored_bdd.low == bdd_storage::bdd_node::terminal_0)
-                {
-                    new_bdd_branch_nodes_[bdd_branch_index].offset_low = bdd_branch_node_vec::terminal_0_offset;
-                    new_bdd_branch_nodes_[bdd_branch_index].low_cost = std::numeric_limits<float>::infinity();
-                }
-                else if(stored_bdd.low == bdd_storage::bdd_node::terminal_1)
-                {
-                    assert(new_bdd_branch_nodes_[bdd_branch_index].low_cost == 0.0);
-                    new_bdd_branch_nodes_[bdd_branch_index].offset_low = bdd_branch_node_vec::terminal_1_offset;
-                }
-                else
-                {
-                    assert(new_bdd_branch_nodes_[bdd_branch_index].low_cost == 0.0);
-                    assert(stored_bdd_index_to_bdd_offset[stored_bdd.low] != nullptr);
-                    bdd_branch_node_vec* low_ptr = stored_bdd_index_to_bdd_offset[stored_bdd.low];
-                    new_bdd_branch_nodes_[bdd_branch_index].offset_low = new_bdd_branch_nodes_[bdd_branch_index].synthesize_address(low_ptr);
-                }
-
-                if(stored_bdd.high == bdd_storage::bdd_node::terminal_0)
-                {
-                    new_bdd_branch_nodes_[bdd_branch_index].offset_high = bdd_branch_node_vec::terminal_0_offset;
-                    new_bdd_branch_nodes_[bdd_branch_index].high_cost = std::numeric_limits<float>::infinity();
-                }
-                else if(stored_bdd.high == bdd_storage::bdd_node::terminal_1)
-                {
-                    assert(new_bdd_branch_nodes_[bdd_branch_index].high_cost == 0.0);
-                    new_bdd_branch_nodes_[bdd_branch_index].offset_high = bdd_branch_node_vec::terminal_1_offset;
-                }
-                else
-                {
-                    assert(new_bdd_branch_nodes_[bdd_branch_index].high_cost == 0.0);
-                    assert(stored_bdd_index_to_bdd_offset[stored_bdd.high] != nullptr);
-                    bdd_branch_node_vec* high_ptr = stored_bdd_index_to_bdd_offset[stored_bdd.high];
-                    new_bdd_branch_nodes_[bdd_branch_index].offset_high = new_bdd_branch_nodes_[bdd_branch_index].synthesize_address(high_ptr);
-                }
-
-                if(bdd_index + nr_bdds() >= std::numeric_limits<uint32_t>::max())
-                    throw std::runtime_error("bdd indices exceed 2^32"); // TODO: write alternative mechanism for this case
-                new_bdd_branch_nodes_[bdd_branch_index].bdd_index = nr_bdds() + bdd_index;
-                assert(stored_bdd_index_to_bdd_offset[stored_bdd_node_index] == nullptr);
-
-                stored_bdd_index_to_bdd_offset[stored_bdd_node_index] = &new_bdd_branch_nodes_[bdd_branch_index];
-            }
-
-            assert(cur_first_bdd_node_indices.size() > 0);
-            new_first_bdd_node_indices_.push_back(cur_first_bdd_node_indices.begin(), cur_first_bdd_node_indices.end()); 
-            assert(cur_last_bdd_node_indices.size() > 0);
-            new_last_bdd_node_indices_.push_back(cur_last_bdd_node_indices.begin(), cur_last_bdd_node_indices.end()); 
-        }
-
-        new_nr_bdds_.clear();
-        new_nr_bdds_.reserve(new_nr_variables);
-        tsl::robin_map<uint32_t, uint32_t> bdd_index_redux;
-        for(size_t i=0; i<new_nr_variables; ++i)
-        {
-            bdd_index_redux.clear();
-            for(size_t vec_idx=new_bdd_branch_node_offsets_[i]; vec_idx<new_bdd_branch_node_offsets_[i+1]; ++vec_idx)
-            {
-                auto& bdd_vec = new_bdd_branch_nodes_[vec_idx]; 
-                const uint32_t bdd_index = bdd_vec.bdd_index;
-                assert(bdd_index != bdd_branch_node_vec::inactive_bdd_index);
-                if(bdd_index_redux.count(bdd_index) == 0)
-                    bdd_index_redux.insert({bdd_index, bdd_index_redux.size()}); 
-            }
-            for(size_t vec_idx=new_bdd_branch_node_offsets_[i]; vec_idx<new_bdd_branch_node_offsets_[i+1]; ++vec_idx)
-            {
-                auto& bdd_vec = new_bdd_branch_nodes_[vec_idx];
-                bdd_vec.bdd_index = bdd_index_redux.find(bdd_vec.bdd_index)->second;
-            }
-            new_nr_bdds_.push_back(bdd_index_redux.size());
-        }
-
-
-        bdd_branch_instruction_variables_.clear(); // to force recomputation for variable of bdd node
-        // swap new and old data structures
-        std::swap(new_bdd_branch_nodes_, bdd_branch_nodes_);
-        std::swap(new_bdd_branch_node_offsets_, bdd_branch_node_offsets_);
-        std::swap(new_nr_bdds_, nr_bdds_);
-        std::swap(new_first_bdd_node_indices_, first_bdd_node_indices_);
-        std::swap(new_last_bdd_node_indices_, last_bdd_node_indices_);
-        message_passing_state_ = message_passing_state::none;
-
-        return new_bdd_nrs;
-    }
-
-    inline void bdd_mma_base_vec::add_bdds(BDD::bdd_collection& bdd_col)
+    template<typename BDD_BRANCH_NODE>
+    void bdd_mma_base<BDD_BRANCH_NODE>::add_bdds(BDD::bdd_collection& bdd_col)
     {
         std::vector<size_t> bdd_nrs(bdd_col.nr_bdds());
         std::iota(bdd_nrs.begin(), bdd_nrs.end(), 0);
         add_bdds(bdd_col, bdd_nrs.begin(), bdd_nrs.end());
     }
 
-    template<typename BDD_NR_ITERATOR>
-        std::vector<size_t> bdd_mma_base_vec::add_bdds(BDD::bdd_collection& bdd_col, BDD_NR_ITERATOR bdd_nrs_begin, BDD_NR_ITERATOR bdd_nrs_end)
+    template<typename BDD_BRANCH_NODE>
+        template<typename BDD_NR_ITERATOR>
+        std::vector<size_t> bdd_mma_base<BDD_BRANCH_NODE>::add_bdds(BDD::bdd_collection& bdd_col, BDD_NR_ITERATOR bdd_nrs_begin, BDD_NR_ITERATOR bdd_nrs_end)
         {
             message_passing_state_ = message_passing_state::none;
 
-            std::vector<bdd_branch_node_vec> new_bdd_branch_nodes_;
+            std::vector<BDD_BRANCH_NODE> new_bdd_branch_nodes_;
             std::vector<size_t> new_bdd_branch_node_offsets_;
             std::vector<size_t> new_nr_bdds_;
             two_dim_variable_array<size_t> new_first_bdd_node_indices_;
@@ -1855,7 +1215,7 @@ namespace LPMP {
 
             new_bdd_branch_nodes_.resize(new_bdd_branch_node_offsets_.back());
             for(const auto& b : new_bdd_branch_nodes_)
-                assert(b.offset_low == 0 && b.offset_high == 0 && b.bdd_index == bdd_branch_node_vec::inactive_bdd_index);
+                assert(b.offset_low == 0 && b.offset_high == 0 && b.bdd_index == BDD_BRANCH_NODE::inactive_bdd_index);
             std::vector<size_t> new_bdd_branch_nodes_counter(new_nr_variables, 0); 
 
             // fill in previous bdd nodes
@@ -1883,7 +1243,7 @@ namespace LPMP {
                         continue;
                     const size_t var = variable(old_i);
                     const size_t new_i = new_bdd_branch_node_offsets_[var] + new_bdd_branch_nodes_counter[var];
-                    assert(new_bdd_branch_nodes_[new_i].offset_low == 0 && new_bdd_branch_nodes_[new_i].offset_high == 0 && new_bdd_branch_nodes_[new_i].bdd_index == bdd_branch_node_vec::inactive_bdd_index);
+                    assert(new_bdd_branch_nodes_[new_i].offset_low == 0 && new_bdd_branch_nodes_[new_i].offset_high == 0 && new_bdd_branch_nodes_[new_i].bdd_index == BDD_BRANCH_NODE::inactive_bdd_index);
                     ++new_bdd_branch_nodes_counter[var];
                     if(var == first_var)
                         new_cur_first_bdd_node_indices.push_back(new_i);
@@ -1892,12 +1252,12 @@ namespace LPMP {
                     //assert(old_i <= new_i); // not necessarily true if we reorder bdd branch nodes belonging to same variable and bdd
                     index_map.insert({old_i, new_i});
 
-                    if(old_bdd.offset_low != bdd_branch_node_vec::terminal_0_offset && old_bdd.offset_low != bdd_branch_node_vec::terminal_1_offset) 
+                    if(old_bdd.offset_low != BDD_BRANCH_NODE::terminal_0_offset && old_bdd.offset_low != BDD_BRANCH_NODE::terminal_1_offset) 
                     {
                         const size_t old_low_i = std::distance(&bdd_branch_nodes_[0], old_bdd.address(old_bdd.offset_low)); 
                         dq.push_back(old_low_i);
                     }
-                    if(old_bdd.offset_high != bdd_branch_node_vec::terminal_0_offset && old_bdd.offset_high != bdd_branch_node_vec::terminal_1_offset) 
+                    if(old_bdd.offset_high != BDD_BRANCH_NODE::terminal_0_offset && old_bdd.offset_high != BDD_BRANCH_NODE::terminal_1_offset) 
                     {
                         const size_t old_high_i = std::distance(&bdd_branch_nodes_[0], old_bdd.address(old_bdd.offset_high)); 
                         dq.push_back(old_high_i);
@@ -1910,11 +1270,11 @@ namespace LPMP {
                 // set address offsets right
                 for(const auto [old_i, new_i] : index_map)
                 {
-                    bdd_branch_node_vec& old_bdd = bdd_branch_nodes_[old_i];
-                    bdd_branch_node_vec& new_bdd = new_bdd_branch_nodes_[new_i];
+                    BDD_BRANCH_NODE& old_bdd = bdd_branch_nodes_[old_i];
+                    BDD_BRANCH_NODE& new_bdd = new_bdd_branch_nodes_[new_i];
                     new_bdd = old_bdd;
 
-                    if(old_bdd.offset_low != bdd_branch_node_vec::terminal_0_offset && old_bdd.offset_low != bdd_branch_node_vec::terminal_1_offset) 
+                    if(old_bdd.offset_low != BDD_BRANCH_NODE::terminal_0_offset && old_bdd.offset_low != BDD_BRANCH_NODE::terminal_1_offset) 
                     {
                         const size_t old_low_i = std::distance(&bdd_branch_nodes_[0], old_bdd.address(old_bdd.offset_low)); 
                         assert(index_map.count(old_low_i) > 0);
@@ -1922,7 +1282,7 @@ namespace LPMP {
                         new_bdd.offset_low = new_bdd.synthesize_address(&new_bdd_branch_nodes_[new_low_i]); 
                     }
 
-                    if(old_bdd.offset_high != bdd_branch_node_vec::terminal_0_offset && old_bdd.offset_high != bdd_branch_node_vec::terminal_1_offset) 
+                    if(old_bdd.offset_high != BDD_BRANCH_NODE::terminal_0_offset && old_bdd.offset_high != BDD_BRANCH_NODE::terminal_1_offset) 
                     {
                         const size_t old_high_i = std::distance(&bdd_branch_nodes_[0], old_bdd.address(old_bdd.offset_high)); 
                         assert(index_map.count(old_high_i) > 0);
@@ -1932,15 +1292,9 @@ namespace LPMP {
                 } 
             }
 
-            //const size_t nr_bdd_col_nodes = [&]() {
-            //    size_t nr_nodes = 0;
-            //    for(auto bdd_nr_it=bdd_nrs_begin; bdd_nr_it!=bdd_nrs_end; ++bdd_nr_it)
-            //        nr_nodes += bdd_col.nr_bdd_nodes(*bdd_nr_it);
-            //    return nr_nodes; 
-            //}();
-            std::unordered_map<size_t,bdd_branch_node_vec*> stored_bdd_index_to_bdd_offset;//(bdd_branch_nodes_.size() + nr_bdd_col_nodes, nullptr);
-            std::vector<size_t> new_bdd_nrs;
             // fill in bdds from bdd_collection
+            std::unordered_map<size_t,BDD_BRANCH_NODE*> stored_bdd_index_to_bdd_offset;
+            std::vector<size_t> new_bdd_nrs;
             for(auto bdd_nr_it=bdd_nrs_begin; bdd_nr_it!=bdd_nrs_end; ++bdd_nr_it)
             {
                 const size_t bdd_nr = *bdd_nr_it;
@@ -1959,9 +1313,9 @@ namespace LPMP {
                     const size_t bdd_branch_index = new_bdd_branch_node_offsets_[v] + new_bdd_branch_nodes_counter[v];
                     ++new_bdd_branch_nodes_counter[v];
                     assert(bdd_branch_index < new_bdd_branch_nodes_.size());
-                    assert(new_bdd_branch_nodes_[bdd_branch_index].offset_low == 0 && new_bdd_branch_nodes_[bdd_branch_index].offset_high == 0 && new_bdd_branch_nodes_[bdd_branch_index].bdd_index == bdd_branch_node_vec::inactive_bdd_index);
+                    assert(new_bdd_branch_nodes_[bdd_branch_index].offset_low == 0 && new_bdd_branch_nodes_[bdd_branch_index].offset_high == 0 && new_bdd_branch_nodes_[bdd_branch_index].bdd_index == BDD_BRANCH_NODE::inactive_bdd_index);
                     assert(v == new_nr_variables-1 || bdd_branch_index < new_bdd_branch_node_offsets_[v+1]);
-                    assert(new_bdd_branch_nodes_[bdd_branch_index].offset_low == 0 && new_bdd_branch_nodes_[bdd_branch_index].offset_high == 0 && new_bdd_branch_nodes_[bdd_branch_index].bdd_index == bdd_branch_node_vec::inactive_bdd_index);
+                    assert(new_bdd_branch_nodes_[bdd_branch_index].offset_low == 0 && new_bdd_branch_nodes_[bdd_branch_index].offset_high == 0 && new_bdd_branch_nodes_[bdd_branch_index].bdd_index == BDD_BRANCH_NODE::inactive_bdd_index);
 
                     if(v == first_var)
                         cur_first_bdd_node_indices.push_back(bdd_branch_index);
@@ -1970,37 +1324,37 @@ namespace LPMP {
 
                     if(bdd_col(bdd_nr,stored_bdd.lo).is_botsink())
                     {
-                        new_bdd_branch_nodes_[bdd_branch_index].offset_low = bdd_branch_node_vec::terminal_0_offset;
-                        new_bdd_branch_nodes_[bdd_branch_index].low_cost = std::numeric_limits<float>::infinity();
+                        new_bdd_branch_nodes_[bdd_branch_index].offset_low = BDD_BRANCH_NODE::terminal_0_offset;
+                        new_bdd_branch_nodes_[bdd_branch_index].low_cost = std::numeric_limits<value_type>::infinity();
                     }
                     else if(bdd_col(bdd_nr,stored_bdd.lo).is_topsink())
                     {
                         assert(new_bdd_branch_nodes_[bdd_branch_index].low_cost == 0.0);
-                        new_bdd_branch_nodes_[bdd_branch_index].offset_low = bdd_branch_node_vec::terminal_1_offset;
+                        new_bdd_branch_nodes_[bdd_branch_index].offset_low = BDD_BRANCH_NODE::terminal_1_offset;
                     }
                     else
                     {
                         assert(new_bdd_branch_nodes_[bdd_branch_index].low_cost == 0.0);
                         assert(stored_bdd_index_to_bdd_offset.count(stored_bdd.lo) > 0);
-                        bdd_branch_node_vec* low_ptr = stored_bdd_index_to_bdd_offset[stored_bdd.lo];
+                        BDD_BRANCH_NODE* low_ptr = stored_bdd_index_to_bdd_offset[stored_bdd.lo];
                         new_bdd_branch_nodes_[bdd_branch_index].offset_low = new_bdd_branch_nodes_[bdd_branch_index].synthesize_address(low_ptr);
                     }
 
                     if(bdd_col(bdd_nr,stored_bdd.hi).is_botsink())
                     {
-                        new_bdd_branch_nodes_[bdd_branch_index].offset_high = bdd_branch_node_vec::terminal_0_offset;
-                        new_bdd_branch_nodes_[bdd_branch_index].high_cost = std::numeric_limits<float>::infinity();
+                        new_bdd_branch_nodes_[bdd_branch_index].offset_high = BDD_BRANCH_NODE::terminal_0_offset;
+                        new_bdd_branch_nodes_[bdd_branch_index].high_cost = std::numeric_limits<value_type>::infinity();
                     }
                     else if(bdd_col(bdd_nr,stored_bdd.hi).is_topsink())
                     {
                         assert(new_bdd_branch_nodes_[bdd_branch_index].high_cost == 0.0);
-                        new_bdd_branch_nodes_[bdd_branch_index].offset_high = bdd_branch_node_vec::terminal_1_offset;
+                        new_bdd_branch_nodes_[bdd_branch_index].offset_high = BDD_BRANCH_NODE::terminal_1_offset;
                     }
                     else
                     {
                         assert(new_bdd_branch_nodes_[bdd_branch_index].high_cost == 0.0);
                         assert(stored_bdd_index_to_bdd_offset.count(stored_bdd.hi) > 0);// != nullptr);
-                        bdd_branch_node_vec* high_ptr = stored_bdd_index_to_bdd_offset[stored_bdd.hi];
+                        BDD_BRANCH_NODE* high_ptr = stored_bdd_index_to_bdd_offset[stored_bdd.hi];
                         new_bdd_branch_nodes_[bdd_branch_index].offset_high = new_bdd_branch_nodes_[bdd_branch_index].synthesize_address(high_ptr);
                     }
 
@@ -2020,6 +1374,7 @@ namespace LPMP {
 
             new_nr_bdds_.clear();
             new_nr_bdds_.reserve(new_nr_variables);
+            // TODO: use bdd_index type of BDD_BRANCH_NODE
             tsl::robin_map<uint32_t, uint32_t> bdd_index_redux;
             for(size_t i=0; i<new_nr_variables; ++i)
             {
@@ -2028,7 +1383,7 @@ namespace LPMP {
                 {
                     auto& bdd_vec = new_bdd_branch_nodes_[vec_idx]; 
                     const uint32_t bdd_index = bdd_vec.bdd_index;
-                    assert(bdd_index != bdd_branch_node_vec::inactive_bdd_index);
+                    assert(bdd_index != BDD_BRANCH_NODE::inactive_bdd_index);
                     if(bdd_index_redux.count(bdd_index) == 0)
                         bdd_index_redux.insert({bdd_index, bdd_index_redux.size()}); 
                 }
@@ -2040,7 +1395,6 @@ namespace LPMP {
                 new_nr_bdds_.push_back(bdd_index_redux.size());
             }
 
-
             bdd_branch_instruction_variables_.clear(); // to force recomputation for variable of bdd node
             // swap new and old data structures
             std::swap(new_bdd_branch_nodes_, bdd_branch_nodes_);
@@ -2050,17 +1404,25 @@ namespace LPMP {
             std::swap(new_last_bdd_node_indices_, last_bdd_node_indices_);
             message_passing_state_ = message_passing_state::none;
 
-            return new_bdd_nrs;
+            for(size_t i=0; i<bdd_branch_nodes_.size(); ++i)
+                assert(bdd_branch_nodes_[i].node_initialized());
 
+            std::cout << &bdd_branch_nodes_[0] << " kwaskwas\n";
+            iteration();
+            const double lb = lower_bound();
+            std::cout << "lb = " << lb << "\n";
+            return new_bdd_nrs;
         }
 
-    inline void bdd_mma_base_vec::export_graphviz(const char* filename)
+    template<typename BDD_BRANCH_NODE>
+    void bdd_mma_base<BDD_BRANCH_NODE>::export_graphviz(const char* filename)
     {
         const std::string f(filename);    
         export_graphviz(f);
     }
 
-    inline void bdd_mma_base_vec::export_graphviz(const std::string& filename)
+    template<typename BDD_BRANCH_NODE>
+    void bdd_mma_base<BDD_BRANCH_NODE>::export_graphviz(const std::string& filename)
     {
         const std::string base_filename = std::filesystem::path(filename).replace_extension("").c_str();
         for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
@@ -2076,11 +1438,12 @@ namespace LPMP {
         }
     }
 
+    template<typename BDD_BRANCH_NODE>
     template<typename STREAM>
-        void bdd_mma_base_vec::export_graphviz(STREAM& s, const size_t bdd_nr)
+        void bdd_mma_base<BDD_BRANCH_NODE>::export_graphviz(STREAM& s, const size_t bdd_nr)
         {
-            std::unordered_set<bdd_branch_node_vec*> visited;
-            std::queue<bdd_branch_node_vec*> q;
+            std::unordered_set<BDD_BRANCH_NODE*> visited;
+            std::queue<BDD_BRANCH_NODE*> q;
 
             s << "digraph BDD\n";
             s << "{\n";
@@ -2092,13 +1455,13 @@ namespace LPMP {
 
             while(!q.empty())
             {
-                bdd_branch_node_vec* bdd = q.front();
+                BDD_BRANCH_NODE* bdd = q.front();
                 q.pop();
                 if(visited.count(bdd) > 0)
                     continue;
                 visited.insert(bdd);
 
-                if(bdd->offset_low != bdd_branch_node_vec::terminal_0_offset && bdd->offset_low != bdd_branch_node_vec::terminal_1_offset)
+                if(bdd->offset_low != BDD_BRANCH_NODE::terminal_0_offset && bdd->offset_low != BDD_BRANCH_NODE::terminal_1_offset)
                 {
                     q.push(bdd->address(bdd->offset_low));
                     s << "\"" << bdd << "\" -> \"" << bdd->address(bdd->offset_low) << "\" [style=\"dashed\"];\n";;
@@ -2106,7 +1469,7 @@ namespace LPMP {
                 else
                     s << "\"" << bdd << "\" -> " << " bot [style=\"dashed\"];\n";;
 
-                if(bdd->offset_high != bdd_branch_node_vec::terminal_0_offset && bdd->offset_high != bdd_branch_node_vec::terminal_1_offset)
+                if(bdd->offset_high != BDD_BRANCH_NODE::terminal_0_offset && bdd->offset_high != BDD_BRANCH_NODE::terminal_1_offset)
                 {
                     q.push(bdd->address(bdd->offset_high));
                     s << "\"" << bdd << "\" -> \"" << bdd->address(bdd->offset_high) << "\";\n";

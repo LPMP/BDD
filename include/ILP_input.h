@@ -237,7 +237,7 @@ namespace LPMP {
         void ILP_input::write_opb(STREAM& s) const
         {
             s << "min:";
-            for(const auto o : var_name_to_index_)
+            for(const auto& o : var_name_to_index_)
                 s << " " << (objective(o.second) < 0.0 ? "- " : "+ ") <<  std::abs(objective(o.second)) << " " << o.first; 
             s << ";\n";
             for(const auto& constr : constraints())

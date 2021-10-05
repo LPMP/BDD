@@ -270,7 +270,12 @@ namespace LPMP {
         }
         else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::sequential_mma)
         {
-            solver = std::move(bdd_mma_vec(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
+            if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::single_prec)
+                solver = std::move(bdd_mma_vec<float>(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
+            else if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::double_prec)
+                solver = std::move(bdd_mma_vec<double>(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
+            else
+                throw std::runtime_error("only float and double precision allowed");
             std::cout << "constructed sequential mma solver\n"; 
         } 
         else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::decomposition_mma)
@@ -455,7 +460,7 @@ namespace LPMP {
 
         std::cout << "Tighten...\n";
         std::visit([](auto&& s) {
-            if constexpr(std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_vec>)
+            if constexpr(std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_vec<float>>)
             s.tighten();
             else
                 throw std::runtime_error("tighten not implemented");
@@ -465,7 +470,7 @@ namespace LPMP {
     void bdd_solver::fix_variable(const size_t var, const bool value)
     {
         std::visit([var, value](auto&& s) {
-            if constexpr(std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_vec>)
+            if constexpr(std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_vec<float>> || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_vec<double>>)
             s.fix_variable(var, value);
             else
                 throw std::runtime_error("fix variable not implemented");

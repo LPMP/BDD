@@ -78,7 +78,7 @@ namespace LPMP {
             void construct_solver(bdd_storage& bs);
 
             bdd_solver_options options;
-            using solver_type = std::variant<bdd_mma_vec, decomposition_bdd_mma, bdd_cuda, bdd_parallel_mma<float>, bdd_parallel_mma<double>>;
+            using solver_type = std::variant<bdd_mma_vec<float>, bdd_mma_vec<double>, decomposition_bdd_mma, bdd_cuda, bdd_parallel_mma<float>, bdd_parallel_mma<double>>;
             std::optional<solver_type> solver;
             std::vector<double> costs;
             std::optional<bdd_fix> primal_heuristic;

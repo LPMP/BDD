@@ -29,7 +29,8 @@ namespace LPMP {
             // use base class alone without decomposition
             std::cout << "not using decomposition, solve directly.\n";
             bdd_bases = std::make_unique<bdd_sub_base[]>(1);
-            bdd_bases[0].base.add_bdds(bdd_storage_);
+            throw std::runtime_error("switch to bdd_collection");
+            //bdd_bases[0].base.add_bdds(bdd_storage_);
             return; 
         }
 
@@ -56,7 +57,8 @@ namespace LPMP {
 #pragma omp parallel for
         for(size_t i=0; i<nr_intervals; ++i)
         {
-            bdd_bases[i].base.add_bdds(bdd_storages[i]); 
+            throw std::runtime_error("switch to bdd_collection");
+            //bdd_bases[i].base.add_bdds(bdd_storages[i]); 
             std::cout << "BDD base for interval " << i << " has " << bdd_bases[i].base.nr_bdd_nodes() << " bdd nodes\n";
             bdd_endpoints[i] = bdd_storages[i].bdd_endpoints();
         }
