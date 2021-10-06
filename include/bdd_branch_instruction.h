@@ -88,8 +88,10 @@ namespace LPMP {
     template<typename REAL, typename DERIVED>
     void bdd_branch_instruction_base<REAL,DERIVED>::backward_step()
     {
-        if(offset_low == terminal_0_offset)
-            assert(low_cost == std::numeric_limits<REAL>::infinity());
+        //if(offset_low == terminal_0_offset)
+        //    assert(low_cost == std::numeric_limits<REAL>::infinity());
+        //if(offset_high == terminal_0_offset)
+        //    assert(high_cost == std::numeric_limits<REAL>::infinity());
 
         if(offset_low == terminal_0_offset || offset_low == terminal_1_offset)
         {
@@ -101,9 +103,6 @@ namespace LPMP {
             assert(!std::isnan(low_branch_node->m));
             m = low_branch_node->m + low_cost;
         }
-
-        if(offset_high == terminal_0_offset)
-            assert(high_cost == std::numeric_limits<REAL>::infinity());
 
         if(offset_high == terminal_0_offset || offset_high == terminal_1_offset)
         {
@@ -215,8 +214,6 @@ namespace LPMP {
             this->high_cost += -reduced_min_marginals[bdd_index][1] + avg_marginals[1];
         else
             this->high_cost = std::numeric_limits<float>::infinity();
-        //this->low_cost += -reduced_min_marginals[bdd_index][0] + avg_marginals[0];
-        //this->high_cost += -reduced_min_marginals[bdd_index][1] + avg_marginals[1]; 
 
         assert(!std::isnan(this->low_cost));
         assert(!std::isnan(this->high_cost));

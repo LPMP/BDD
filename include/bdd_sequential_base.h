@@ -19,7 +19,6 @@ namespace LPMP {
         class bdd_sequential_base {
             public:
             using value_type = typename BDD_BRANCH_NODE::value_type;
-            //bdd_sequential_base(const bdd_storage& stor) { init(stor); }
             bdd_sequential_base(BDD::bdd_collection& bdd_col) { add_bdds(bdd_col); }
 
             void add_bdds(BDD::bdd_collection& bdd_col);
@@ -85,6 +84,7 @@ namespace LPMP {
                 invalid 
             } lower_bound_state_ = lower_bound_state::invalid; 
             double lower_bound_ = -std::numeric_limits<double>::infinity();
+            double constant_ = 0.0;
 
             double compute_lower_bound();
             double compute_lower_bound_after_forward_pass();
@@ -152,105 +152,6 @@ namespace LPMP {
         {
             return std::accumulate(nr_bdds_per_variable_.begin(), nr_bdds_per_variable_.end(), 0); 
         }
-
-    /*
-    template<typename BDD_BRANCH_NODE>
-        void bdd_sequential_base<BDD_BRANCH_NODE>::init(const bdd_storage& stor)
-        {
-            bdd_branch_nodes_.clear();
-            bdd_branch_nodes_.reserve(stor.bdd_nodes().size());
-            bdd_variables_.clear();
-            nr_bdds_per_variable_.clear();
-            nr_bdds_per_variable_.resize(stor.nr_variables(), 0);
-
-            for(size_t bdd_nr=0; bdd_nr<stor.nr_bdds(); ++bdd_nr)
-            {
-                const size_t first_bdd_node = stor.bdd_delimiters()[bdd_nr];
-                const size_t last_bdd_node = stor.bdd_delimiters()[bdd_nr+1];
-
-                std::unordered_map<size_t, size_t> bdd_node_counter_per_var;
-                for(size_t bdd_storage_node_idx = first_bdd_node; bdd_storage_node_idx<last_bdd_node; ++bdd_storage_node_idx) 
-                {
-                    const auto& bdd_storage_node = stor.bdd_nodes()[bdd_storage_node_idx];
-                    if(bdd_node_counter_per_var.count(bdd_storage_node.variable) == 0)
-                        bdd_node_counter_per_var.insert({bdd_storage_node.variable, 0});
-                    bdd_node_counter_per_var.find(bdd_storage_node.variable)->second++;
-                }
-
-                struct bdd_node_counter { size_t variable; size_t nr_bdd_nodes; };
-                std::vector<bdd_node_counter> bdd_variable_nr_sorted;
-                for(const auto [var, nr_nodes] : bdd_node_counter_per_var)
-                {
-                    assert(nr_nodes > 0);
-                    bdd_variable_nr_sorted.push_back({var, nr_nodes});
-                }
-                std::sort(bdd_variable_nr_sorted.begin(), bdd_variable_nr_sorted.end(), [](const bdd_node_counter& a, const bdd_node_counter& b) { return a.variable < b.variable; });
-
-                std::vector<bdd_variable> cur_bdd_variables;
-                size_t cur_offset = bdd_branch_nodes_.size();
-                for(const auto [var, nr_bdd_nodes] : bdd_variable_nr_sorted)
-                {
-                    cur_bdd_variables.push_back({cur_offset, var});
-                    cur_offset += nr_bdd_nodes;
-                    ++nr_bdds_per_variable_[var];
-                }
-                bdd_branch_nodes_.resize(cur_offset);
-
-                cur_bdd_variables.push_back({cur_offset, std::numeric_limits<size_t>::max()}); // For extra delimiter at the end
-                bdd_variables_.push_back(cur_bdd_variables.begin(), cur_bdd_variables.end());
-                cur_bdd_variables.resize(cur_bdd_variables.size()-1);
-
-                // fill in bdd branch nodes
-                for(const auto [offset, var] : cur_bdd_variables)
-                    bdd_node_counter_per_var.find(var)->second = offset;
-
-                std::unordered_map<size_t, size_t> bdd_storage_index_to_branch_node_index;
-                auto bdd_branch_node_index_from_bdd_storage_index = [&](const size_t cur_idx, const size_t storage_idx) -> size_t {
-                    if(storage_idx == bdd_storage::bdd_node::terminal_0)
-                        return BDD_BRANCH_NODE::terminal_0_offset;
-                    else if(storage_idx == bdd_storage::bdd_node::terminal_1)
-                        return BDD_BRANCH_NODE::terminal_1_offset;
-                    assert(bdd_storage_index_to_branch_node_index.count(storage_idx) > 0);
-                    const size_t pointed_to_idx = bdd_storage_index_to_branch_node_index.find(storage_idx)->second; 
-                    assert(cur_idx < pointed_to_idx);
-                    return pointed_to_idx - cur_idx;
-                };
-
-                auto new_branch_node_index = [&](size_t idx) -> size_t {
-                    assert(bdd_storage_index_to_branch_node_index.count(idx) == 0);
-                    const bdd_storage::bdd_node bdd_storage_node = stor.bdd_nodes()[idx];
-                    const size_t variable = bdd_storage_node.variable;
-                    const size_t bdd_branch_node_index = bdd_node_counter_per_var.find(variable)->second;
-                    bdd_node_counter_per_var.find(variable)->second++;
-                    assert(bdd_node_counter_per_var.find(variable)->second > 0);
-                    bdd_storage_index_to_branch_node_index.insert(std::make_pair(idx, bdd_branch_node_index));
-                    return bdd_branch_node_index;
-                };
-
-                for(size_t bdd_storage_node_idx = first_bdd_node; bdd_storage_node_idx<last_bdd_node; ++bdd_storage_node_idx) 
-                {
-                    const auto& bdd_storage_node = stor.bdd_nodes()[bdd_storage_node_idx];
-                    const size_t branch_node_index = new_branch_node_index(bdd_storage_node_idx);
-                    auto& bdd_branch_node = bdd_branch_nodes_[branch_node_index];
-                    assert(bdd_branch_node.offset_low == 0 && bdd_branch_node.offset_high == 0);
-                    assert(bdd_branch_node.low_cost == 0 && bdd_branch_node.high_cost == 0);
-
-                    bdd_branch_node.offset_low = bdd_branch_node_index_from_bdd_storage_index(branch_node_index, bdd_storage_node.low); 
-                    if(bdd_branch_node.offset_low == BDD_BRANCH_NODE::terminal_0_offset)
-                        bdd_branch_node.low_cost = std::numeric_limits<decltype(bdd_branch_node.low_cost)>::infinity();
-
-                    bdd_branch_node.offset_high = bdd_branch_node_index_from_bdd_storage_index(branch_node_index, bdd_storage_node.high);
-                    if(bdd_branch_node.offset_high == BDD_BRANCH_NODE::terminal_0_offset)
-                        bdd_branch_node.high_cost = std::numeric_limits<decltype(bdd_branch_node.high_cost)>::infinity();
-                }
-            }
-
-            // add last entry for offset
-            std::vector<bdd_variable> tmp_bdd_variables;
-            tmp_bdd_variables.push_back({bdd_branch_nodes_.size(), std::numeric_limits<size_t>::max()});
-            bdd_variables_.push_back(tmp_bdd_variables.begin(), tmp_bdd_variables.end());
-        }
-*/
 
     template<typename BDD_BRANCH_NODE>
         void bdd_sequential_base<BDD_BRANCH_NODE>::add_bdds(BDD::bdd_collection& bdd_col)
@@ -381,7 +282,7 @@ namespace LPMP {
         {
             MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME;
             assert(message_passing_state_ == message_passing_state::after_backward_pass);
-            double lb = 0.0;
+            double lb = constant_;
 
             // TODO: works only for non-split BDDs
             for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
@@ -399,7 +300,7 @@ namespace LPMP {
         {
             MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME;
             assert(message_passing_state_ == message_passing_state::after_forward_pass);
-            double lb = 0.0;
+            double lb = constant_;
 
             // TODO: works only for non-split BDDs
             for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
@@ -711,7 +612,6 @@ namespace LPMP {
         template<typename COST_ITERATOR> 
         void bdd_sequential_base<BDD_BRANCH_NODE>::set_costs(COST_ITERATOR begin, COST_ITERATOR end)
         {
-            assert(std::distance(begin, end) == nr_variables());
 //#pragma omp parallel for schedule(guided,128)
             for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
             {
@@ -719,7 +619,12 @@ namespace LPMP {
                 {
                     const auto [first_node, last_node] = bdd_index_range(bdd_nr, bdd_idx);
                     const size_t var = variable(bdd_nr, bdd_idx);
-                    const double cost = *(begin+var)/double(nr_bdds(var));
+                    const double cost = [&]() {
+                        if(var < std::distance(begin, end))
+                            return *(begin+var)/double(nr_bdds(var));
+                        else
+                            return 0.0;
+                    }();
                     assert(std::isfinite(cost));
                     for(size_t i=first_node; i<last_node; ++i)
                     {
@@ -738,6 +643,12 @@ namespace LPMP {
                     }
                 }
             }
+
+            // go over all cost entries and add then to constant if they are not in any BDD.
+            constant_ = 0.0;
+            for(size_t i=0; i<std::distance(begin, end); ++i)
+                if(i >= nr_variables() || nr_bdds(i) == 0)
+                    constant_ += std::min(double(0.0), double(*(begin+i)));
         }
 
     template<typename BDD_BRANCH_NODE>
@@ -864,24 +775,43 @@ namespace LPMP {
 
                 const size_t var = variable(bdd_nr, bdd_idx);
 
-                if(cur_mm[0] < cur_mm[1])
+                if(!std::isfinite(cur_mm[0]))
                 {
-                    //mm[var][1] += omega*(cur_mm[1] - cur_mm[0]);
-                    atomic_addf(mms[var][1], omega*(cur_mm[1] - cur_mm[0]));
+                    mms[var][0] = std::numeric_limits<value_type>::infinity();
                 }
-                else
+                if(!std::isfinite(cur_mm[1]))
                 {
-                    //mm[var][0] += omega*(cur_mm[0] - cur_mm[1]);
-                    atomic_addf(mms[var][0], omega*(cur_mm[0] - cur_mm[1]));
+                    mms[var][1] = std::numeric_limits<value_type>::infinity();
                 }
+                if(std::isfinite(cur_mm[0]) && std::isfinite(cur_mm[1]))
+                {
+                    if(cur_mm[0] < cur_mm[1])
+                        atomic_addf(mms[var][1], omega*(cur_mm[1] - cur_mm[0]));
+                    else
+                        atomic_addf(mms[var][0], omega*(cur_mm[0] - cur_mm[1]));
+                }
+
                 assert(mms[var][0] >= 0.0);
                 assert(mms[var][1] >= 0.0);
 
                 for(size_t i=first_bdd_node; i<last_bdd_node; ++i)
-                    if(cur_mm[0] < cur_mm[1])
-                        bdd_branch_nodes_[i].high_cost += omega*(cur_mm[0] - cur_mm[1]);
-                    else
-                        bdd_branch_nodes_[i].low_cost += omega*(cur_mm[1] - cur_mm[0]);
+                {
+                    if(!std::isfinite(cur_mm[0]))
+                    {
+                        bdd_branch_nodes_[i].low_cost = std::numeric_limits<value_type>::infinity();
+                    }
+                    if(!std::isfinite(cur_mm[1]))
+                    {
+                        bdd_branch_nodes_[i].high_cost = std::numeric_limits<value_type>::infinity();
+                    }
+                    if(std::isfinite(cur_mm[0]) && std::isfinite(cur_mm[1]))
+                    {
+                        if(cur_mm[0] < cur_mm[1])
+                            bdd_branch_nodes_[i].high_cost += omega*(cur_mm[0] - cur_mm[1]);
+                        else
+                            bdd_branch_nodes_[i].low_cost += omega*(cur_mm[1] - cur_mm[0]);
+                    }
+                }
 
                 if(bdd_idx+1<nr_variables(bdd_nr))
                 {
@@ -912,25 +842,42 @@ namespace LPMP {
                 }
 
                 const size_t var = variable(bdd_nr, bdd_idx);
-                if(cur_mm[0] < cur_mm[1])
+                if(!std::isfinite(cur_mm[0]))
                 {
-                    //mm_begin[var][1] += omega*(cur_mm[1] - cur_mm[0]);
-                    atomic_addf(mms[var][1], omega*(cur_mm[1] - cur_mm[0]));
+                    mms[var][0] = std::numeric_limits<value_type>::infinity();
                 }
-                else
+                if(!std::isfinite(cur_mm[1]))
                 {
-                    //mm_begin[var][0] += omega*(cur_mm[0] - cur_mm[1]);
-                    atomic_addf(mms[var][0], omega*(cur_mm[0] - cur_mm[1]));
+                    mms[var][1] = std::numeric_limits<value_type>::infinity();
                 }
+                if(std::isfinite(cur_mm[0]) && std::isfinite(cur_mm[1]))
+                {
+                    if(cur_mm[0] < cur_mm[1])
+                        atomic_addf(mms[var][1], omega*(cur_mm[1] - cur_mm[0]));
+                    else
+                        atomic_addf(mms[var][0], omega*(cur_mm[0] - cur_mm[1]));
+                }
+
                 assert(mms[var][0] >= 0.0);
                 assert(mms[var][1] >= 0.0);
 
                 for(std::ptrdiff_t i=std::ptrdiff_t(last_bdd_node)-1; i>=std::ptrdiff_t(first_bdd_node); --i)
                 {
-                    if(cur_mm[0] < cur_mm[1])
-                        bdd_branch_nodes_[i].high_cost += omega*(cur_mm[0] - cur_mm[1]);
-                    else
-                        bdd_branch_nodes_[i].low_cost += omega*(cur_mm[1] - cur_mm[0]);
+                    if(!std::isfinite(cur_mm[0]))
+                    {
+                        bdd_branch_nodes_[i].low_cost = std::numeric_limits<value_type>::infinity();
+                    }
+                    if(!std::isfinite(cur_mm[1]))
+                    {
+                        bdd_branch_nodes_[i].high_cost = std::numeric_limits<value_type>::infinity();
+                    }
+                    if(std::isfinite(cur_mm[0]) && std::isfinite(cur_mm[1]))
+                    {
+                        if(cur_mm[0] < cur_mm[1])
+                            bdd_branch_nodes_[i].high_cost += omega*(cur_mm[0] - cur_mm[1]);
+                        else
+                            bdd_branch_nodes_[i].low_cost += omega*(cur_mm[1] - cur_mm[0]);
+                    }
                 }
 
                 for(std::ptrdiff_t i=std::ptrdiff_t(last_bdd_node)-1; i>=std::ptrdiff_t(first_bdd_node); --i)
@@ -1002,7 +949,7 @@ namespace LPMP {
                     }
                     cur_lb += bdd_branch_nodes_[bdd_index_range(bdd_nr,0)[0]].m;
                 }
-                lower_bound_ = cur_lb;
+                lower_bound_ = constant_ + cur_lb;
             }
 
             message_passing_state_ = message_passing_state::after_backward_pass;

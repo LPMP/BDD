@@ -2,6 +2,7 @@
 #include "bdd_branch_instruction.h"
 #include "ILP_parser.h"
 #include "bdd_preprocessor.h"
+#include "test_problem_generator.h"
 #include "test.h"
 
 using namespace LPMP;
@@ -81,5 +82,56 @@ int main(int argc, char** argv)
         test(std::abs(mms[5][1] - mms[5][0] - (1-1 - (2+1))) <= 1e-6); // x_6 has now cost 1
         test(std::abs(mms[4][1] - mms[4][0] - (2+1 - (2+1))) <= 1e-6);
         test(std::abs(mms[3][1] - mms[3][0] - (1+1 - (2+1))) <= 1e-6);
+    }
+
+    // random inequalities
+    for(size_t nr_vars=2; nr_vars<50; ++nr_vars)
+    {
+        const auto [coefficients, ineq, rhs] = generate_random_inequality(nr_vars);
+        ILP_input ilp = generate_ILP(coefficients, ineq, rhs);
+        bdd_preprocessor pre(ilp);
+
+        // forward incremental mm
+        {
+            bdd_base_type solver(pre.get_bdd_collection());
+            solver.set_costs(ilp.objective().begin(), ilp.objective().end());
+
+            solver.backward_run();
+            const double lb_before = solver.lower_bound();
+
+            std::vector<std::array<std::atomic<float>,2>> mms(ilp.nr_variables());
+            for(auto& x : mms)
+            {
+                x[0] = 0.0;
+                x[1] = 0.0;
+            }
+            for(size_t bdd_nr=0; bdd_nr<solver.nr_bdds(); ++bdd_nr)
+                solver.forward_mm(bdd_nr, 1.0, mms);
+
+            const double lb_after = solver.lower_bound();
+            test(std::abs(lb_before - lb_after) <= 1e-6);
+
+        }
+
+        // backward incremental mm
+        {
+            bdd_base_type solver(pre.get_bdd_collection());
+            solver.set_costs(ilp.objective().begin(), ilp.objective().end());
+
+            solver.forward_run();
+            const double lb_before = solver.lower_bound();
+
+            std::vector<std::array<std::atomic<float>,2>> mms(ilp.nr_variables());
+            for(auto& x : mms)
+            {
+                x[0] = 0.0;
+                x[1] = 0.0;
+            }
+            for(size_t bdd_nr=0; bdd_nr<solver.nr_bdds(); ++bdd_nr)
+                solver.backward_mm(bdd_nr, 1.0, mms);
+
+            const double lb_after = solver.lower_bound();
+            test(std::abs(lb_before - lb_after) <= 1e-6);
+        }
     }
 }
