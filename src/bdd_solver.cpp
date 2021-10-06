@@ -470,7 +470,11 @@ namespace LPMP {
     void bdd_solver::fix_variable(const size_t var, const bool value)
     {
         std::visit([var, value](auto&& s) {
-            if constexpr(std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_vec<float>> || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_vec<double>>)
+            if constexpr(
+                    std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_vec<float>> || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_vec<double>>
+                    ||
+                    std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma<float>> || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma<double>>
+                    )
             s.fix_variable(var, value);
             else
                 throw std::runtime_error("fix variable not implemented");

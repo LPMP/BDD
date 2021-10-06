@@ -74,7 +74,18 @@ namespace LPMP {
     template<typename REAL>
     void bdd_parallel_mma<REAL>::fix_variable(const size_t var, const bool value)
     {
-        throw std::runtime_error("not implemented");
+        size_t v = var;
+        if(value == false)
+            fix_variables(&v, (&v)+1, &v, &v);
+        else
+            fix_variables(&v, &v, &v, (&v)+1);
+    }
+
+    template<typename REAL>
+        template<typename ITERATOR>
+    void bdd_parallel_mma<REAL>::fix_variables(ITERATOR zero_fixations_begin, ITERATOR zero_fixations_end, ITERATOR one_fixations_begin, ITERATOR one_fixations_end)
+    {
+        pimpl->base.fix_variables(zero_fixations_begin, zero_fixations_end, one_fixations_begin, one_fixations_end);
     }
 
     template<typename REAL>
@@ -93,6 +104,9 @@ namespace LPMP {
     template void bdd_parallel_mma<float>::set_costs(std::vector<float>::iterator, std::vector<float>::iterator);
     template void bdd_parallel_mma<float>::set_costs(std::vector<double>::const_iterator, std::vector<double>::const_iterator);
     template void bdd_parallel_mma<float>::set_costs(std::vector<float>::const_iterator, std::vector<float>::const_iterator);
+    template void bdd_parallel_mma<float>::fix_variables(size_t*, size_t*, size_t*, size_t*);
+    template void bdd_parallel_mma<float>::fix_variables(std::vector<size_t>::iterator,std::vector<size_t>::iterator,std::vector<size_t>::iterator,   std::vector<size_t>::iterator);
+    template void bdd_parallel_mma<float>::fix_variables(std::vector<size_t>::const_iterator,std::vector<size_t>::const_iterator,std::vector<size_t>::const_iterator,std::vector<size_t>::const_iterator);
 
     template void bdd_parallel_mma<double>::set_costs(float*, float*);
     template void bdd_parallel_mma<double>::set_costs(double*, double*);
@@ -100,4 +114,7 @@ namespace LPMP {
     template void bdd_parallel_mma<double>::set_costs(std::vector<float>::iterator, std::vector<float>::iterator);
     template void bdd_parallel_mma<double>::set_costs(std::vector<double>::const_iterator, std::vector<double>::const_iterator);
     template void bdd_parallel_mma<double>::set_costs(std::vector<float>::const_iterator, std::vector<float>::const_iterator);
+    template void bdd_parallel_mma<double>::fix_variables(size_t*, size_t*, size_t*, size_t*);
+    template void bdd_parallel_mma<double>::fix_variables(std::vector<size_t>::iterator,std::vector<size_t>::iterator,std::vector<size_t>::iterator,   std::vector<size_t>::iterator);
+    template void bdd_parallel_mma<double>::fix_variables(std::vector<size_t>::const_iterator,std::vector<size_t>::const_iterator,std::vector<size_t>::const_iterator,std::vector<size_t>::const_iterator);
 }

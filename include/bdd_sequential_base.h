@@ -9,6 +9,7 @@
 #include <fstream>
 #include <cstdlib>
 #include <filesystem>
+#include <unordered_set>
 #include "time_measure_util.h"
 
 namespace LPMP {
@@ -48,6 +49,9 @@ namespace LPMP {
 
             vector_type get_costs();
             void update_costs(const vector_type& delta);
+
+            template<typename ITERATOR>
+                void fix_variables(ITERATOR zero_fixations_begin, ITERATOR zero_fixations_end, ITERATOR one_fixations_begin, ITERATOR one_fixations_end);
 
             // make a step that is guaranteed to be non-decreasing in the lower bound.
             void diffusion_step(const two_dim_variable_array<std::array<value_type,2>>& min_margs, const value_type damping_step = 1.0);
@@ -711,6 +715,32 @@ namespace LPMP {
                     {
                         bdd_branch_nodes_[i].high_cost += delta(c, 0);
                     }
+                }
+            }
+        }
+
+    template<typename BDD_BRANCH_NODE>
+        template<typename ITERATOR>
+        void bdd_sequential_base<BDD_BRANCH_NODE>::fix_variables(ITERATOR zero_fixations_begin, ITERATOR zero_fixations_end, ITERATOR one_fixations_begin, ITERATOR one_fixations_end)
+        {
+            // TODO: check for variables that are not covered by any BDD. They might change the constant_
+            std::unordered_set<size_t> zero_fixations(zero_fixations_begin, zero_fixations_end);
+            std::unordered_set<size_t> one_fixations(one_fixations_begin, one_fixations_end);
+            assert(zero_fixations.size() + one_fixations.size() > 0);
+
+            for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
+            {
+                for(size_t bdd_idx=0; bdd_idx<nr_variables(bdd_nr); ++bdd_idx)
+                {
+                    const size_t var = variable(bdd_nr, bdd_idx);
+                    const auto [first_bdd_node, last_bdd_node] = bdd_index_range(bdd_nr, bdd_idx);
+                    assert(!(zero_fixations.count(var) > 0 && one_fixations.count(var) > 0));
+                    if(zero_fixations.count(var) > 0)
+                        for(size_t i=first_bdd_node; i<last_bdd_node; ++i)
+                            bdd_branch_nodes_[i].high_cost = std::numeric_limits<value_type>::infinity();
+                    if(one_fixations.count(var) > 0)
+                        for(size_t i=first_bdd_node; i<last_bdd_node; ++i)
+                            bdd_branch_nodes_[i].low_cost = std::numeric_limits<value_type>::infinity();
                 }
             }
         }
