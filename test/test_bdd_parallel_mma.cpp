@@ -16,6 +16,73 @@ x_1 + x_2 + x_3 = 1
 x_4 + x_5 + x_6 = 2
 End)";
 
+std::vector<std::array<std::atomic<float>,2>> test_mm(const ILP_input& ilp, const std::string direction = "forward")
+{
+    using bdd_base_type = bdd_sequential_base<bdd_branch_instruction<float>>;
+
+    bdd_preprocessor pre(ilp);
+    bdd_base_type solver(pre.get_bdd_collection());
+    solver.set_costs(ilp.objective().begin(), ilp.objective().end());
+
+    if(direction == "forward")
+        solver.backward_run();
+    else
+        solver.forward_run();
+
+    const double lb_before = solver.lower_bound();
+
+    std::vector<std::array<std::atomic<float>,2>> mms_to_collect(solver.nr_variables());
+    std::vector<std::array<std::atomic<float>,2>> mms_to_collect2(solver.nr_variables());
+    std::vector<std::array<std::atomic<float>,2>> mms_to_distribute(solver.nr_variables());
+    for(auto& x : mms_to_collect)
+    {
+        x[0] = 0.0;
+        x[1] = 0.0;
+    }
+    for(auto& x : mms_to_collect2)
+    {
+        x[0] = 0.0;
+        x[1] = 0.0;
+    }
+    for(auto& x : mms_to_distribute)
+    {
+        x[0] = 0.0;
+        x[1] = 0.0;
+    }
+
+    for(size_t bdd_nr=0; bdd_nr<solver.nr_bdds(); ++bdd_nr)
+        if(direction == "forward")
+            solver.forward_mm(bdd_nr, 1.0, mms_to_collect, mms_to_distribute);
+        else
+            solver.backward_mm(bdd_nr, 1.0, mms_to_collect, mms_to_distribute);
+
+    const double lb_after = solver.lower_bound();
+    test(std::abs(lb_before - lb_after) <= 1e-6);
+
+    for(size_t i=0; i<mms_to_collect.size(); ++i)
+    {
+        test(mms_to_collect[i][0] >= 0.0 ||  mms_to_collect[i][0] == std::numeric_limits<float>::infinity());
+        test(mms_to_collect[i][1] >= 0.0 ||  mms_to_collect[i][1] == std::numeric_limits<float>::infinity());
+    }
+
+    for(size_t bdd_nr=0; bdd_nr<solver.nr_bdds(); ++bdd_nr)
+        if(direction == "forward")
+            solver.backward_mm(bdd_nr, 1.0, mms_to_collect2, mms_to_distribute);
+        else
+            solver.forward_mm(bdd_nr, 1.0, mms_to_collect2, mms_to_distribute);
+
+    for(size_t i=0; i<mms_to_collect2.size(); ++i)
+    {
+        test(std::abs(mms_to_collect2[i][0] - 0.0) <= 1e-6 || mms_to_collect2[i][0] == std::numeric_limits<float>::infinity());
+        test(std::abs(mms_to_collect2[i][1] - 0.0) <= 1e-6 || mms_to_collect2[i][1] == std::numeric_limits<float>::infinity());
+    }
+
+    const double lb_after2 = solver.lower_bound();
+    test(std::abs(lb_before - lb_after2) <= 1e-6);
+
+    return mms_to_collect;
+}
+
 int main(int argc, char** argv)
 {
     using bdd_base_type = bdd_sequential_base<bdd_branch_instruction<float>>;
@@ -24,26 +91,7 @@ int main(int argc, char** argv)
 
     // forward incremental mm
     {
-        bdd_base_type solver(pre.get_bdd_collection());
-        solver.set_costs(ilp.objective().begin(), ilp.objective().end());
-
-        solver.backward_run();
-        const double lb_before = solver.lower_bound();
-
-        std::vector<std::array<std::atomic<float>,2>> mms(ilp.nr_variables());
-        for(auto& x : mms)
-        {
-            x[0] = 0.0;
-            x[1] = 0.0;
-        }
-        for(size_t bdd_nr=0; bdd_nr<solver.nr_bdds(); ++bdd_nr)
-            solver.forward_mm(bdd_nr, 1.0, mms);
-
-        const double lb_after = solver.lower_bound();
-        test(std::abs(lb_before - lb_after) <= 1e-6);
-
-        for(size_t i=0; i<mms.size(); ++i)
-            test(mms[i][0] >= 0.0 && mms[i][1] >= 0.0);
+        const auto mms = test_mm(ilp, "forward");
 
         test(std::abs(mms[0][1] - mms[0][0] - (1 - 0)) <= 1e-6);
         test(std::abs(mms[1][1] - mms[1][0] - (1 - 1)) <= 1e-6);
@@ -56,24 +104,7 @@ int main(int argc, char** argv)
 
     // backward incremental mm
     {
-        bdd_base_type solver(pre.get_bdd_collection());
-        solver.set_costs(ilp.objective().begin(), ilp.objective().end());
-
-        solver.forward_run();
-        const double lb_before = solver.lower_bound();
-
-        std::vector<std::array<std::atomic<float>,2>> mms(ilp.nr_variables());
-        for(auto& x : mms)
-        {
-            x[0] = 0.0;
-            x[1] = 0.0;
-        }
-
-        for(size_t bdd_nr=0; bdd_nr<solver.nr_bdds(); ++bdd_nr)
-            solver.backward_mm(bdd_nr, 1.0, mms);
-
-        const double lb_after = solver.lower_bound();
-        test(std::abs(lb_before - lb_after) <= 1e-6);
+        const auto mms = test_mm(ilp, "backward");
 
         test(std::abs(mms[2][1] - mms[2][0] - (1 - 1)) <= 1e-6);
         test(std::abs(mms[1][1] - mms[1][0] - (1 - 1)) <= 1e-6);
@@ -89,49 +120,7 @@ int main(int argc, char** argv)
     {
         const auto [coefficients, ineq, rhs] = generate_random_inequality(nr_vars);
         ILP_input ilp = generate_ILP(coefficients, ineq, rhs);
-        bdd_preprocessor pre(ilp);
-
-        // forward incremental mm
-        {
-            bdd_base_type solver(pre.get_bdd_collection());
-            solver.set_costs(ilp.objective().begin(), ilp.objective().end());
-
-            solver.backward_run();
-            const double lb_before = solver.lower_bound();
-
-            std::vector<std::array<std::atomic<float>,2>> mms(ilp.nr_variables());
-            for(auto& x : mms)
-            {
-                x[0] = 0.0;
-                x[1] = 0.0;
-            }
-            for(size_t bdd_nr=0; bdd_nr<solver.nr_bdds(); ++bdd_nr)
-                solver.forward_mm(bdd_nr, 1.0, mms);
-
-            const double lb_after = solver.lower_bound();
-            test(std::abs(lb_before - lb_after) <= 1e-6);
-
-        }
-
-        // backward incremental mm
-        {
-            bdd_base_type solver(pre.get_bdd_collection());
-            solver.set_costs(ilp.objective().begin(), ilp.objective().end());
-
-            solver.forward_run();
-            const double lb_before = solver.lower_bound();
-
-            std::vector<std::array<std::atomic<float>,2>> mms(ilp.nr_variables());
-            for(auto& x : mms)
-            {
-                x[0] = 0.0;
-                x[1] = 0.0;
-            }
-            for(size_t bdd_nr=0; bdd_nr<solver.nr_bdds(); ++bdd_nr)
-                solver.backward_mm(bdd_nr, 1.0, mms);
-
-            const double lb_after = solver.lower_bound();
-            test(std::abs(lb_before - lb_after) <= 1e-6);
-        }
+        test_mm(ilp, "forward");
+        test_mm(ilp, "backward");
     }
 }
