@@ -59,11 +59,6 @@ namespace LPMP {
         std::cout << "%negative min margs = " << 100.0 * double(nr_negative_min_marg_differences) / double(mmd.size()) << "\n";
         std::cout << "#negative min margs = " << nr_negative_min_marg_differences << "\n";
 
-        std::cout << "zero min marg vars:\n";
-        for(size_t i=0; i<mmd.size(); ++i)
-            if(mmd[i] <= eps && mmd[i] >= -eps)
-                std::cout << " " << i;
-        std::cout << "\n";
         return mmd;
     }
 
