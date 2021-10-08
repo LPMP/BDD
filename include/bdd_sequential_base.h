@@ -782,7 +782,7 @@ namespace LPMP {
         REAL old = f;
         REAL desired = old + d;
         if(d != 0.0)
-            while(__atomic_compare_exchange(&f, &old, &desired, true, __ATOMIC_CONSUME, __ATOMIC_CONSUME))
+            while(__atomic_compare_exchange(&f, &old, &desired, false, __ATOMIC_RELEASE, __ATOMIC_CONSUME))
             {
                 desired = old + d;
             }
