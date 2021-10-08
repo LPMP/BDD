@@ -16,7 +16,7 @@ x_1 + x_2 + x_3 = 1
 x_4 + x_5 + x_6 = 2
 End)";
 
-std::vector<std::array<std::atomic<float>,2>> test_mm(const ILP_input& ilp, const std::string direction = "forward")
+std::vector<std::array<float,2>> test_mm(const ILP_input& ilp, const std::string direction = "forward")
 {
     using bdd_base_type = bdd_sequential_base<bdd_branch_instruction<float,uint16_t>>;
 
@@ -31,9 +31,9 @@ std::vector<std::array<std::atomic<float>,2>> test_mm(const ILP_input& ilp, cons
 
     const double lb_before = solver.lower_bound();
 
-    std::vector<std::array<std::atomic<float>,2>> mms_to_collect(solver.nr_variables());
-    std::vector<std::array<std::atomic<float>,2>> mms_to_collect2(solver.nr_variables());
-    std::vector<std::array<std::atomic<float>,2>> mms_to_distribute(solver.nr_variables());
+    std::vector<std::array<float,2>> mms_to_collect(solver.nr_variables());
+    std::vector<std::array<float,2>> mms_to_collect2(solver.nr_variables());
+    std::vector<std::array<float,2>> mms_to_distribute(solver.nr_variables());
     for(auto& x : mms_to_collect)
     {
         x[0] = 0.0;

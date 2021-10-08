@@ -5,7 +5,6 @@
 #include <Eigen/SparseCore>
 #include "bdd_collection/bdd_collection.h"
 #include "two_dimensional_variable_array.hxx"
-#include <atomic>
 #include <fstream>
 #include <cstdlib>
 #include <filesystem>
@@ -58,8 +57,8 @@ namespace LPMP {
 
             // compute incremental min marginals and perform min-marginal averaging subsequently
             void parallel_mma();
-            void forward_mm(const size_t bdd_nr, const typename BDD_BRANCH_NODE::value_type omega, std::vector<std::array<std::atomic<typename BDD_BRANCH_NODE::value_type>,2>>& mms_to_collect, std::vector<std::array<std::atomic<typename BDD_BRANCH_NODE::value_type>,2>>& mms_to_distribute);
-            void backward_mm(const size_t bdd_nr, const typename BDD_BRANCH_NODE::value_type omega, std::vector<std::array<std::atomic<typename BDD_BRANCH_NODE::value_type>,2>>& mms_to_collect, std::vector<std::array<std::atomic<typename BDD_BRANCH_NODE::value_type>,2>>& mms_to_distribute);
+            void forward_mm(const size_t bdd_nr, const typename BDD_BRANCH_NODE::value_type omega, std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& mms_to_collect, std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& mms_to_distribute);
+            void backward_mm(const size_t bdd_nr, const typename BDD_BRANCH_NODE::value_type omega, std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& mms_to_collect, std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& mms_to_distribute);
 
             // Both operations below are inverses of each other
             // Given elements in order bdd_nr/bdd_index, transpose to variable/bdd_index with same variable.
@@ -111,9 +110,8 @@ namespace LPMP {
             std::vector<size_t> nr_bdds_per_variable_;
 
             // for parallel mma
-            // TODO: use atomic ref after switching to C++20
-            std::vector<std::array<std::atomic<value_type>,2>> mms_to_collect_;
-            std::vector<std::array<std::atomic<value_type>,2>> mms_to_distribute_;
+            std::vector<std::array<value_type,2>> mms_to_collect_;
+            std::vector<std::array<value_type,2>> mms_to_distribute_;
         };
 
     ////////////////////
@@ -778,21 +776,23 @@ namespace LPMP {
         }
 
     template<typename REAL>
-    void atomic_addf(std::atomic<REAL>& f, const REAL d) 
+    void atomic_addf(REAL& f, const REAL d) 
     {
-        REAL old = f.load(std::memory_order_consume);
+        // TODO: use atomic_ref when in C++20
+        REAL old = f;
         REAL desired = old + d;
-        while (!f.compare_exchange_weak(old, desired, std::memory_order_release, std::memory_order_consume))
-        {
-            desired = old + d;
-        }
+        if(d != 0.0)
+            while(__atomic_compare_exchange(&f, &old, &desired, true, __ATOMIC_CONSUME, __ATOMIC_CONSUME))
+            {
+                desired = old + d;
+            }
     }
 
     template<typename BDD_BRANCH_NODE>
         void bdd_sequential_base<BDD_BRANCH_NODE>::forward_mm(
                 const size_t bdd_nr, const typename BDD_BRANCH_NODE::value_type omega,
-                std::vector<std::array<std::atomic<typename BDD_BRANCH_NODE::value_type>, 2>>& mms_to_collect,
-                std::vector<std::array<std::atomic<typename BDD_BRANCH_NODE::value_type>,2>>& mms_to_distribute)
+                std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& mms_to_collect,
+                std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& mms_to_distribute)
         {
             assert(mms_to_collect.size() == nr_variables());
             assert(mms_to_distribute.size() == nr_variables());
@@ -863,7 +863,7 @@ namespace LPMP {
         }
 
     template<typename BDD_BRANCH_NODE>
-        void bdd_sequential_base<BDD_BRANCH_NODE>::backward_mm(const size_t bdd_nr, const typename BDD_BRANCH_NODE::value_type omega, std::vector<std::array<std::atomic<typename BDD_BRANCH_NODE::value_type>,2>>& mms_to_collect, std::vector<std::array<std::atomic<typename BDD_BRANCH_NODE::value_type>,2>>& mms_to_distribute)
+        void bdd_sequential_base<BDD_BRANCH_NODE>::backward_mm(const size_t bdd_nr, const typename BDD_BRANCH_NODE::value_type omega, std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& mms_to_collect, std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& mms_to_distribute)
         {
             assert(omega > 0.0 && omega <= 1.0);
             assert(bdd_nr < nr_bdds());
@@ -925,7 +925,7 @@ namespace LPMP {
         {
             backward_run();
 
-            auto reset_mms = [&](std::vector<std::array<std::atomic<value_type>,2>>& mms) {
+            auto reset_mms = [&](std::vector<std::array<value_type,2>>& mms) {
                 assert(mms.size() == nr_variables());
 #pragma omp parallel for schedule(static,256)
                 for(size_t i=0; i<mms.size(); ++i)
@@ -935,25 +935,23 @@ namespace LPMP {
                 }
             };
 
-            auto init_mms = [&](std::vector<std::array<std::atomic<value_type>,2>>& mms) {
+            auto init_mms = [&](std::vector<std::array<value_type,2>>& mms) {
                 if(mms.size() != nr_variables())
                 {
                     assert(mms.size() == 0.0);
-                    mms = std::vector<std::array<std::atomic<value_type>,2>>(nr_variables());
+                    mms = std::vector<std::array<value_type,2>>(nr_variables());
                     reset_mms(mms);
                 }
             };
 
-            auto average_mms = [&](std::vector<std::array<std::atomic<value_type>,2>>& mms) {
+            auto average_mms = [&](std::vector<std::array<value_type,2>>& mms) {
                 MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME2("parallel mma marginal averaging");
 #pragma omp parallel for
                 for(size_t var=0; var<nr_variables(); ++var)
                 {
                     assert(nr_bdds(var) > 0);
-                    const value_type d0 = mms[var][0] / value_type(nr_bdds(var));
-                    mms[var][0].store(d0);
-                    const value_type d1 = mms[var][1] / value_type(nr_bdds(var));
-                    mms[var][1].store(d1);
+                    mms[var][0] /= value_type(nr_bdds(var));
+                    mms[var][1] /= value_type(nr_bdds(var));
                 }
             };
 
