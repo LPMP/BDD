@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <unordered_set>
 #include "time_measure_util.h"
+#include "atomic_ref.hpp"
 
 namespace LPMP {
 
@@ -778,14 +779,12 @@ namespace LPMP {
     template<typename REAL>
     void atomic_addf(REAL& f, const REAL d) 
     {
-        // TODO: use atomic_ref when in C++20
-        REAL old = f;
-        REAL desired = old + d;
-        if(d != 0.0)
-            while(__atomic_compare_exchange(&f, &old, &desired, false, __ATOMIC_RELEASE, __ATOMIC_CONSUME))
-            {
-                desired = old + d;
-            }
+        if(d == 0)
+            return;
+
+        // TODO: use std::atomic_ref when available in C++20
+        Foo::atomic_ref<REAL> f_ref{f};
+        f_ref += d;
     }
 
     template<typename BDD_BRANCH_NODE>
