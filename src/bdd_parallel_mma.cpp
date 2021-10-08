@@ -12,7 +12,7 @@ namespace LPMP {
                 : base(bdd_col)
             {};
 
-            bdd_sequential_base<bdd_branch_instruction<REAL>> base;
+            bdd_sequential_base<bdd_branch_instruction<REAL,uint16_t>> base;
     };
 
     template<typename REAL>

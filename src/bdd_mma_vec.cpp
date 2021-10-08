@@ -13,7 +13,7 @@ namespace LPMP {
                 : mma(bdd_col)
             {};
 
-            bdd_mma_base<bdd_branch_instruction_bdd_index<REAL>> mma;
+            bdd_mma_base<bdd_branch_instruction_bdd_index<REAL,uint32_t>> mma;
     };
 
     template<typename REAL>

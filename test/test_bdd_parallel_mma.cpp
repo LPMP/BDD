@@ -18,7 +18,7 @@ End)";
 
 std::vector<std::array<std::atomic<float>,2>> test_mm(const ILP_input& ilp, const std::string direction = "forward")
 {
-    using bdd_base_type = bdd_sequential_base<bdd_branch_instruction<float>>;
+    using bdd_base_type = bdd_sequential_base<bdd_branch_instruction<float,uint16_t>>;
 
     bdd_preprocessor pre(ilp);
     bdd_base_type solver(pre.get_bdd_collection());
@@ -85,7 +85,7 @@ std::vector<std::array<std::atomic<float>,2>> test_mm(const ILP_input& ilp, cons
 
 int main(int argc, char** argv)
 {
-    using bdd_base_type = bdd_sequential_base<bdd_branch_instruction<float>>;
+    using bdd_base_type = bdd_sequential_base<bdd_branch_instruction<float,uint16_t>>;
     const ILP_input ilp = ILP_parser::parse_string(two_simplex_problem);
     bdd_preprocessor pre(ilp);
 
