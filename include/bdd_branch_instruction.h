@@ -12,11 +12,11 @@ namespace LPMP {
             using value_type = REAL;
             using offset_type = OFFSET_TYPE;
             // offsets are added to the address of the current bdd_branch_instruction_base<REAL,DERIVED>. The compute address points to the bdd_branch_node_vec
-            OFFSET_TYPE offset_low = 0;
-            OFFSET_TYPE offset_high = 0;
             REAL m = std::numeric_limits<REAL>::infinity();
             REAL low_cost = 0.0;
             REAL high_cost = 0.0;
+            OFFSET_TYPE offset_low = 0;
+            OFFSET_TYPE offset_high = 0;
 
             void prepare_forward_step();
             void forward_step();

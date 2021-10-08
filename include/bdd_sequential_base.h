@@ -15,7 +15,7 @@
 namespace LPMP {
 
     // store BDDs one after the other.
-    // allows for efficient computation of min marginals
+    // allows for efficient computation of min marginals and parallel mma
     template<typename BDD_BRANCH_NODE>
         class bdd_sequential_base {
             public:
@@ -493,7 +493,7 @@ namespace LPMP {
 
             message_passing_state_ = message_passing_state::after_forward_pass;
 
-            return min_margs;
+            return transpose_to_var_order(min_margs);
         }
     
     template<typename BDD_BRANCH_NODE>
@@ -777,7 +777,7 @@ namespace LPMP {
         }
 
     template<typename REAL>
-    void atomic_addf(REAL& f, const REAL d) 
+    void atomic_add(REAL& f, const REAL d) 
     {
         if(d == 0)
             return;
@@ -785,6 +785,13 @@ namespace LPMP {
         // TODO: use std::atomic_ref when available in C++20
         Foo::atomic_ref<REAL> f_ref{f};
         f_ref += d;
+    }
+
+    template<typename REAL>
+    void atomic_store(REAL& f, const REAL d) 
+    {
+        Foo::atomic_ref<REAL> f_ref{f};
+        f_ref.store(d);
     }
 
     template<typename BDD_BRANCH_NODE>
@@ -817,15 +824,15 @@ namespace LPMP {
                 }
 
                 if(!std::isfinite(cur_mm[0]))
-                    mms_to_collect[var][0] = std::numeric_limits<value_type>::infinity();
+                    atomic_store(mms_to_collect[var][0], std::numeric_limits<value_type>::infinity());
                 if(!std::isfinite(cur_mm[1]))
-                    mms_to_collect[var][1] = std::numeric_limits<value_type>::infinity();
+                    atomic_store(mms_to_collect[var][1], std::numeric_limits<value_type>::infinity());
                 if(std::isfinite(cur_mm[0]) && std::isfinite(cur_mm[1]))
                 {
                     if(cur_mm[0] < cur_mm[1])
-                        atomic_addf(mms_to_collect[var][1], omega*(cur_mm[1] - cur_mm[0]));
+                        atomic_add(mms_to_collect[var][1], omega*(cur_mm[1] - cur_mm[0]));
                     else
-                        atomic_addf(mms_to_collect[var][0], omega*(cur_mm[0] - cur_mm[1]));
+                        atomic_add(mms_to_collect[var][0], omega*(cur_mm[0] - cur_mm[1]));
                 }
 
                 assert(mms_to_collect[var][0] >= 0.0);
@@ -839,6 +846,8 @@ namespace LPMP {
                         bdd_branch_nodes_[i].high_cost = std::numeric_limits<value_type>::infinity();
                     if(std::isfinite(cur_mm[0]) && std::isfinite(cur_mm[1]))
                     {
+                        //bdd_branch_nodes_[i].low_cost += std::min(omega*(cur_mm[1] - cur_mm[0]), value_type(0.0));
+                        //bdd_branch_nodes_[i].high_cost += std::min(omega*(cur_mm[0] - cur_mm[1]), value_type(0.0));
                         if(cur_mm[0] < cur_mm[1])
                             bdd_branch_nodes_[i].high_cost += omega*(cur_mm[0] - cur_mm[1]);
                         else
@@ -865,6 +874,8 @@ namespace LPMP {
         typename BDD_BRANCH_NODE::value_type 
         bdd_sequential_base<BDD_BRANCH_NODE>::backward_mm(const size_t bdd_nr, const typename BDD_BRANCH_NODE::value_type omega, std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& mms_to_collect, std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& mms_to_distribute)
         {
+            assert(mms_to_collect.size() == nr_variables());
+            assert(mms_to_distribute.size() == nr_variables());
             assert(omega > 0.0 && omega <= 1.0);
             assert(bdd_nr < nr_bdds());
 
@@ -882,15 +893,15 @@ namespace LPMP {
                 }
 
                 if(!std::isfinite(cur_mm[0]))
-                    mms_to_collect[var][0] = std::numeric_limits<value_type>::infinity();
+                    atomic_store(mms_to_collect[var][0], std::numeric_limits<value_type>::infinity());
                 if(!std::isfinite(cur_mm[1]))
-                    mms_to_collect[var][1] = std::numeric_limits<value_type>::infinity();
+                    atomic_store(mms_to_collect[var][1], std::numeric_limits<value_type>::infinity());
                 if(std::isfinite(cur_mm[0]) && std::isfinite(cur_mm[1]))
                 {
                     if(cur_mm[0] < cur_mm[1])
-                        atomic_addf(mms_to_collect[var][1], omega*(cur_mm[1] - cur_mm[0]));
+                        atomic_add(mms_to_collect[var][1], omega*(cur_mm[1] - cur_mm[0]));
                     else
-                        atomic_addf(mms_to_collect[var][0], omega*(cur_mm[0] - cur_mm[1]));
+                        atomic_add(mms_to_collect[var][0], omega*(cur_mm[0] - cur_mm[1]));
                 }
 
                 assert(mms_to_collect[var][0] >= 0.0);
@@ -904,6 +915,8 @@ namespace LPMP {
                         bdd_branch_nodes_[i].high_cost = std::numeric_limits<value_type>::infinity();
                     if(std::isfinite(cur_mm[0]) && std::isfinite(cur_mm[1]))
                     {
+                        //bdd_branch_nodes_[i].low_cost += std::min(omega*(cur_mm[1] - cur_mm[0]), value_type(0.0));
+                        //bdd_branch_nodes_[i].high_cost += std::min(omega*(cur_mm[0] - cur_mm[1]), value_type(0.0));
                         if(cur_mm[0] < cur_mm[1])
                             bdd_branch_nodes_[i].high_cost += omega*(cur_mm[0] - cur_mm[1]);
                         else
@@ -931,20 +944,14 @@ namespace LPMP {
 
             auto reset_mms = [&](std::vector<std::array<value_type,2>>& mms) {
                 assert(mms.size() == nr_variables());
-#pragma omp parallel for schedule(static,256)
-                for(size_t i=0; i<mms.size(); ++i)
-                {
-                    mms[i][0] = 0.0;
-                    mms[i][1] = 0.0;
-                }
+                std::fill(mms.begin(), mms.end(), std::array<value_type,2>{0.0,0.0});
             };
 
             auto init_mms = [&](std::vector<std::array<value_type,2>>& mms) {
                 if(mms.size() != nr_variables())
                 {
                     assert(mms.size() == 0.0);
-                    mms = std::vector<std::array<value_type,2>>(nr_variables());
-                    reset_mms(mms);
+                    mms = std::vector<std::array<value_type,2>>(nr_variables(), {0.0,0.0});
                 }
             };
 
