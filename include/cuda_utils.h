@@ -1,0 +1,138 @@
+#pragma once
+
+#include <cuda_runtime.h>
+#include <thrust/copy.h>
+#include <thrust/device_vector.h>
+#include <thrust/gather.h>
+#include <thrust/sort.h>
+#include <thrust/unique.h>
+#include <thrust/adjacent_difference.h>
+#include <thrust/iterator/discard_iterator.h>
+#include "time_measure_util.h"
+#include <thrust/iterator/constant_iterator.h>
+
+inline float __int_as_float_host(int a)
+{
+    union {int a; float b;} u;
+    u.a = a;
+    return u.b;
+}
+
+#define CUDART_INF_F __int_as_float_host(0x7f800000)
+
+// copied from: https://github.com/treecode/Bonsai/blob/8904dd3ebf395ccaaf0eacef38933002b49fc3ba/runtime/profiling/derived_atomic_functions.h#L186
+__device__ __forceinline__ float atomicMin(float *address, float val)
+{
+    int ret = __float_as_int(*address);
+    while(val < __int_as_float(ret))
+    {
+        int old = ret;
+        if((ret = atomicCAS((int *)address, old, __float_as_int(val))) == old)
+            break;
+    }
+    return __int_as_float(ret);
+}
+
+// float atomicMax
+__device__ __forceinline__ float atomicMax(float *address, float val)
+{
+    int ret = __float_as_int(*address);
+    while(val > __int_as_float(ret))
+    {
+        int old = ret;
+        if((ret = atomicCAS((int *)address, old, __float_as_int(val))) == old)
+            break;
+    }
+    return __int_as_float(ret);
+}
+
+
+inline int get_cuda_device()
+{   
+    return 0; // Get first possible GPU. CUDA_VISIBLE_DEVICES automatically masks the rest of GPUs.
+}
+
+inline void print_gpu_memory_stats()
+{
+    size_t free, total;
+    cudaMemGetInfo(&free, &total);
+    std::cout<<"Total memory(MB): "<<total / (1024 * 1024)<<", Free(MB): "<<free / (1024 * 1024)<<std::endl;
+}
+
+inline void checkCudaError(cudaError_t status, std::string errorMsg)
+{
+    if (status != cudaSuccess) {
+        std::cout << "CUDA error: " << errorMsg << ", status" <<cudaGetErrorString(status) << std::endl;
+        throw std::exception();
+    }
+}
+
+inline std::tuple<thrust::device_vector<int>, thrust::device_vector<int>> get_unique_with_counts(const thrust::device_vector<int>& input)
+{
+    assert(thrust::is_sorted(input.begin(), input.end()));
+    thrust::device_vector<int> unique_counts(input.size() + 1);
+    thrust::device_vector<int> unique_values(input.size());
+
+    auto new_end = thrust::unique_by_key_copy(input.begin(), input.end(), thrust::make_counting_iterator(0), unique_values.begin(), unique_counts.begin());
+    int num_unique = std::distance(unique_values.begin(), new_end.first);
+    unique_values.resize(num_unique);
+    unique_counts.resize(num_unique + 1); // contains smallest index of each unique element.
+    
+    unique_counts[num_unique] = input.size();
+    thrust::adjacent_difference(unique_counts.begin(), unique_counts.end(), unique_counts.begin());
+    unique_counts = thrust::device_vector<int>(unique_counts.begin() + 1, unique_counts.end());
+
+    return {unique_values, unique_counts};
+}
+
+template<typename T>
+inline thrust::device_vector<T> repeat_values(const thrust::device_vector<T>& values, const thrust::device_vector<int>& counts)
+{
+    MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
+    thrust::device_vector<int> counts_sum(counts.size() + 1);
+    counts_sum[0] = 0;
+    thrust::inclusive_scan(counts.begin(), counts.end(), counts_sum.begin() + 1);
+    
+    int out_size = counts_sum.back();
+    thrust::device_vector<int> output_indices(out_size, 0);
+
+    thrust::scatter(thrust::constant_iterator<int>(1), thrust::constant_iterator<int>(1) + values.size(), counts_sum.begin(), output_indices.begin());
+
+    thrust::inclusive_scan(output_indices.begin(), output_indices.end(), output_indices.begin());
+    thrust::transform(output_indices.begin(), output_indices.end(), thrust::make_constant_iterator(1), output_indices.begin(), thrust::minus<int>());
+
+    thrust::device_vector<T> out_values(out_size);
+    thrust::gather(output_indices.begin(), output_indices.end(), values.begin(), out_values.begin());
+
+    return out_values;
+}
+
+template<typename T>
+inline thrust::device_vector<T> concatenate(const thrust::device_vector<T>& a, const thrust::device_vector<T>& b)
+{
+    thrust::device_vector<T> ab(a.size() + b.size());
+    thrust::copy(a.begin(), a.end(), ab.begin());
+    thrust::copy(b.begin(), b.end(), ab.begin() + a.size());
+    return ab;
+}
+
+inline void coo_sorting(thrust::device_vector<int>& i, thrust::device_vector<int>& j)
+{
+    auto first = thrust::make_zip_iterator(thrust::make_tuple(i.begin(), j.begin()));
+    auto last = thrust::make_zip_iterator(thrust::make_tuple(i.end(), j.end()));
+    thrust::sort(first, last);
+}
+
+template<typename T>
+inline void print_vector(const thrust::device_vector<T>& v, const char* name, const int num = 0)
+{
+    std::cout<<name<<": ";
+    if (num == 0)
+        thrust::copy(v.begin(), v.end(), std::ostream_iterator<T>(std::cout, " "));
+    else
+    {
+        int size = std::distance(v.begin(), v.end());
+        thrust::copy(v.begin(), v.begin() + std::min(size, num), std::ostream_iterator<T>(std::cout, " "));
+    }
+    std::cout<<"\n";
+}

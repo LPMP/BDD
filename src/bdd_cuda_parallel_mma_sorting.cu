@@ -78,7 +78,7 @@ namespace LPMP {
         thrust::device_vector<float> diff_1_0;
         {
             thrust::device_vector<float> mm_0;
-            std::tie(mm_primal_index, mm_bdd_index, mm_0, diff_1_0) = min_marginals_cuda();
+            std::tie(mm_0, diff_1_0) = min_marginals_cuda();
 
             // Compute min-marginal difference (mm_1 - mm_0) and store in diff_1_0
             // print_vector(mm_primal_index, "mm_primal_index");
