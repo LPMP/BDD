@@ -13,6 +13,7 @@
 #include "bdd_cuda.h"
 #include "bdd_parallel_mma.h"
 #include "bdd_fix.h"
+#include "incremental_mm_agreement_rounding.hxx"
 #include <variant> 
 #include <optional>
 #include <CLI/CLI.hpp>
@@ -48,7 +49,8 @@ namespace LPMP {
 
         bool tighten = false;
 
-        bool primal_rounding = false;
+        bool incremental_primal_rounding = false;
+        bool diving_primal_rounding = false;
         bdd_fix_options fixing_options_;
 
         bool statistics = false;

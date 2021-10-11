@@ -60,7 +60,7 @@ namespace LPMP {
             two_dim_variable_array<std::array<double,2>> min_marginals();
             void solve(const size_t max_iter, const double tolerance, const double time_limit); 
             double lower_bound() const { return lower_bound_; }
-            void set_cost(const double c, const size_t var);
+            void update_cost(const double c, const size_t var);
             void fix_variable(const size_t var, const bool value);
 
             // get variable costs from bdd
@@ -70,6 +70,8 @@ namespace LPMP {
                 void update_costs(const size_t bdd_nr,
                         COST_ITERATOR cost_begin, COST_ITERATOR cost_end,
                         VARIABLE_ITERATOR variable_begin, VARIABLE_ITERATOR variable_end);
+            template<typename COST_ITERATOR>
+                void update_costs(COST_ITERATOR cost_begin, COST_ITERATOR cost_end);
 
             template<typename ITERATOR>
                 void update_arc_costs(const size_t first_node, ITERATOR begin, ITERATOR end);
@@ -359,7 +361,7 @@ namespace LPMP {
     }
 
     template<typename BDD_BRANCH_NODE>
-    void bdd_mma_base<BDD_BRANCH_NODE>::set_cost(const double c, const size_t var)
+    void bdd_mma_base<BDD_BRANCH_NODE>::update_cost(const double c, const size_t var)
     {
         assert(nr_bdds(var) > 0);
         assert(std::isfinite(c));
@@ -368,11 +370,7 @@ namespace LPMP {
         message_passing_state_ = message_passing_state::none;
 
         for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
-        {
-            assert(bdd_branch_nodes_[i].high_cost  == 0.0 || bdd_branch_nodes_[i].offset_high == BDD_BRANCH_NODE::terminal_0_offset);
-            assert(bdd_branch_nodes_[i].low_cost  == 0.0 || bdd_branch_nodes_[i].offset_low == BDD_BRANCH_NODE::terminal_0_offset);
             bdd_branch_nodes_[i].high_cost += c / value_type(nr_bdds(var));
-        }
     }
 
     template<typename BDD_BRANCH_NODE>
@@ -504,6 +502,16 @@ namespace LPMP {
                     if(*var_it == variable(i))
                     bdd_branch_nodes_[i].high_cost += *cost_it;
                     });
+        }
+
+    template<typename BDD_BRANCH_NODE>
+    template<typename COST_ITERATOR>
+        void bdd_mma_base<BDD_BRANCH_NODE>::update_costs(COST_ITERATOR cost_begin, COST_ITERATOR cost_end)
+        {
+            assert(std::distance(cost_begin, cost_end) == nr_variables());
+            for(size_t var=0; var<nr_variables(); ++var)
+                for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
+                    bdd_branch_nodes_[i].high_cost += *(cost_begin+i) / value_type(nr_bdds(var));
         }
 
     template<typename BDD_BRANCH_NODE>
@@ -1407,8 +1415,6 @@ namespace LPMP {
             for(size_t i=0; i<bdd_branch_nodes_.size(); ++i)
                 assert(bdd_branch_nodes_[i].node_initialized());
 
-            std::cout << &bdd_branch_nodes_[0] << " kwaskwas\n";
-            iteration();
             const double lb = lower_bound();
             std::cout << "lb = " << lb << "\n";
             return new_bdd_nrs;

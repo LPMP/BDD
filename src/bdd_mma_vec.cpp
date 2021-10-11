@@ -40,9 +40,9 @@ namespace LPMP {
     {}
 
     template<typename REAL>
-    void bdd_mma_vec<REAL>::set_cost(const double c, const size_t var)
+    void bdd_mma_vec<REAL>::update_cost(const double c, const size_t var)
     {
-        pimpl->mma.set_cost(c, var);
+        pimpl->mma.update_cost(c, var);
     }
 
     template<typename REAL>

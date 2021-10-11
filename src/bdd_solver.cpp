@@ -8,6 +8,7 @@
 #include <iomanip>
 #include <memory>
 #include <stdlib.h>
+#include <stdexcept>
 #include <CLI/CLI.hpp>
 #include "time_measure_util.h"
 
@@ -99,11 +100,13 @@ namespace LPMP {
         auto bdd_solver_precision_arg = app.add_option("--precision", bdd_solver_precision_, "floating point precision used in solver")
             ->transform(CLI::CheckedTransformer(bdd_solver_precision_map, CLI::ignore_case));
 
-        //bool primal_rounding = false;
-        auto primal_arg = app.add_flag("-p, --primal", primal_rounding, "primal rounding flag");
+        auto primal_group = app.add_option_group("primal rounding", "method for obtaining a primal solution from the dual optimization");
+        auto diving_primal_arg = primal_group->add_flag("--diving_primal", diving_primal_rounding, "diving primal rounding flag");
+        auto incremental_primal_arg = primal_group->add_flag("--incremental_primal", incremental_primal_rounding, "incremental primal rounding flag");
+        primal_group->require_option(0,1); 
 
-        auto primal_param_group = app.add_option_group("primal parameters", "parameters for rounding a primal solution");
-        primal_param_group->needs(primal_arg);
+        auto primal_param_group = app.add_option_group("primal diving parameters", "parameters for rounding a primal solution");
+        primal_param_group->needs(diving_primal_arg);
 
         //bdd_fix_options fixing_options_;
         using fix_order = bdd_fix_options::variable_order;
@@ -303,7 +306,7 @@ namespace LPMP {
             throw std::runtime_error("no solver nor output of statistics or export of lp selected");
         }
 
-        if(options.primal_rounding)
+        if(options.diving_primal_rounding)
         {
             std::cout << options.fixing_options_.var_order << ", " << options.fixing_options_.var_value << "\n";
             primal_heuristic = std::move(bdd_fix(stor, options.fixing_options_));
@@ -415,37 +418,50 @@ namespace LPMP {
 
     void bdd_solver::round()
     {
-        assert(options.primal_rounding == bool(primal_heuristic));
-        if(!options.primal_rounding)
-            return;
-
-        MEASURE_FUNCTION_EXECUTION_TIME;
-
-        if(options.time_limit < 0)
+        if(options.diving_primal_rounding)
         {
-            std::cout << "Time limit exceeded, aborting rounding." << std::endl;
-            return;
-        }
+            assert(options.diving_primal_rounding == bool(primal_heuristic));
+            if(!options.diving_primal_rounding)
+                return;
 
-        if(!primal_heuristic)
+            MEASURE_FUNCTION_EXECUTION_TIME;
+
+            if(options.time_limit < 0)
+            {
+                std::cout << "Time limit exceeded, aborting rounding." << std::endl;
+                return;
+            }
+
+            if(!primal_heuristic)
+            {
+                std::cout << "no primal heuristic intialized\n";
+                return;
+            }
+
+            std::cout << "Retrieving total min-marginals..." << std::endl;
+
+            const std::vector<double> total_min_marginals = min_marginal_differences(min_marginals(), 0.0);
+            bool success = primal_heuristic->round(total_min_marginals);
+
+            if (!success)
+                return;
+
+            std::vector<char> primal_solution = primal_heuristic->primal_solution();
+            assert(std::all_of(primal_solution.begin(), primal_solution.end(), [](char x){ return (x >= 0) && (x <= 1);}));
+            assert(primal_solution.size() == costs.size());
+            double upper_bound = std::inner_product(primal_solution.begin(), primal_solution.end(), costs.begin(), 0.0);
+            std::cout << "Primal solution value: " << upper_bound << std::endl;
+        }
+        else if(options.incremental_primal_rounding)
         {
-            std::cout << "no primal heuristic intialized\n";
-            return;
+            std::cout << "[incremental primal rounding]\n";
+            std::visit([&](auto&& s) {
+                    if constexpr(std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_vec<float>>)
+                    incremental_mm_agreement_rounding_iter(s);
+                    else
+                    throw std::runtime_error("solver not supported for incremental rounding");
+                    }, *solver);
         }
-
-        std::cout << "Retrieving total min-marginals..." << std::endl;
-
-        const std::vector<double> total_min_marginals = min_marginal_differences(min_marginals(), 0.0);
-        bool success = primal_heuristic->round(total_min_marginals);
-
-        if (!success)
-            return;
-
-        std::vector<char> primal_solution = primal_heuristic->primal_solution();
-        assert(std::all_of(primal_solution.begin(), primal_solution.end(), [](char x){ return (x >= 0) && (x <= 1);}));
-        assert(primal_solution.size() == costs.size());
-        double upper_bound = std::inner_product(primal_solution.begin(), primal_solution.end(), costs.begin(), 0.0);
-        std::cout << "Primal solution value: " << upper_bound << std::endl;
     } 
 
     void bdd_solver::tighten()

@@ -17,7 +17,9 @@ namespace LPMP {
             bdd_mma_vec(bdd_mma_vec&&);
             bdd_mma_vec& operator=(bdd_mma_vec&&);
             ~bdd_mma_vec();
-            void set_cost(const double c, const size_t var);
+            void update_cost(const double c, const size_t var);
+            template<typename COST_ITERATOR>
+                void update_costs(COST_ITERATOR cost_begin, COST_ITERATOR cost_end);
             void set_avg_type(const averaging_type avg_type);
             double lower_bound();
             void iteration();
@@ -38,9 +40,17 @@ namespace LPMP {
         : bdd_mma_vec(bdd_col)
         {
             size_t var = 0;
-            for(auto cost_it=cost_begin; cost_it!=cost_end; ++cost_it, ++var)
-                set_cost(*cost_it, var);
+            update_costs(cost_begin, cost_end);
             backward_run();
+        }
+
+    template<typename REAL>
+        template<typename COST_ITERATOR>
+        void bdd_mma_vec<REAL>::update_costs(COST_ITERATOR cost_begin, COST_ITERATOR cost_end)
+        {
+            size_t var = 0;
+            for(auto cost_it=cost_begin; cost_it!=cost_end; ++cost_it, ++var)
+                update_cost(*cost_it, var);
         }
 
 };

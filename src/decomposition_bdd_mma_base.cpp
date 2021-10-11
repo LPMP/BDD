@@ -115,7 +115,7 @@ namespace LPMP {
             if(bdd_bases[i].base.nr_bdds(var) > 0)
             {
                 const double interval_cost = c/double(nr_cover_intervals);
-                bdd_bases[i].base.set_cost(interval_cost, var);
+                bdd_bases[i].base.update_cost(interval_cost, var);
             }
         }
     }
