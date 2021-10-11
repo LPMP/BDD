@@ -3,10 +3,7 @@
 #include "bdd_cuda_base.h"
 
 namespace LPMP {
-    // Solving happens here. 
-    // Take top-k variables with highest abs. min marginal difference but also prioritize the variables which 
-    // have not been updated recently. Update only these dual variable by parallel mma. 
-    class bdd_cuda_parallel_mma_sorting : public bdd_cuda_base {
+    class bdd_cuda_parallel_mma : public bdd_cuda_base {
         public:
             using bdd_cuda_base::bdd_cuda_base; // inherit base constructor
 
@@ -18,6 +15,11 @@ namespace LPMP {
             // https://on-demand.gputechconf.com/gtc-express/2011/presentations/NVIDIA_GPU_Computing_Webinars_CUDA_Memory_Optimization.pdf
 
         private:
+            void forward_iteration(const float omega);
+            void backward_iteration(const float omega);
+
+            thrust::device_vector<float> delta_lo, delta_hi; // One entry in each per primal variable.
+
 
     };
 }

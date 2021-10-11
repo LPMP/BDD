@@ -30,7 +30,7 @@ namespace LPMP {
             size_t nr_bdds() const { return nr_bdds_; }
 
             void forward_run(); //TODO: Should these functions be called from outside?
-            void backward_run();
+            void backward_run(bool compute_path_costs);
 
         protected:
 
@@ -39,7 +39,7 @@ namespace LPMP {
             // Following arrays have one entry per layer of BDD in each BDD:
             thrust::device_vector<int> primal_variable_index_;
             thrust::device_vector<int> bdd_index_;
-            thrust::device_vector<float> hi_cost_;
+            thrust::device_vector<float> hi_cost_, lo_cost_;
 
             // Following arrays are allocated for each bdd node:
             thrust::device_vector<int> lo_bdd_node_index_; // = 0

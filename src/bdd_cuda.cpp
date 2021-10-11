@@ -55,6 +55,20 @@ namespace LPMP {
 #endif
     }
 
+    template<typename COST_ITERATOR>
+    void bdd_cuda::set_costs(COST_ITERATOR costs_begin, COST_ITERATOR costs_end)
+    {
+        pimpl->pmma.set_costs(costs_begin, costs_end);
+    }
+
+    // Need to have explicit instantiation in the base.
+    template void bdd_cuda::set_costs(double*, double*);
+    template void bdd_cuda::set_costs(float*, float*);
+    template void bdd_cuda::set_costs(std::vector<double>::iterator, std::vector<double>::iterator);
+    template void bdd_cuda::set_costs(std::vector<double>::const_iterator, std::vector<double>::const_iterator);
+    template void bdd_cuda::set_costs(std::vector<float>::iterator, std::vector<float>::iterator);
+    template void bdd_cuda::set_costs(std::vector<float>::const_iterator, std::vector<float>::const_iterator);
+
     void bdd_cuda::backward_run()
     {
 #ifdef WITH_CUDA

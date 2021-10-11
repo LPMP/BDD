@@ -34,13 +34,4 @@ namespace LPMP {
             set_costs(cost_begin, cost_end);
         }
 
-    template<typename ITERATOR>
-        void bdd_cuda::set_costs(ITERATOR cost_begin, ITERATOR cost_end)
-        {
-            // TODO: not fast!
-            auto cost_it = cost_begin;
-            for(size_t i=0; i<std::distance(cost_begin, cost_end); ++i, ++cost_it)
-                set_cost(*cost_it, i); 
-
-        }
 };

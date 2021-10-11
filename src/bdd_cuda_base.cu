@@ -65,7 +65,7 @@ namespace LPMP {
         cost_from_root_ = thrust::device_vector<float>(nr_bdd_nodes_, CUDART_INF_F);
         cost_from_terminal_ = thrust::device_vector<float>(nr_bdd_nodes_, CUDART_INF_F);
         hi_path_cost_ = thrust::device_vector<float>(nr_bdd_nodes_, CUDART_INF_F);
-        lo_path_cost_ = thrust::device_vector<float>(nr_bdd_nodes_, CUDART_INF_F);
+        lo_path_cost_ = thrust::device_vector<float>(nr_bdd_nodes_, 0.0f);
     }
 
     std::tuple<thrust::device_vector<int>, thrust::device_vector<int>> bdd_cuda_base::populate_bdd_nodes(const BDD::bdd_collection& bdd_col)
@@ -187,6 +187,7 @@ namespace LPMP {
     void bdd_cuda_base::compress_bdd_nodes_to_layer()
     {
         thrust::device_vector<float> hi_cost_compressed(hi_cost_.size());
+        thrust::device_vector<float> lo_cost_compressed(lo_cost_.size());
         thrust::device_vector<int> primal_index_compressed(primal_variable_index_.size()); 
         thrust::device_vector<int> bdd_index_compressed(bdd_index_.size());
         
@@ -205,15 +206,19 @@ namespace LPMP {
         thrust::sequence(bdd_node_to_layer_map_.begin(), bdd_node_to_layer_map_.end());
         bdd_node_to_layer_map_ = repeat_values(bdd_node_to_layer_map_, bdd_layer_width_);
 
-        // Compress hi_costs_
-        auto new_end_unique = thrust::unique_by_key_copy(first_key, last_key, hi_cost_.begin(), thrust::make_discard_iterator(), hi_cost_compressed.begin());
-        assert(out_size == thrust::distance(hi_cost_compressed.begin(), new_end_unique.second));
+        // Compress hi_costs_, lo_costs_ (although initially they are infinity, 0 resp.)
+        auto first_cost_val = thrust::make_zip_iterator(thrust::make_tuple(hi_cost_.begin(), lo_cost_.begin()));
+        auto first_cost_val_compressed = thrust::make_zip_iterator(thrust::make_tuple(hi_cost_compressed.begin(), lo_cost_compressed.begin()));
+
+        auto new_end_unique = thrust::unique_by_key_copy(first_key, last_key, first_cost_val, thrust::make_discard_iterator(), first_cost_val_compressed);
+        assert(out_size == thrust::distance(first_cost_val_compressed, new_end_unique.second));
 
         hi_cost_compressed.resize(out_size);
         primal_index_compressed.resize(out_size);
         bdd_index_compressed.resize(out_size);
         bdd_layer_width_.resize(out_size);
 
+        thrust::swap(lo_cost_compressed, lo_cost_);
         thrust::swap(hi_cost_compressed, hi_cost_);
         thrust::swap(primal_index_compressed, primal_variable_index_);
         thrust::swap(bdd_index_compressed, bdd_index_);
@@ -288,10 +293,19 @@ namespace LPMP {
         thrust::for_each(first, last, func);
     }
 
+    template void bdd_cuda_base::set_costs(double*, double*);
+    template void bdd_cuda_base::set_costs(float*, float*);
+    template void bdd_cuda_base::set_costs(std::vector<double>::iterator, std::vector<double>::iterator);
+    template void bdd_cuda_base::set_costs(std::vector<double>::const_iterator, std::vector<double>::const_iterator);
+    template void bdd_cuda_base::set_costs(std::vector<float>::iterator, std::vector<float>::iterator);
+    template void bdd_cuda_base::set_costs(std::vector<float>::const_iterator, std::vector<float>::const_iterator);
+
+
     __global__ void forward_step(const int cur_num_bdd_nodes, const int start_offset,
                                 const int* const __restrict__ lo_bdd_node_index, 
                                 const int* const __restrict__ hi_bdd_node_index, 
                                 const int* const __restrict__ bdd_node_to_layer_map, 
+                                const float* const __restrict__ lo_cost,
                                 const float* const __restrict__ hi_cost,
                                 float* __restrict__ cost_from_root)
     {
@@ -308,11 +322,10 @@ namespace LPMP {
 
             const float cur_c_from_root = cost_from_root[bdd_idx];
             const int layer_idx = bdd_node_to_layer_map[bdd_idx];
-            const float cur_hi_cost = hi_cost[layer_idx];
 
             // Uncoalesced writes:
-            atomicMin(&cost_from_root[next_lo_node], cur_c_from_root); // TODO: Set cost_from_root to infinity before starting next iterations.
-            atomicMin(&cost_from_root[next_hi_node], cur_c_from_root + cur_hi_cost);
+            atomicMin(&cost_from_root[next_lo_node], cur_c_from_root + lo_cost[layer_idx]);
+            atomicMin(&cost_from_root[next_hi_node], cur_c_from_root + hi_cost[layer_idx]);
         }
     }
 
@@ -340,6 +353,7 @@ namespace LPMP {
                                                     thrust::raw_pointer_cast(lo_bdd_node_index_.data()),
                                                     thrust::raw_pointer_cast(hi_bdd_node_index_.data()),
                                                     thrust::raw_pointer_cast(bdd_node_to_layer_map_.data()),
+                                                    thrust::raw_pointer_cast(lo_cost_.data()),
                                                     thrust::raw_pointer_cast(hi_cost_.data()),
                                                     thrust::raw_pointer_cast(cost_from_root_.data()));
             num_nodes_processed += cur_num_bdd_nodes;
@@ -352,15 +366,16 @@ namespace LPMP {
         //                 cost_from_root_.begin());
     }
 
-    __global__ void backward_step(const int cur_num_bdd_nodes, const int start_offset,
-                                const int* const __restrict__ lo_bdd_node_index, 
-                                const int* const __restrict__ hi_bdd_node_index, 
-                                const int* const __restrict__ bdd_node_to_layer_map, 
-                                const float* const __restrict__ hi_cost,
-                                const float* __restrict__ cost_from_root, 
-                                float* __restrict__ cost_from_terminal,
-                                float* __restrict__ lo_path_cost, 
-                                float* __restrict__ hi_path_cost)
+    __global__ void backward_step_with_path_costs(const int cur_num_bdd_nodes, const int start_offset,
+                                                const int* const __restrict__ lo_bdd_node_index, 
+                                                const int* const __restrict__ hi_bdd_node_index, 
+                                                const int* const __restrict__ bdd_node_to_layer_map, 
+                                                const float* const __restrict__ lo_cost,
+                                                const float* const __restrict__ hi_cost,
+                                                const float* __restrict__ cost_from_root, 
+                                                float* __restrict__ cost_from_terminal,
+                                                float* __restrict__ lo_path_cost, 
+                                                float* __restrict__ hi_path_cost)
     {
         const int start_index = blockIdx.x * blockDim.x + threadIdx.x;
         const int num_threads = blockDim.x * gridDim.x;
@@ -377,22 +392,20 @@ namespace LPMP {
 
             if (!is_lo_bot_sink && !is_hi_bot_sink)
             {
-                const float next_lo_node_cost_terminal = cost_from_terminal[lo_node];
-                const float next_hi_node_cost_terminal = cost_from_terminal[hi_node];
-
-                const float cur_hi_cost_from_terminal = next_hi_node_cost_terminal + hi_cost[layer_idx];
-                cost_from_terminal[bdd_idx] = min(cur_hi_cost_from_terminal, next_lo_node_cost_terminal);
+                const float cur_hi_cost_from_terminal = cost_from_terminal[hi_node] + hi_cost[layer_idx];
+                const float cur_lo_cost_from_terminal = cost_from_terminal[lo_node] + lo_cost[layer_idx];
+                cost_from_terminal[bdd_idx] = min(cur_hi_cost_from_terminal, cur_lo_cost_from_terminal);
 
                 const float cur_cost_from_root = cost_from_root[bdd_idx];
                 hi_path_cost[bdd_idx] = cur_cost_from_root + cur_hi_cost_from_terminal;
-                lo_path_cost[bdd_idx] = cur_cost_from_root + next_lo_node_cost_terminal;
+                lo_path_cost[bdd_idx] = cur_cost_from_root + cur_lo_cost_from_terminal;
             }
 
             else if(!is_lo_bot_sink)
             {
-                const float next_lo_node_cost_terminal = cost_from_terminal[lo_node];
-                cost_from_terminal[bdd_idx] = next_lo_node_cost_terminal;
-                lo_path_cost[bdd_idx] = cost_from_root[bdd_idx] + next_lo_node_cost_terminal;
+                const float cur_lo_cost_from_terminal = cost_from_terminal[lo_node] + lo_cost[layer_idx];
+                cost_from_terminal[bdd_idx] = cur_lo_cost_from_terminal;
+                lo_path_cost[bdd_idx] = cost_from_root[bdd_idx] + cur_lo_cost_from_terminal;
             }
             else if(!is_hi_bot_sink)
             {
@@ -400,11 +413,52 @@ namespace LPMP {
                 cost_from_terminal[bdd_idx] = cur_hi_cost_from_terminal;
                 hi_path_cost[bdd_idx] = cost_from_root[bdd_idx] + cur_hi_cost_from_terminal;
             }
-            __syncthreads();
         }
     }
 
-    void bdd_cuda_base::backward_run()
+        __global__ void backward_step(const int cur_num_bdd_nodes, const int start_offset,
+                                    const int* const __restrict__ lo_bdd_node_index, 
+                                    const int* const __restrict__ hi_bdd_node_index, 
+                                    const int* const __restrict__ bdd_node_to_layer_map, 
+                                    const float* const __restrict__ lo_cost,
+                                    const float* const __restrict__ hi_cost,
+                                    float* __restrict__ cost_from_terminal)
+    {
+        const int start_index = blockIdx.x * blockDim.x + threadIdx.x;
+        const int num_threads = blockDim.x * gridDim.x;
+        for (int bdd_idx = start_index + start_offset; bdd_idx < cur_num_bdd_nodes + start_offset; bdd_idx += num_threads) 
+        {
+            const int lo_node = lo_bdd_node_index[bdd_idx];
+            if (lo_node < 0)
+                continue; // terminal node.
+            const int hi_node = hi_bdd_node_index[bdd_idx];
+
+            const bool is_lo_bot_sink = lo_bdd_node_index[lo_node] == BOT_SINK_INDICATOR_CUDA;
+            const bool is_hi_bot_sink = lo_bdd_node_index[hi_node] == BOT_SINK_INDICATOR_CUDA;
+            const int layer_idx = bdd_node_to_layer_map[bdd_idx];
+
+            if (!is_lo_bot_sink && !is_hi_bot_sink)
+            {
+                const float cur_hi_cost_from_terminal = cost_from_terminal[hi_node] + hi_cost[layer_idx];
+                const float cur_lo_cost_from_terminal = cost_from_terminal[lo_node] + lo_cost[layer_idx];
+                cost_from_terminal[bdd_idx] = min(cur_hi_cost_from_terminal, cur_lo_cost_from_terminal);
+            }
+
+            else if(!is_lo_bot_sink)
+            {
+                const float cur_lo_cost_from_terminal = cost_from_terminal[lo_node] + lo_cost[layer_idx];
+                cost_from_terminal[bdd_idx] = cur_lo_cost_from_terminal;
+            }
+            else if(!is_hi_bot_sink)
+            {
+                const float cur_hi_cost_from_terminal = cost_from_terminal[hi_node] + hi_cost[layer_idx];
+                cost_from_terminal[bdd_idx] = cur_hi_cost_from_terminal;
+            }
+        }
+    }
+
+
+    void bdd_cuda_base::backward_run(bool compute_path_costs = True)
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         if (backward_state_valid_)
@@ -428,15 +482,26 @@ namespace LPMP {
             int cur_num_bdd_nodes = cum_nr_bdd_nodes_per_hop_dist_[s] - start_offset;
             int blockCount = ceil(cur_num_bdd_nodes / (float) threadCount);
             std::cout<<"backward_run: "<<s<<", blockCount: "<<blockCount<<"\n";
-            backward_step<<<blockCount, threadCount>>>(cur_num_bdd_nodes, start_offset,
-                                                    thrust::raw_pointer_cast(lo_bdd_node_index_.data()),
-                                                    thrust::raw_pointer_cast(hi_bdd_node_index_.data()),
-                                                    thrust::raw_pointer_cast(bdd_node_to_layer_map_.data()),
-                                                    thrust::raw_pointer_cast(hi_cost_.data()),
-                                                    thrust::raw_pointer_cast(cost_from_root_.data()),
-                                                    thrust::raw_pointer_cast(cost_from_terminal_.data()),
-                                                    thrust::raw_pointer_cast(lo_path_cost_.data()),
-                                                    thrust::raw_pointer_cast(hi_path_cost_.data()));
+            if (compute_path_costs)
+                backward_step_with_path_costs<<<blockCount, threadCount>>>(cur_num_bdd_nodes, start_offset,
+                                                        thrust::raw_pointer_cast(lo_bdd_node_index_.data()),
+                                                        thrust::raw_pointer_cast(hi_bdd_node_index_.data()),
+                                                        thrust::raw_pointer_cast(bdd_node_to_layer_map_.data()),
+                                                        thrust::raw_pointer_cast(lo_cost_.data()),
+                                                        thrust::raw_pointer_cast(hi_cost_.data()),
+                                                        thrust::raw_pointer_cast(cost_from_root_.data()),
+                                                        thrust::raw_pointer_cast(cost_from_terminal_.data()),
+                                                        thrust::raw_pointer_cast(lo_path_cost_.data()),
+                                                        thrust::raw_pointer_cast(hi_path_cost_.data()));
+            else
+                backward_step<<<blockCount, threadCount>>>(cur_num_bdd_nodes, start_offset,
+                                                        thrust::raw_pointer_cast(lo_bdd_node_index_.data()),
+                                                        thrust::raw_pointer_cast(hi_bdd_node_index_.data()),
+                                                        thrust::raw_pointer_cast(bdd_node_to_layer_map_.data()),
+                                                        thrust::raw_pointer_cast(lo_cost_.data()),
+                                                        thrust::raw_pointer_cast(hi_cost_.data()),
+                                                        thrust::raw_pointer_cast(cost_from_terminal_.data()));
+
         }
         backward_state_valid_ = true;
     }
