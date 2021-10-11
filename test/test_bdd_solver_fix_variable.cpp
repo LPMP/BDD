@@ -18,12 +18,13 @@ mu_2_0 - mu_00 - mu_10 = 0
 mu_2_1 - mu_01 - mu_11 = 0
 End)";
 
-int main(int argc, char** argv)
+void variable_fixation_test(const std::string& solver_name)
 {
     std::vector<std::string> args {
         "--lp_input_string", short_mrf_chain,
-        "-s", "mma_vec"
+        "-s", solver_name
     };
+
     bdd_solver solver(args);
     solver.solve();
     // optimal solution is (1,1);
@@ -38,4 +39,10 @@ int main(int argc, char** argv)
     solver.solve();
     // optimal solution (0,0);
     test(std::abs(solver.lower_bound() - (3.0 - 1.0 + 1.0)) <= 1e-6);
+}
+
+int main(int argc, char** argv)
+{
+    variable_fixation_test("sequential_mma");
+    variable_fixation_test("parallel_mma");
 }

@@ -8,7 +8,7 @@
 
 namespace py=pybind11;
 
-using bdd_base_type = LPMP::bdd_sequential_base<LPMP::bdd_branch_instruction<float>>;
+using bdd_base_type = LPMP::bdd_sequential_base<LPMP::bdd_branch_instruction<float,uint16_t>>;
 
 PYBIND11_MODULE(bdd_mp_py, m) {
     m.doc() = "Python binding for solution of bdd-based message passing";

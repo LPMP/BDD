@@ -24,6 +24,8 @@ namespace LPMP {
             void backward_run(); 
             two_dim_variable_array<std::array<double,2>> min_marginals();
             void fix_variable(const size_t var, const bool value);
+            template<typename ITERATOR>
+                void fix_variables(ITERATOR zero_fixations_begin, ITERATOR zero_fixations_end, ITERATOR one_fixations_begin, ITERATOR one_fixations_end);
 
             void tighten();
         private:

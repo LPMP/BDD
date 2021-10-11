@@ -322,7 +322,7 @@ namespace BDD {
             auto bdd_it = bdd_it_begin;
             for(size_t bdd_nr=*bdd_it_begin; bdd_nr<nr_bdds(); ++bdd_nr)
             {
-                if(bdd_nr == *bdd_it) // skip bdd
+                if(bdd_it != bdd_it_end && bdd_nr == *bdd_it) // skip bdd
                 {
                     bdd_it++;
                 }

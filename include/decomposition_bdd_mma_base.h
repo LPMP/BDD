@@ -76,7 +76,7 @@ namespace LPMP {
             };
 
             struct bdd_sub_base {
-                bdd_mma_base<bdd_branch_instruction_bdd_index<float>> base;
+                bdd_mma_base<bdd_branch_instruction_bdd_index<float,uint32_t>> base;
                 //bdd_mma_base_vec base;
 
                 void read_in_Lagrange_multipliers(Lagrange_multiplier_queue& queue);

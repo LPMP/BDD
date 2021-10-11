@@ -123,7 +123,7 @@ namespace LPMP {
                 std::vector<size_t> add_bdds(BDD::bdd_collection& bdd_col, BDD_NR_ITERATOR bdd_nrs_begin, BDD_NR_ITERATOR bdd_nrs_end);
 
             std::vector<size_t> variables(const size_t bdd_idx);
-            std::vector<bdd_branch_instruction<float>> export_bdd(const size_t bdd_idx);
+            std::vector<bdd_branch_instruction<float,uint32_t>> export_bdd(const size_t bdd_idx);
             size_t export_bdd(BDD::bdd_collection& bdd_col, const size_t bdd_idx);
             std::tuple<BDD::node_ref, std::vector<size_t>> export_bdd(BDD::bdd_mgr& bdd_mgr, const size_t bdd_idx);
 
@@ -951,10 +951,10 @@ namespace LPMP {
     }
 
     template<typename BDD_BRANCH_NODE>
-    std::vector<bdd_branch_instruction<float>> bdd_mma_base<BDD_BRANCH_NODE>::export_bdd(const size_t bdd_idx)
+    std::vector<bdd_branch_instruction<float,uint32_t>> bdd_mma_base<BDD_BRANCH_NODE>::export_bdd(const size_t bdd_idx)
     {
         assert(bdd_idx < nr_bdds());
-        std::vector<bdd_branch_instruction<float>> bdds;
+        std::vector<bdd_branch_instruction<float,uint32_t>> bdds;
         std::vector<std::array<size_t,2>> bdd_offsets;
         std::deque<size_t> dq;
         // TODO: replace visited by using bdd_offset_map
@@ -986,7 +986,7 @@ namespace LPMP {
                 }
             };
 
-            bdd_branch_instruction<float> bdd;
+            bdd_branch_instruction<float,uint32_t> bdd;
             bdd.low_cost = instr.low_cost;
             bdd.high_cost = instr.high_cost;
             bdd.offset_low = instr.offset_low;

@@ -18,7 +18,7 @@ End)";
 
 int main(int argc, char** argv)
 {
-    using bdd_base_type = bdd_sequential_base<bdd_branch_instruction<float>>;
+    using bdd_base_type = bdd_sequential_base<bdd_branch_instruction<float,uint16_t>>;
     const ILP_input ilp = ILP_parser::parse_string(two_simplex_problem);
     bdd_preprocessor pre(ilp);
     bdd_base_type solver(pre.get_bdd_collection());
@@ -28,15 +28,19 @@ int main(int argc, char** argv)
     test(lb == 1 + 0); 
 
     const auto mm = solver.min_marginals();
-    test(mm.size() == 2);
-    test(mm.size(0) == 3);
-    test(mm.size(1) == 3);
+    test(mm.size() == 6);
+    test(mm.size(0) == 1);
+    test(mm.size(1) == 1);
+    test(mm.size(2) == 1);
+    test(mm.size(3) == 1);
+    test(mm.size(4) == 1);
+    test(mm.size(5) == 1);
 
     test(mm(0,0) == std::array<float,2>{1.0,2.0});
-    test(mm(0,1) == std::array<float,2>{1.0,1.0});
-    test(mm(0,2) == std::array<float,2>{1.0,1.0});
+    test(mm(1,0) == std::array<float,2>{1.0,1.0});
+    test(mm(2,0) == std::array<float,2>{1.0,1.0});
 
-    test(mm(1,0) == std::array<float,2>{1.0,0.0});
-    test(mm(1,1) == std::array<float,2>{0.0,1.0});
-    test(mm(1,2) == std::array<float,2>{3.0,0.0});
+    test(mm(3,0) == std::array<float,2>{1.0,0.0});
+    test(mm(4,0) == std::array<float,2>{0.0,1.0});
+    test(mm(5,0) == std::array<float,2>{3.0,0.0});
 }
