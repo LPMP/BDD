@@ -17,7 +17,7 @@ PYBIND11_MODULE(bdd_mp_py, m) {
         .def(py::init([](const LPMP::ILP_input& ilp) {
                     LPMP::bdd_preprocessor bdd_pre(ilp);
                     auto* base = new bdd_base_type(bdd_pre.get_bdd_collection()); 
-                    base->set_costs(ilp.objective().begin(), ilp.objective().end());
+                    base->update_costs(ilp.objective().begin(), ilp.objective().end());
                     return base;
                     }))
     .def("min_marginals", [](bdd_base_type& base) { return base.min_marginals_stacked(); })

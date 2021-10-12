@@ -462,7 +462,12 @@ namespace LPMP {
         {
             std::cout << "[incremental primal rounding] start rounding\n";
             const auto sol = std::visit([&](auto&& s) {
-                    if constexpr(std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_vec<float>>)
+                    if constexpr(
+                            std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_vec<float>>
+                            || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_vec<double>>
+                            || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma<float>>
+                            || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma<double>>
+                            )
                     return incremental_mm_agreement_rounding_iter(s, options.incremental_initial_perturbation);
                     else
                     {

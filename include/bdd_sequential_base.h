@@ -38,12 +38,13 @@ namespace LPMP {
             void forward_run();
             void backward_run();
             void backward_run(const size_t bdd_nr);
-            two_dim_variable_array<std::array<value_type,2>> min_marginals();
+            //two_dim_variable_array<std::array<value_type,2>> min_marginals();
+            two_dim_variable_array<std::array<double,2>> min_marginals();
             using min_marginal_type = Eigen::Matrix<typename BDD_BRANCH_NODE::value_type, Eigen::Dynamic, 2>;
             std::tuple<min_marginal_type, std::vector<char>> min_marginals_stacked();
 
             template<typename COST_ITERATOR>
-                void set_costs(COST_ITERATOR begin, COST_ITERATOR end);
+                void update_costs(COST_ITERATOR begin, COST_ITERATOR end);
             void update_costs(const two_dim_variable_array<std::array<value_type,2>>& delta);
             void update_costs(const min_marginal_type& delta);
 
@@ -454,14 +455,15 @@ namespace LPMP {
         }
 
     template<typename BDD_BRANCH_NODE>
-        two_dim_variable_array<std::array<typename BDD_BRANCH_NODE::value_type,2>> bdd_sequential_base<BDD_BRANCH_NODE>::min_marginals()
+        //two_dim_variable_array<std::array<typename BDD_BRANCH_NODE::value_type,2>> bdd_sequential_base<BDD_BRANCH_NODE>::min_marginals()
+        two_dim_variable_array<std::array<double,2>> bdd_sequential_base<BDD_BRANCH_NODE>::min_marginals()
         {
             backward_run();
             std::vector<size_t> nr_bdd_variables;
             nr_bdd_variables.reserve(nr_bdds());
             for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
                 nr_bdd_variables.push_back(nr_variables(bdd_nr));
-            two_dim_variable_array<std::array<value_type,2>> min_margs(nr_bdd_variables);
+            two_dim_variable_array<std::array<double,2>> min_margs(nr_bdd_variables);
 
 //#pragma omp parallel for schedule(guided,128)
             for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
@@ -482,7 +484,8 @@ namespace LPMP {
                         mm[1] = std::min(mm[1], cur_mm[1]); 
                     }
 
-                    min_margs(bdd_nr, idx) = mm;
+                    min_margs(bdd_nr, idx)[0] = mm[0];
+                    min_margs(bdd_nr, idx)[1] = mm[1];
 
                     for(size_t i=first; i<last; ++i)
                         bdd_branch_nodes_[i].prepare_forward_step(); 
@@ -617,8 +620,11 @@ namespace LPMP {
 
     template<typename BDD_BRANCH_NODE>
         template<typename COST_ITERATOR> 
-        void bdd_sequential_base<BDD_BRANCH_NODE>::set_costs(COST_ITERATOR begin, COST_ITERATOR end)
+        void bdd_sequential_base<BDD_BRANCH_NODE>::update_costs(COST_ITERATOR begin, COST_ITERATOR end)
         {
+            message_passing_state_ = message_passing_state::none;
+            lower_bound_state_ = lower_bound_state::invalid;
+
 //#pragma omp parallel for schedule(guided,128)
             for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
             {
@@ -637,22 +643,17 @@ namespace LPMP {
                     {
                         if(bdd_branch_nodes_[i].offset_low == BDD_BRANCH_NODE::terminal_0_offset)
                             assert(bdd_branch_nodes_[i].low_cost == std::numeric_limits<decltype(bdd_branch_nodes_[i].low_cost)>::infinity());
-                        else
-                            assert(bdd_branch_nodes_[i].low_cost == 0.0);
 
                         if(bdd_branch_nodes_[i].offset_high == BDD_BRANCH_NODE::terminal_0_offset)
                             assert(bdd_branch_nodes_[i].high_cost == std::numeric_limits<decltype(bdd_branch_nodes_[i].high_cost)>::infinity());
-                        else
-                            assert(bdd_branch_nodes_[i].high_cost == 0.0);
 
                         if(bdd_branch_nodes_[i].offset_high != BDD_BRANCH_NODE::terminal_0_offset)
-                            bdd_branch_nodes_[i].high_cost = cost;
+                            bdd_branch_nodes_[i].high_cost += cost;
                     }
                 }
             }
 
             // go over all cost entries and add then to constant if they are not in any BDD.
-            constant_ = 0.0;
             for(size_t i=0; i<std::distance(begin, end); ++i)
                 if(i >= nr_variables() || nr_bdds(i) == 0)
                     constant_ += std::min(double(0.0), double(*(begin+i)));

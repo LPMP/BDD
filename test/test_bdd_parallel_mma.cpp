@@ -22,7 +22,7 @@ std::vector<std::array<float,2>> test_mm(const ILP_input& ilp, const std::string
 
     bdd_preprocessor pre(ilp);
     bdd_base_type solver(pre.get_bdd_collection());
-    solver.set_costs(ilp.objective().begin(), ilp.objective().end());
+    solver.update_costs(ilp.objective().begin(), ilp.objective().end());
 
     if(direction == "forward")
         solver.backward_run();

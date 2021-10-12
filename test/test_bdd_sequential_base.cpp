@@ -22,7 +22,7 @@ int main(int argc, char** argv)
     const ILP_input ilp = ILP_parser::parse_string(two_simplex_problem);
     bdd_preprocessor pre(ilp);
     bdd_base_type solver(pre.get_bdd_collection());
-    solver.set_costs(ilp.objective().begin(), ilp.objective().end());
+    solver.update_costs(ilp.objective().begin(), ilp.objective().end());
     solver.backward_run();
     const double lb = solver.lower_bound();
     test(lb == 1 + 0); 
@@ -36,11 +36,11 @@ int main(int argc, char** argv)
     test(mm.size(4) == 1);
     test(mm.size(5) == 1);
 
-    test(mm(0,0) == std::array<float,2>{1.0,2.0});
-    test(mm(1,0) == std::array<float,2>{1.0,1.0});
-    test(mm(2,0) == std::array<float,2>{1.0,1.0});
+    test(mm(0,0) == std::array<double,2>{1.0,2.0});
+    test(mm(1,0) == std::array<double,2>{1.0,1.0});
+    test(mm(2,0) == std::array<double,2>{1.0,1.0});
 
-    test(mm(3,0) == std::array<float,2>{1.0,0.0});
-    test(mm(4,0) == std::array<float,2>{0.0,1.0});
-    test(mm(5,0) == std::array<float,2>{3.0,0.0});
+    test(mm(3,0) == std::array<double,2>{1.0,0.0});
+    test(mm(4,0) == std::array<double,2>{0.0,1.0});
+    test(mm(5,0) == std::array<double,2>{3.0,0.0});
 }
