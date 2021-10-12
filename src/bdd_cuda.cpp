@@ -58,7 +58,9 @@ namespace LPMP {
     template<typename COST_ITERATOR>
     void bdd_cuda::set_costs(COST_ITERATOR costs_begin, COST_ITERATOR costs_end)
     {
+#ifdef WITH_CUDA
         pimpl->pmma.set_costs(costs_begin, costs_end);
+#endif
     }
 
     // Need to have explicit instantiation in the base.
