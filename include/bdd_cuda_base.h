@@ -41,6 +41,9 @@ namespace LPMP {
             thrust::device_vector<int> bdd_index_;
             thrust::device_vector<float> hi_cost_, lo_cost_;
 
+            thrust::device_vector<int> layer_offsets_; // Similar to CSR representation where row is layer index, and column is bdd node.
+            std::vector<int> cum_nr_layers_per_hop_dist_; // Similar to cum_nr_bdd_nodes_per_hop_dist_ but for BDD layer instead of BDD node.
+
             // Following arrays are allocated for each bdd node:
             thrust::device_vector<int> lo_bdd_node_index_; // = 0
             thrust::device_vector<int> hi_bdd_node_index_; // = 1
@@ -69,7 +72,7 @@ namespace LPMP {
             void reorder_bdd_nodes(thrust::device_vector<int>& bdd_hop_dist_root, thrust::device_vector<int>& bdd_depth);
             void populate_counts(const BDD::bdd_collection& bdd_col);
             void set_special_nodes_indices(const thrust::device_vector<int>& bdd_hop_dist);
-            void compress_bdd_nodes_to_layer();
+            void compress_bdd_nodes_to_layer(const thrust::device_vector<int>& bdd_hop_dist);
             void print_num_bdd_nodes_per_hop();
 
     };

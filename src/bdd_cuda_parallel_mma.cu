@@ -26,16 +26,16 @@ namespace LPMP {
     {
         const int start_index = blockIdx.x * blockDim.x + threadIdx.x;
         const int num_threads = blockDim.x * gridDim.x;
-        for (int bdd_idx = start_index + start_offset; bdd_idx < cur_num_bdd_nodes + start_offset; bdd_idx += num_threads) 
+        for (int bdd_node_idx = start_index + start_offset; bdd_node_idx < cur_num_bdd_nodes + start_offset; bdd_node_idx += num_threads) 
         {
-            const int next_lo_node = lo_bdd_node_index[bdd_idx];
+            const int next_lo_node = lo_bdd_node_index[bdd_node_idx];
             if (next_lo_node < 0) // will matter when one row contains multiple BDDs, otherwise the terminal nodes are at the end anyway.
                 continue; // nothing needs to be done for terminal node.
 
-            const int next_hi_node = hi_bdd_node_index[bdd_idx];
+            const int next_hi_node = hi_bdd_node_index[bdd_node_idx];
 
-            const float cur_c_from_root = cost_from_root[bdd_idx];
-            const int layer_idx = bdd_node_to_layer_map[bdd_idx];
+            const float cur_c_from_root = cost_from_root[bdd_node_idx];
+            const int layer_idx = bdd_node_to_layer_map[bdd_node_idx];
 
             // TODO: can possibly store the following 'indicator' variable in char or something?
             // or just set lo_cost to bot sink to infinity?
@@ -77,9 +77,10 @@ namespace LPMP {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         thrust::fill(mm_lo_.begin(), mm_lo_.end(), CUDART_INF_F);
         thrust::fill(mm_hi_.begin(), mm_hi_.end(), CUDART_INF_F);
+        // forward_iteration_layer_based(0.5);
+        forward_iteration(0.5);
         backward_iteration(0.5);
         // backward_run(false);
-        forward_iteration(0.5);
     }
 
     __global__ void forward_step_with_solve(const int cur_num_bdd_nodes, const int start_offset, const float omega,
@@ -100,13 +101,13 @@ namespace LPMP {
     {
         const int start_index = blockIdx.x * blockDim.x + threadIdx.x;
         const int num_threads = blockDim.x * gridDim.x;
-        for (int bdd_idx = start_index + start_offset; bdd_idx < cur_num_bdd_nodes + start_offset; bdd_idx += num_threads) 
+        for (int bdd_node_idx = start_index + start_offset; bdd_node_idx < cur_num_bdd_nodes + start_offset; bdd_node_idx += num_threads) 
         {
-            const int next_lo_node = lo_bdd_node_index[bdd_idx];
+            const int next_lo_node = lo_bdd_node_index[bdd_node_idx];
             if (next_lo_node < 0) // will matter when one row contains multiple BDDs, otherwise the terminal nodes are at the end anyway.
                 continue; // nothing needs to be done for terminal node.
             
-            const int layer_idx = bdd_node_to_layer_map[bdd_idx];
+            const int layer_idx = bdd_node_to_layer_map[bdd_node_idx];
             const float cur_mm_diff_hi_lo = mm_hi[layer_idx] - mm_lo[layer_idx];
             const int cur_primal_idx = primal_variable_index[layer_idx];
 
@@ -116,8 +117,8 @@ namespace LPMP {
             lo_cost[layer_idx] = cur_lo_cost;
             hi_cost[layer_idx] = cur_hi_cost;
 
-            const int next_hi_node = hi_bdd_node_index[bdd_idx];
-            const float cur_c_from_root = cost_from_root[bdd_idx];
+            const int next_hi_node = hi_bdd_node_index[bdd_node_idx];
+            const float cur_c_from_root = cost_from_root[bdd_node_idx];
 
             // Update costs from root:
             atomicMin(&cost_from_root[next_lo_node], cur_c_from_root + cur_lo_cost);
@@ -125,7 +126,7 @@ namespace LPMP {
 
             // Select the leader thread for each BDD layer which will write out to delta_out
             // Leader thread would be the thread operating on first BDD node of each layer.
-            bool is_leader = start_index == 0 || layer_idx != bdd_node_to_layer_map[bdd_idx - 1];
+            bool is_leader = start_index == 0 || layer_idx != bdd_node_to_layer_map[bdd_node_idx - 1];
             if  (is_leader)
             {
                 if (cur_mm_diff_hi_lo > 0)
@@ -182,7 +183,108 @@ namespace LPMP {
         thrust::swap(delta_hi_in_, delta_hi_out_);
         forward_state_valid_ = true;
         backward_state_valid_ = false;
+        cudaDeviceSynchronize();  // TODO: Not necessary, only to compute exact timing of this function.
     }
+
+    __global__ void forward_step_with_solve_layer(const int cur_num_bdd_nodes, const int start_offset, const float omega,
+                                                const int* const __restrict__ lo_bdd_node_index, 
+                                                const int* const __restrict__ hi_bdd_node_index, 
+                                                const int* const __restrict__ bdd_node_to_layer_map, 
+                                                const int* const __restrict__ primal_variable_index, 
+                                                const int* const __restrict__ num_bdds_per_var, 
+                                                const float* const __restrict__ delta_lo_in,
+                                                const float* const __restrict__ delta_hi_in,
+                                                const float* const __restrict__ mm_lo,
+                                                const float* const __restrict__ mm_hi,
+                                                const int* const __restrict__ layer_offsets,
+                                                float* __restrict__ lo_cost,
+                                                float* __restrict__ hi_cost,
+                                                float* __restrict__ delta_lo_out,
+                                                float* __restrict__ delta_hi_out,
+                                                float* __restrict__ cost_from_root)
+    {
+        const int start_index = blockIdx.x * blockDim.x + threadIdx.x;
+        const int num_threads = blockDim.x * gridDim.x;
+        for (int layer_idx = start_index + start_offset; layer_idx < cur_num_bdd_nodes + start_offset; layer_idx += num_threads) 
+        {
+            const int cur_primal_idx = primal_variable_index[layer_idx];
+            if (cur_primal_idx < 0)
+                continue; // terminal node.
+
+            const float cur_mm_diff_hi_lo = mm_hi[layer_idx] - mm_lo[layer_idx];
+            const float cur_hi_cost = hi_cost[layer_idx] + omega * min(-cur_mm_diff_hi_lo, 0.0f) + delta_hi_in[cur_primal_idx] / num_bdds_per_var[cur_primal_idx];
+            const float cur_lo_cost = lo_cost[layer_idx] + omega * min(cur_mm_diff_hi_lo, 0.0f) + delta_lo_in[cur_primal_idx] / num_bdds_per_var[cur_primal_idx];
+            lo_cost[layer_idx] = cur_lo_cost;
+            hi_cost[layer_idx] = cur_hi_cost;
+
+            const int start_bdd_node = layer_offsets[layer_idx];
+            const int end_bdd_node = layer_offsets[layer_idx + 1];
+            for (int bdd_node_idx = start_bdd_node; bdd_node_idx < end_bdd_node; bdd_node_idx++)
+            {
+                const int next_lo_node = lo_bdd_node_index[bdd_node_idx];
+                const int next_hi_node = hi_bdd_node_index[bdd_node_idx];
+                const float cur_c_from_root = cost_from_root[bdd_node_idx];
+
+                // Update costs from root:
+                cost_from_root[next_lo_node] = min(cost_from_root[next_lo_node], cur_c_from_root + cur_lo_cost);
+                cost_from_root[next_hi_node] = min(cost_from_root[next_hi_node], cur_c_from_root + cur_hi_cost);
+            }
+            if (cur_mm_diff_hi_lo > 0)
+                atomicAdd(&delta_hi_out[cur_primal_idx], omega * cur_mm_diff_hi_lo);
+            else
+                atomicAdd(&delta_lo_out[cur_primal_idx], -omega * cur_mm_diff_hi_lo);
+        }
+    }
+
+    void bdd_cuda_parallel_mma::forward_iteration_layer_based(const float omega)
+    {
+        MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
+        assert(backward_state_valid_); //For the first iteration need to have costs from terminal. 
+        
+        // Set costs from root to INF and of root nodes to itself to 0:
+        thrust::fill(cost_from_root_.begin(), cost_from_root_.end(), CUDART_INF_F);
+        thrust::scatter(thrust::make_constant_iterator<float>(0.0), thrust::make_constant_iterator<float>(0.0) + root_indices_.size(), root_indices_.begin(), cost_from_root_.begin());
+
+        // Set delta_out to zero:
+        thrust::fill(delta_lo_out_.begin(), delta_lo_out_.end(), 0.0f);
+        thrust::fill(delta_hi_out_.begin(), delta_hi_out_.end(), 0.0f);
+
+        const int num_steps = cum_nr_bdd_nodes_per_hop_dist_.size() - 1;
+        int num_layers_processed = 0;
+        for (int s = 0; s < num_steps; s++)
+        {
+            // 1. Compute min-marginals using costs from root, costs from terminal and hi_costs, lo_costs for current hop
+            min_marginals_from_directional_costs(s);
+
+            int threadCount = 256;
+            int cur_num_layers = cum_nr_layers_per_hop_dist_[s] - num_layers_processed;
+            int blockCount = ceil(cur_num_layers / (float) threadCount);
+
+            // 2. Subtract from hi_costs, update costs from root and add to delta_hi_out, delta_lo_out.
+            forward_step_with_solve_layer<<<blockCount, threadCount>>>(cur_num_layers, num_layers_processed, omega,
+                                                                    thrust::raw_pointer_cast(lo_bdd_node_index_.data()),
+                                                                    thrust::raw_pointer_cast(hi_bdd_node_index_.data()),
+                                                                    thrust::raw_pointer_cast(bdd_node_to_layer_map_.data()),
+                                                                    thrust::raw_pointer_cast(primal_variable_index_.data()),
+                                                                    thrust::raw_pointer_cast(num_bdds_per_var_.data()),
+                                                                    thrust::raw_pointer_cast(delta_lo_in_.data()),
+                                                                    thrust::raw_pointer_cast(delta_hi_in_.data()),
+                                                                    thrust::raw_pointer_cast(mm_lo_.data()),
+                                                                    thrust::raw_pointer_cast(mm_hi_.data()),
+                                                                    thrust::raw_pointer_cast(layer_offsets_.data()),
+                                                                    thrust::raw_pointer_cast(lo_cost_.data()),
+                                                                    thrust::raw_pointer_cast(hi_cost_.data()),
+                                                                    thrust::raw_pointer_cast(delta_lo_out_.data()),
+                                                                    thrust::raw_pointer_cast(delta_hi_out_.data()),
+                                                                    thrust::raw_pointer_cast(cost_from_root_.data()));
+            num_layers_processed += cur_num_layers;
+        }
+        thrust::swap(delta_lo_in_, delta_lo_out_);
+        thrust::swap(delta_hi_in_, delta_hi_out_);
+        forward_state_valid_ = true;
+        backward_state_valid_ = false;
+    }
+
 
     __global__ void backward_step_with_solve(const int cur_num_bdd_nodes, const int start_offset, const float omega,
                                             const int* const __restrict__ lo_bdd_node_index, 
@@ -202,13 +304,13 @@ namespace LPMP {
     {
         const int start_index = blockIdx.x * blockDim.x + threadIdx.x;
         const int num_threads = blockDim.x * gridDim.x;
-        for (int bdd_idx = start_index + start_offset; bdd_idx < cur_num_bdd_nodes + start_offset; bdd_idx += num_threads) 
+        for (int bdd_node_idx = start_index + start_offset; bdd_node_idx < cur_num_bdd_nodes + start_offset; bdd_node_idx += num_threads) 
         {
-            const int next_lo_node = lo_bdd_node_index[bdd_idx];
+            const int next_lo_node = lo_bdd_node_index[bdd_node_idx];
             if (next_lo_node < 0)
                 continue; // nothing needs to be done for terminal node.
             
-            const int layer_idx = bdd_node_to_layer_map[bdd_idx];
+            const int layer_idx = bdd_node_to_layer_map[bdd_node_idx];
             const float cur_mm_diff_hi_lo = mm_hi[layer_idx] - mm_lo[layer_idx];
             const int cur_primal_idx = primal_variable_index[layer_idx];
 
@@ -218,7 +320,7 @@ namespace LPMP {
             lo_cost[layer_idx] = cur_lo_cost;
             hi_cost[layer_idx] = cur_hi_cost;
 
-            const int next_hi_node = hi_bdd_node_index[bdd_idx];
+            const int next_hi_node = hi_bdd_node_index[bdd_node_idx];
 
             // TODO: Skip following check by setting all arcs going to bot sink to infty.
             const bool is_lo_bot_sink = lo_bdd_node_index[next_lo_node] == BOT_SINK_INDICATOR_CUDA;
@@ -226,15 +328,15 @@ namespace LPMP {
 
             // Update costs from terminal:
             if(!is_lo_bot_sink && !is_hi_bot_sink)
-                cost_from_terminal[bdd_idx] = min(cur_hi_cost + cost_from_terminal[next_hi_node], cur_lo_cost + cost_from_terminal[next_lo_node]);
+                cost_from_terminal[bdd_node_idx] = min(cur_hi_cost + cost_from_terminal[next_hi_node], cur_lo_cost + cost_from_terminal[next_lo_node]);
             else if(!is_hi_bot_sink)
-                cost_from_terminal[bdd_idx] = cur_hi_cost + cost_from_terminal[next_hi_node];
+                cost_from_terminal[bdd_node_idx] = cur_hi_cost + cost_from_terminal[next_hi_node];
             else if(!is_lo_bot_sink)
-                cost_from_terminal[bdd_idx] = cur_lo_cost + cost_from_terminal[next_lo_node];
+                cost_from_terminal[bdd_node_idx] = cur_lo_cost + cost_from_terminal[next_lo_node];
 
             // Select the leader thread for each BDD layer which will write out to delta_out
             // Leader thread would be the thread operating on first BDD node of each layer.
-            bool is_leader = start_index == 0 || layer_idx != bdd_node_to_layer_map[bdd_idx - 1]; //TODO: Try warp shuffle.
+            bool is_leader = start_index == 0 || layer_idx != bdd_node_to_layer_map[bdd_node_idx - 1]; //TODO: Try warp shuffle.
             if  (is_leader)
             {
                 if (cur_mm_diff_hi_lo > 0)
@@ -292,5 +394,6 @@ namespace LPMP {
         thrust::swap(delta_hi_in_, delta_hi_out_);
         forward_state_valid_ = false;
         backward_state_valid_ = true;
+        cudaDeviceSynchronize();  // TODO: Not necessary, only to compute exact timing of this function.
     }
 }
