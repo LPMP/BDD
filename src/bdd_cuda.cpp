@@ -1,6 +1,6 @@
 #include "bdd_cuda.h"
 #ifdef WITH_CUDA
-#include "bdd_cuda_parallel_mma_sorting.h"
+#include "bdd_cuda_parallel_mma.h"
 #endif
 #include "time_measure_util.h"
 
@@ -11,7 +11,7 @@ namespace LPMP {
             impl(BDD::bdd_collection& bdd_col);
 
 #ifdef WITH_CUDA
-            bdd_cuda_parallel_mma_sorting pmma;
+            bdd_cuda_parallel_mma pmma;
 #endif
     };
 

@@ -11,6 +11,16 @@
 #include "time_measure_util.h"
 #include <thrust/iterator/constant_iterator.h>
 
+#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
+{
+   if (code != cudaSuccess) 
+   {
+      fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+      if (abort) exit(code);
+   }
+}
+
 inline float __int_as_float_host(int a)
 {
     union {int a; float b;} u;

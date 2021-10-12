@@ -36,6 +36,7 @@ namespace LPMP {
         reorder_bdd_nodes(bdd_hop_dist_root, bdd_depth);
         set_special_nodes_indices(bdd_hop_dist_root);
         compress_bdd_nodes_to_layer();
+        print_num_bdd_nodes_per_hop();
     }
 
     void bdd_cuda_base::initialize(const BDD::bdd_collection& bdd_col)
@@ -62,6 +63,7 @@ namespace LPMP {
         num_vars_per_bdd_ = thrust::device_vector<int>(num_vars_per_bdd.begin(), num_vars_per_bdd.end());
         // Initialize data per BDD node: 
         hi_cost_ = thrust::device_vector<float>(nr_bdd_nodes_, CUDART_INF_F);
+        lo_cost_ = thrust::device_vector<float>(nr_bdd_nodes_, 0);
         cost_from_root_ = thrust::device_vector<float>(nr_bdd_nodes_, CUDART_INF_F);
         cost_from_terminal_ = thrust::device_vector<float>(nr_bdd_nodes_, CUDART_INF_F);
         hi_path_cost_ = thrust::device_vector<float>(nr_bdd_nodes_, CUDART_INF_F);
@@ -150,14 +152,17 @@ namespace LPMP {
         thrust::for_each(hi_bdd_node_index_.begin(), hi_bdd_node_index_.end(), func);
 
         // Count number of BDD nodes per hop distance. Need for launching CUDA kernel with appropiate offset and threads:
-        cum_nr_bdd_nodes_per_hop_dist_ = thrust::device_vector<int>(nr_bdd_nodes_);
+        thrust::device_vector<int> dev_cum_nr_bdd_nodes_per_hop_dist(nr_bdd_nodes_);
         auto last_red = thrust::reduce_by_key(bdd_hop_dist_dev.begin(), bdd_hop_dist_dev.end(), thrust::make_constant_iterator<int>(1), 
                                                 thrust::make_discard_iterator(), 
-                                                cum_nr_bdd_nodes_per_hop_dist_.begin());
-        cum_nr_bdd_nodes_per_hop_dist_.resize(thrust::distance(cum_nr_bdd_nodes_per_hop_dist_.begin(), last_red.second));
+                                                dev_cum_nr_bdd_nodes_per_hop_dist.begin());
+        dev_cum_nr_bdd_nodes_per_hop_dist.resize(thrust::distance(dev_cum_nr_bdd_nodes_per_hop_dist.begin(), last_red.second));
 
         // Convert to cumulative:
-        thrust::inclusive_scan(cum_nr_bdd_nodes_per_hop_dist_.begin(), cum_nr_bdd_nodes_per_hop_dist_.end(), cum_nr_bdd_nodes_per_hop_dist_.begin());
+        thrust::inclusive_scan(dev_cum_nr_bdd_nodes_per_hop_dist.begin(), dev_cum_nr_bdd_nodes_per_hop_dist.end(), dev_cum_nr_bdd_nodes_per_hop_dist.begin());
+
+        cum_nr_bdd_nodes_per_hop_dist_ = std::vector<int>(dev_cum_nr_bdd_nodes_per_hop_dist.size());
+        thrust::copy(dev_cum_nr_bdd_nodes_per_hop_dist.begin(), dev_cum_nr_bdd_nodes_per_hop_dist.end(), cum_nr_bdd_nodes_per_hop_dist_.begin());
     }
 
     void bdd_cuda_base::set_special_nodes_indices(const thrust::device_vector<int>& bdd_hop_dist_dev)
@@ -214,6 +219,7 @@ namespace LPMP {
         assert(out_size == thrust::distance(first_cost_val_compressed, new_end_unique.second));
 
         hi_cost_compressed.resize(out_size);
+        lo_cost_compressed.resize(out_size);
         primal_index_compressed.resize(out_size);
         bdd_index_compressed.resize(out_size);
         bdd_layer_width_.resize(out_size);
@@ -240,6 +246,16 @@ namespace LPMP {
         thrust::fill(cost_from_terminal_.begin(), cost_from_terminal_.end(), CUDART_INF_F);
         thrust::fill(hi_path_cost_.begin(), hi_path_cost_.end(), CUDART_INF_F);
         thrust::fill(lo_path_cost_.begin(), lo_path_cost_.end(), CUDART_INF_F);
+    }
+
+    void bdd_cuda_base::print_num_bdd_nodes_per_hop()
+    {
+        int prev = 0;
+        for(int i = 0; i < cum_nr_bdd_nodes_per_hop_dist_.size(); i++)
+        {
+            std::cout<<"Hop: "<<i<<", # BDD nodes: "<<cum_nr_bdd_nodes_per_hop_dist_[i] - prev<<std::endl;
+            prev = cum_nr_bdd_nodes_per_hop_dist_[i];
+        }
     }
 
     struct set_var_cost_func {
@@ -273,8 +289,12 @@ namespace LPMP {
         __host__ __device__ void operator()(const thrust::tuple<int, float&> t) const
         {
             const int cur_var_index = thrust::get<0>(t);
+            if (cur_var_index < 0)
+                return; // terminal node.
             float& hi_cost = thrust::get<1>(t);
-            hi_cost = primal_costs[cur_var_index] / var_counts[cur_var_index];
+            const int count = var_counts[cur_var_index];
+            assert(count > 0);
+            hi_cost = primal_costs[cur_var_index] / count;
         }
     };
 
@@ -318,7 +338,6 @@ namespace LPMP {
                 continue; // nothing needs to be done for terminal node.
 
             const int next_hi_node = hi_bdd_node_index[bdd_idx];
-            assert(next_hi_node >= 0);
 
             const float cur_c_from_root = cost_from_root[bdd_idx];
             const int layer_idx = bdd_node_to_layer_map[bdd_idx];
@@ -348,7 +367,6 @@ namespace LPMP {
             int threadCount = 256;
             int cur_num_bdd_nodes = cum_nr_bdd_nodes_per_hop_dist_[s] - num_nodes_processed;
             int blockCount = ceil(cur_num_bdd_nodes / (float) threadCount);
-            std::cout<<"forward_run: "<<s<<", blockCount: "<<blockCount<<", cur_num_bdd_nodes: "<<cur_num_bdd_nodes<<"\n";
             forward_step<<<blockCount, threadCount>>>(cur_num_bdd_nodes, num_nodes_processed,
                                                     thrust::raw_pointer_cast(lo_bdd_node_index_.data()),
                                                     thrust::raw_pointer_cast(hi_bdd_node_index_.data()),
@@ -458,13 +476,11 @@ namespace LPMP {
     }
 
 
-    void bdd_cuda_base::backward_run(bool compute_path_costs = True)
+    void bdd_cuda_base::backward_run(bool compute_path_costs)
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         if (backward_state_valid_)
             return;
-
-        const int num_steps = cum_nr_bdd_nodes_per_hop_dist_.size() - 2;
 
         // Set costs of top sinks to 0:
         thrust::scatter(thrust::make_constant_iterator<float>(0.0), 
@@ -472,7 +488,7 @@ namespace LPMP {
                         top_sink_indices_.begin(), 
                         cost_from_terminal_.begin());
 
-        for (int s = num_steps; s >= 0; s--)
+        for (int s = cum_nr_bdd_nodes_per_hop_dist_.size() - 2; s >= 0; s--)
         {
             int threadCount = 256;
             int start_offset = 0;
@@ -481,7 +497,6 @@ namespace LPMP {
 
             int cur_num_bdd_nodes = cum_nr_bdd_nodes_per_hop_dist_[s] - start_offset;
             int blockCount = ceil(cur_num_bdd_nodes / (float) threadCount);
-            std::cout<<"backward_run: "<<s<<", blockCount: "<<blockCount<<"\n";
             if (compute_path_costs)
                 backward_step_with_path_costs<<<blockCount, threadCount>>>(cur_num_bdd_nodes, start_offset,
                                                         thrust::raw_pointer_cast(lo_bdd_node_index_.data()),
@@ -515,8 +530,7 @@ namespace LPMP {
         }
     };
 
-    // Compute min-marginals by reduction.
-    // TODO: Warp aggregation or not (?) https://on-demand.gputechconf.com/gtc/2017/presentation/s7622-Kyrylo-perelygin-robust-and-scalable-cuda.pdf
+    // Computes min-marginals by reduction. Assumes that lo_path_cost_ and hi_path_cost_ are precomputed!
     std::tuple<thrust::device_vector<float>, thrust::device_vector<float>> bdd_cuda_base::min_marginals_cuda()
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME

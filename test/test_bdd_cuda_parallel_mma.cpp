@@ -1,4 +1,4 @@
-#include "bdd_cuda_parallel_mma_sorting.h"
+#include "bdd_cuda_parallel_mma.h"
 #include "ILP_parser.h"
 #include "bdd_collection/bdd_collection.h"
 #include "bdd_preprocessor.h"
@@ -199,17 +199,13 @@ void test_problem(const char* instance, const double expected_lb)
     ILP_input ilp = ILP_parser::parse_string(instance);
     bdd_preprocessor bdd_pre(ilp);
     bdd_collection bdd_col = bdd_pre.get_bdd_collection();
-    bdd_cuda_parallel_mma_sorting solver(bdd_col);
+    bdd_cuda_parallel_mma solver(bdd_col);
 
     for(size_t i=0; i<solver.nr_variables(); ++i)
         solver.set_cost(ilp.objective()[i], i);
 
-    for(size_t iter=0; iter<100; ++iter)
-    {
-        solver.iteration();
-        std::cout<<"\t Iteration: "<<iter<<", LB:"<<solver.lower_bound()<<"\n";
-    }
-
+    solver.solve(100, 1e-6, 100);
+    
     test(std::abs(solver.lower_bound() - expected_lb) <= 1e-6);
 }
 
