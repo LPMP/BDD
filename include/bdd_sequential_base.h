@@ -626,6 +626,19 @@ namespace LPMP {
             message_passing_state_ = message_passing_state::none;
             lower_bound_state_ = lower_bound_state::invalid;
 
+            auto get_lo_cost = [&](const size_t var) {
+                if(var < std::distance(cost_lo_begin, cost_lo_end))
+                    return *(cost_lo_begin+var)/double(nr_bdds(var));
+                else
+                    return 0.0;
+            };
+            auto get_hi_cost = [&](const size_t var) {
+                if(var < std::distance(cost_hi_begin, cost_hi_end))
+                    return *(cost_hi_begin+var)/double(nr_bdds(var));
+                else
+                    return 0.0;
+            };
+
 //#pragma omp parallel for schedule(guided,128)
             for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
             {
@@ -633,19 +646,9 @@ namespace LPMP {
                 {
                     const auto [first_node, last_node] = bdd_index_range(bdd_nr, bdd_idx);
                     const size_t var = variable(bdd_nr, bdd_idx);
-                    const double lo_cost = [&]() {
-                        if(var < std::distance(cost_lo_begin, cost_lo_end))
-                            return *(cost_lo_begin+var)/double(nr_bdds(var));
-                        else
-                            return 0.0;
-                    }();
+                    const double lo_cost = get_lo_cost(var);
                     assert(std::isfinite(lo_cost));
-                    const double hi_cost = [&]() {
-                        if(var < std::distance(cost_hi_begin, cost_hi_end))
-                            return *(cost_hi_begin+var)/double(nr_bdds(var));
-                        else
-                            return 0.0;
-                    }();
+                    const double hi_cost = get_hi_cost(var);
                     assert(std::isfinite(hi_cost));
                     for(size_t i=first_node; i<last_node; ++i)
                     {
@@ -668,8 +671,9 @@ namespace LPMP {
             {
                 if(i >= nr_variables() || nr_bdds(i) == 0)
                 {
-                    const double lo_cost
-                    constant_ += std::min(double(0.0), double(*(begin+i)));
+                    const double lo_cost = get_lo_cost(i);
+                    const double hi_cost = get_hi_cost(i);
+                    constant_ += std::min(lo_cost, hi_cost);
                 }
             }
         }

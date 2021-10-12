@@ -22,7 +22,7 @@ int main(int argc, char** argv)
     const ILP_input ilp = ILP_parser::parse_string(two_simplex_problem);
     bdd_preprocessor pre(ilp);
     bdd_base_type solver(pre.get_bdd_collection());
-    solver.update_costs(ilp.objective().begin(), ilp.objective().end());
+    solver.update_costs(ilp.objective().begin(), ilp.objective().begin(), ilp.objective().begin(), ilp.objective().end());
     solver.backward_run();
     const double lb = solver.lower_bound();
     test(lb == 1 + 0); 

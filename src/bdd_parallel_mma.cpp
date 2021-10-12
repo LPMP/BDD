@@ -42,7 +42,7 @@ namespace LPMP {
     template<typename ITERATOR>
     void bdd_parallel_mma<REAL>::update_costs(ITERATOR cost_begin, ITERATOR cost_end)
     {
-        pimpl->base.update_costs(cost_begin, cost_end);
+        pimpl->base.update_costs(cost_begin, cost_begin, cost_begin, cost_end);
     }
 
     template<typename REAL>
