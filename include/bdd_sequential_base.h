@@ -44,12 +44,13 @@ namespace LPMP {
             std::tuple<min_marginal_type, std::vector<char>> min_marginals_stacked();
 
             template<typename COST_ITERATOR>
-                void update_costs(COST_ITERATOR begin, COST_ITERATOR end);
+                void update_costs(COST_ITERATOR cost_lo_begin, COST_ITERATOR cost_lo_end, COST_ITERATOR cost_hi_begin, COST_ITERATOR cost_hi_end);
+            // TODO: remove these! //
             void update_costs(const two_dim_variable_array<std::array<value_type,2>>& delta);
             void update_costs(const min_marginal_type& delta);
-
             vector_type get_costs();
             void update_costs(const vector_type& delta);
+            /////////////////////////
 
             template<typename ITERATOR>
                 void fix_variables(ITERATOR zero_fixations_begin, ITERATOR zero_fixations_end, ITERATOR one_fixations_begin, ITERATOR one_fixations_end);
@@ -620,7 +621,7 @@ namespace LPMP {
 
     template<typename BDD_BRANCH_NODE>
         template<typename COST_ITERATOR> 
-        void bdd_sequential_base<BDD_BRANCH_NODE>::update_costs(COST_ITERATOR begin, COST_ITERATOR end)
+        void bdd_sequential_base<BDD_BRANCH_NODE>::update_costs(COST_ITERATOR cost_lo_begin, COST_ITERATOR cost_lo_end, COST_ITERATOR cost_hi_begin, COST_ITERATOR cost_hi_end)
         {
             message_passing_state_ = message_passing_state::none;
             lower_bound_state_ = lower_bound_state::invalid;
@@ -632,13 +633,20 @@ namespace LPMP {
                 {
                     const auto [first_node, last_node] = bdd_index_range(bdd_nr, bdd_idx);
                     const size_t var = variable(bdd_nr, bdd_idx);
-                    const double cost = [&]() {
-                        if(var < std::distance(begin, end))
-                            return *(begin+var)/double(nr_bdds(var));
+                    const double lo_cost = [&]() {
+                        if(var < std::distance(cost_lo_begin, cost_lo_end))
+                            return *(cost_lo_begin+var)/double(nr_bdds(var));
                         else
                             return 0.0;
                     }();
-                    assert(std::isfinite(cost));
+                    assert(std::isfinite(lo_cost));
+                    const double hi_cost = [&]() {
+                        if(var < std::distance(cost_hi_begin, cost_hi_end))
+                            return *(cost_hi_begin+var)/double(nr_bdds(var));
+                        else
+                            return 0.0;
+                    }();
+                    assert(std::isfinite(hi_cost));
                     for(size_t i=first_node; i<last_node; ++i)
                     {
                         if(bdd_branch_nodes_[i].offset_low == BDD_BRANCH_NODE::terminal_0_offset)
@@ -647,16 +655,23 @@ namespace LPMP {
                         if(bdd_branch_nodes_[i].offset_high == BDD_BRANCH_NODE::terminal_0_offset)
                             assert(bdd_branch_nodes_[i].high_cost == std::numeric_limits<decltype(bdd_branch_nodes_[i].high_cost)>::infinity());
 
+                        if(bdd_branch_nodes_[i].offset_low != BDD_BRANCH_NODE::terminal_0_offset)
+                            bdd_branch_nodes_[i].low_cost += lo_cost;
                         if(bdd_branch_nodes_[i].offset_high != BDD_BRANCH_NODE::terminal_0_offset)
-                            bdd_branch_nodes_[i].high_cost += cost;
+                            bdd_branch_nodes_[i].high_cost += hi_cost;
                     }
                 }
             }
 
             // go over all cost entries and add then to constant if they are not in any BDD.
-            for(size_t i=0; i<std::distance(begin, end); ++i)
+            for(size_t i=0; i<std::max(std::distance(cost_lo_begin, cost_lo_end), std::distance(cost_hi_begin, cost_hi_end)); ++i)
+            {
                 if(i >= nr_variables() || nr_bdds(i) == 0)
+                {
+                    const double lo_cost
                     constant_ += std::min(double(0.0), double(*(begin+i)));
+                }
+            }
         }
 
     template<typename BDD_BRANCH_NODE>
