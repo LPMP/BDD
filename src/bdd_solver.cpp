@@ -120,6 +120,12 @@ namespace LPMP {
         primal_param_group->add_option("--fixing_value", fixing_options_.var_value, "preferred variable value for primal heuristic, default value = marg")
             ->transform(CLI::CheckedTransformer(fixing_var_value_map, CLI::ignore_case));
 
+        auto incremental_rounding_param_group = app.add_option_group("incremental primal rounding parameters", "parameters for rounding a primal solution");
+        incremental_rounding_param_group->add_option("--incremental_initial_perturbation", incremental_initial_perturbation, "value for initial perturbation for obtaining primal solutions by incremental primal rounding")
+            ->check(CLI::PositiveNumber);
+       incremental_rounding_param_group->needs(incremental_primal_arg);
+
+
         auto tighten_arg = app.add_flag("--tighten", tighten, "tighten relaxation flag");
         
         solver_group->add_flag("--statistics", statistics, "statistics of the problem");
@@ -454,13 +460,19 @@ namespace LPMP {
         }
         else if(options.incremental_primal_rounding)
         {
-            std::cout << "[incremental primal rounding]\n";
-            std::visit([&](auto&& s) {
+            std::cout << "[incremental primal rounding] start rounding\n";
+            const auto sol = std::visit([&](auto&& s) {
                     if constexpr(std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_vec<float>>)
-                    incremental_mm_agreement_rounding_iter(s);
+                    return incremental_mm_agreement_rounding_iter(s, options.incremental_initial_perturbation);
                     else
+                    {
                     throw std::runtime_error("solver not supported for incremental rounding");
+                    return std::vector<char>{};
+                    }
                     }, *solver);
+
+            const double obj = options.ilp.evaluate(sol.begin(), sol.end());
+            std::cout << "[incremental primal rounding] solution objective = " << obj << "\n";
         }
     } 
 

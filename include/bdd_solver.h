@@ -50,6 +50,7 @@ namespace LPMP {
         bool tighten = false;
 
         bool incremental_primal_rounding = false;
+        double incremental_initial_perturbation = std::numeric_limits<double>::infinity();
         bool diving_primal_rounding = false;
         bdd_fix_options fixing_options_;
 
