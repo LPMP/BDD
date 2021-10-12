@@ -79,6 +79,8 @@ namespace LPMP {
         thrust::fill(mm_hi_.begin(), mm_hi_.end(), CUDART_INF_F);
         // forward_iteration_layer_based(0.5);
         forward_iteration(0.5);
+        thrust::fill(mm_lo_.begin(), mm_lo_.end(), CUDART_INF_F);
+        thrust::fill(mm_hi_.begin(), mm_hi_.end(), CUDART_INF_F);
         backward_iteration(0.5);
         // backward_run(false);
     }
