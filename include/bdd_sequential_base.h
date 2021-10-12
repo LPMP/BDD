@@ -627,13 +627,13 @@ namespace LPMP {
             lower_bound_state_ = lower_bound_state::invalid;
 
             auto get_lo_cost = [&](const size_t var) {
-                if(var < std::distance(cost_lo_begin, cost_lo_end))
+                if(var < std::distance(cost_lo_begin, cost_lo_end) && var < nr_variables())
                     return *(cost_lo_begin+var)/double(nr_bdds(var));
                 else
                     return 0.0;
             };
             auto get_hi_cost = [&](const size_t var) {
-                if(var < std::distance(cost_hi_begin, cost_hi_end))
+                if(var < std::distance(cost_hi_begin, cost_hi_end) && var < nr_variables())
                     return *(cost_hi_begin+var)/double(nr_bdds(var));
                 else
                     return 0.0;
