@@ -17,6 +17,8 @@ namespace LPMP {
 
         private:
             void forward_iteration(const float omega);
+            void forward_iteration_layer_based(const float omega);
+
             void backward_iteration(const float omega);
 
             void min_marginals_from_directional_costs(const int hop_index);

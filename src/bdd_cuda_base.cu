@@ -35,12 +35,13 @@ namespace LPMP {
         std::tie(bdd_hop_dist_root, bdd_depth) = populate_bdd_nodes(bdd_col);
         reorder_bdd_nodes(bdd_hop_dist_root, bdd_depth);
         set_special_nodes_indices(bdd_hop_dist_root);
-        compress_bdd_nodes_to_layer();
+        compress_bdd_nodes_to_layer(bdd_hop_dist_root);
         print_num_bdd_nodes_per_hop();
     }
 
     void bdd_cuda_base::initialize(const BDD::bdd_collection& bdd_col)
     {
+        MEASURE_FUNCTION_EXECUTION_TIME
         nr_vars_ = [&]() {
             size_t max_v=0;
             for(size_t bdd_nr=0; bdd_nr<bdd_col.nr_bdds(); ++bdd_nr)
@@ -72,6 +73,7 @@ namespace LPMP {
 
     std::tuple<thrust::device_vector<int>, thrust::device_vector<int>> bdd_cuda_base::populate_bdd_nodes(const BDD::bdd_collection& bdd_col)
     {
+        MEASURE_FUNCTION_EXECUTION_TIME
         std::vector<int> primal_variable_index;
         std::vector<int> lo_bdd_node_index;
         std::vector<int> hi_bdd_node_index;
@@ -132,6 +134,7 @@ namespace LPMP {
 
     void bdd_cuda_base::reorder_bdd_nodes(thrust::device_vector<int>& bdd_hop_dist_dev, thrust::device_vector<int>& bdd_depth_dev)
     {
+        MEASURE_FUNCTION_EXECUTION_TIME
         // Make nodes with same hop distance, BDD depth and bdd index contiguous in that order.
         thrust::device_vector<int> sorting_order(nr_bdd_nodes_);
         thrust::sequence(sorting_order.begin(), sorting_order.end());
@@ -167,6 +170,7 @@ namespace LPMP {
 
     void bdd_cuda_base::set_special_nodes_indices(const thrust::device_vector<int>& bdd_hop_dist_dev)
     {
+        MEASURE_FUNCTION_EXECUTION_TIME
         // Set indices of BDD nodes which are root, top, bot sinks.
         root_indices_ = thrust::device_vector<int>(nr_bdd_nodes_);
         thrust::sequence(root_indices_.begin(), root_indices_.end());
@@ -189,8 +193,9 @@ namespace LPMP {
 
     // Removes redundant information in hi_costs, primal_index, bdd_index as it is duplicated across
     // multiple BDD nodes for each layer.
-    void bdd_cuda_base::compress_bdd_nodes_to_layer()
+    void bdd_cuda_base::compress_bdd_nodes_to_layer(const thrust::device_vector<int>& bdd_hop_dist_dev)
     {
+        MEASURE_FUNCTION_EXECUTION_TIME
         thrust::device_vector<float> hi_cost_compressed(hi_cost_.size());
         thrust::device_vector<float> lo_cost_compressed(lo_cost_.size());
         thrust::device_vector<int> primal_index_compressed(primal_variable_index_.size()); 
@@ -204,16 +209,17 @@ namespace LPMP {
         // Compute number of BDD nodes in each layer:
         bdd_layer_width_ = thrust::device_vector<int>(nr_bdd_nodes_);
         auto new_end = thrust::reduce_by_key(first_key, last_key, thrust::make_constant_iterator<int>(1), first_out_key, bdd_layer_width_.begin());
-        const int out_size = thrust::distance(first_out_key, new_end.first);
+        const int out_size = thrust::distance(first_out_key, new_end.first);      
 
         // Assign bdd node to layer map:
         bdd_node_to_layer_map_ = thrust::device_vector<int>(out_size);
         thrust::sequence(bdd_node_to_layer_map_.begin(), bdd_node_to_layer_map_.end());
         bdd_node_to_layer_map_ = repeat_values(bdd_node_to_layer_map_, bdd_layer_width_);
 
-        // Compress hi_costs_, lo_costs_ (although initially they are infinity, 0 resp.)
-        auto first_cost_val = thrust::make_zip_iterator(thrust::make_tuple(hi_cost_.begin(), lo_cost_.begin()));
-        auto first_cost_val_compressed = thrust::make_zip_iterator(thrust::make_tuple(hi_cost_compressed.begin(), lo_cost_compressed.begin()));
+        // Compress hi_costs_, lo_costs_ (although initially they are infinity, 0 resp.) and also populate how many BDD layers per hop dist.
+        thrust::device_vector<int> bdd_hop_dist_compressed(out_size);
+        auto first_cost_val = thrust::make_zip_iterator(thrust::make_tuple(hi_cost_.begin(), lo_cost_.begin(), bdd_hop_dist_dev.begin()));
+        auto first_cost_val_compressed = thrust::make_zip_iterator(thrust::make_tuple(hi_cost_compressed.begin(), lo_cost_compressed.begin(), bdd_hop_dist_compressed.begin()));
 
         auto new_end_unique = thrust::unique_by_key_copy(first_key, last_key, first_cost_val, thrust::make_discard_iterator(), first_cost_val_compressed);
         assert(out_size == thrust::distance(first_cost_val_compressed, new_end_unique.second));
@@ -228,6 +234,20 @@ namespace LPMP {
         thrust::swap(hi_cost_compressed, hi_cost_);
         thrust::swap(primal_index_compressed, primal_variable_index_);
         thrust::swap(bdd_index_compressed, bdd_index_);
+
+        // For launching kernels where each thread operates on a BDD layer instead of a BDD node.
+        layer_offsets_ = thrust::device_vector<int>(bdd_layer_width_.size() + 1);
+        layer_offsets_[0] = 0;
+        thrust::inclusive_scan(bdd_layer_width_.begin(), bdd_layer_width_.end(), layer_offsets_.begin() + 1);
+
+        thrust::device_vector<int> dev_cum_nr_layers_per_hop_dist(cum_nr_bdd_nodes_per_hop_dist_.size());
+        cum_nr_layers_per_hop_dist_ = std::vector<int>(dev_cum_nr_layers_per_hop_dist.size());
+
+        thrust::reduce_by_key(bdd_hop_dist_compressed.begin(), bdd_hop_dist_compressed.end(), thrust::make_constant_iterator<int>(1), 
+                            thrust::make_discard_iterator(), dev_cum_nr_layers_per_hop_dist.begin());
+
+        thrust::inclusive_scan(dev_cum_nr_layers_per_hop_dist.begin(), dev_cum_nr_layers_per_hop_dist.end(), dev_cum_nr_layers_per_hop_dist.begin());
+        thrust::copy(dev_cum_nr_layers_per_hop_dist.begin(), dev_cum_nr_layers_per_hop_dist.end(), cum_nr_layers_per_hop_dist_.begin());
     }
 
     void bdd_cuda_base::flush_forward_states()
@@ -601,17 +621,6 @@ namespace LPMP {
         return min_margs;
     }
 
-    struct return_top_sink_costs
-    {
-        __host__ __device__ double operator()(const thrust::tuple<int, float>& t) const
-        {
-            const int index = thrust::get<0>(t);
-            if (index != TOP_SINK_INDICATOR_CUDA)
-                return 0.0;
-            return thrust::get<1>(t);
-        }
-    };
-
     void bdd_cuda_base::update_costs(const thrust::device_vector<float>& update_vec)
     {
         thrust::transform(hi_cost_.begin(), hi_cost_.end(), update_vec.begin(), hi_cost_.begin(), thrust::plus<float>());
@@ -622,12 +631,9 @@ namespace LPMP {
     double bdd_cuda_base::lower_bound()
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
-        forward_run();
+        backward_run(false);
+        // Sum costs_from_terminal of all root nodes. Since root nodes are always at the start (unless one row contains > 1 BDD then have to change TODO.)
 
-        // Gather all BDD nodes corresponding to top_sink (i.e. lo_bdd_node_index_ == TOP_SINK_INDICATOR_CUDA) and sum their costs_from_root
-        auto first = thrust::make_zip_iterator(thrust::make_tuple(lo_bdd_node_index_.begin(), cost_from_root_.begin()));
-        auto last = thrust::make_zip_iterator(thrust::make_tuple(lo_bdd_node_index_.end(), cost_from_root_.end()));
-
-        return thrust::transform_reduce(first, last, return_top_sink_costs(), 0.0, thrust::plus<double>());
+        return thrust::reduce(cost_from_terminal_.begin(), cost_from_terminal_.begin() + nr_bdds_, 0.0);
     }
 }
