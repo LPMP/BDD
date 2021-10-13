@@ -17,7 +17,7 @@ namespace LPMP {
             ~bdd_parallel_mma();
 
             template<typename ITERATOR>
-                void update_costs(ITERATOR cost_begin, ITERATOR cost_end);
+                void update_costs(ITERATOR cost_lo_begin, ITERATOR cost_lo_end, ITERATOR cost_hi_begin, ITERATOR cost_hi_end);
 
             double lower_bound();
             void iteration();
@@ -39,7 +39,7 @@ namespace LPMP {
         bdd_parallel_mma<REAL>::bdd_parallel_mma(BDD::bdd_collection& bdd_col, ITERATOR cost_begin, ITERATOR cost_end)
         : bdd_parallel_mma(bdd_col)
         {
-            update_costs(cost_begin, cost_end);
+            update_costs(cost_begin, cost_begin, cost_begin, cost_end);
             backward_run();
         }
 };

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstdlib>
+#include <random>
 #include <array>
 #include <vector>
 #include <limits>
@@ -25,7 +25,6 @@ namespace LPMP {
                 else
                     return 1;
             };
-            int sign = mms(i,0)[1] - mms(i,0)[0];
             const bool all_equal = [&]() { // all min-marginals are equal
                 for(size_t j=0; j<mms.size(i); ++j)
                     if(std::abs(mms(i,j)[1] - mms(i,j)[0]) > 1e-6)
@@ -86,6 +85,9 @@ namespace LPMP {
 
             double cur_delta = 1.0/delta_growth_factor * init_delta;
 
+            std::random_device rd;
+            std::mt19937 gen(rd());
+
             for(size_t round=0; round<100; ++round)
             {
                 cur_delta = cur_delta*delta_growth_factor;
@@ -93,9 +95,21 @@ namespace LPMP {
 
                 const auto mms = s.min_marginals();
                 const auto signs = mm_signs(mms);
-                const size_t nr_good_mms = std::count_if(signs.begin(), signs.end(), [](const char v) { return v == -1 || v == 1; });
-                std::cout << "#unique min-marginals " << nr_good_mms << "/" << mms.size() << ", % = " << double(nr_good_mms)/double(mms.size()) << "\n";
-                if(nr_good_mms == signs.size())
+                const size_t nr_positive_mm_diffs = std::count(signs.begin(), signs.end(), 1);
+                const size_t nr_negative_mm_diffs = std::count(signs.begin(), signs.end(), -1);
+                const size_t nr_zero_mm_diffs = std::count(signs.begin(), signs.end(), 0);
+                const size_t nr_disagreeing_mm_diffs = std::count(signs.begin(), signs.end(), std::numeric_limits<char>::max());
+                assert(nr_positive_mm_diffs + nr_negative_mm_diffs + nr_zero_mm_diffs + nr_disagreeing_mm_diffs == mms.size());
+
+                std::cout << "[incremental primal rounding] " <<
+                    "#positive min-marg diffs = " << nr_positive_mm_diffs << " % " << double(100*nr_positive_mm_diffs)/double(mms.size()) << ", " <<  
+                    "#negative min-marg diffs = " << nr_negative_mm_diffs << " % " << double(100*nr_negative_mm_diffs)/double(mms.size()) << ", " << 
+                    "#zero min-marg diffs = " << nr_zero_mm_diffs << " % " << double(100*nr_zero_mm_diffs)/double(mms.size()) << ", " << 
+                    "#disagreeing min-marg diffs = " << nr_disagreeing_mm_diffs << " % " << double(100*nr_disagreeing_mm_diffs)/double(mms.size()) << "\n";
+                
+                std::uniform_real_distribution<> dis(-cur_delta, cur_delta);
+
+                if(nr_positive_mm_diffs + nr_negative_mm_diffs == signs.size())
                 {
                     std::vector<char> sol(mms.size(),0);
                     for(size_t i=0; i<sol.size(); ++i)
@@ -112,28 +126,63 @@ namespace LPMP {
                     return sol;
                 }
 
-                std::vector<double> cost_updates(mms.size(), 0.0);
+                std::vector<double> cost_lo_updates(mms.size(), 0.0);
+                std::vector<double> cost_hi_updates(mms.size(), 0.0);
                 for(size_t i=0; i<mms.size(); ++i)
                 {
                     if(signs[i] == -1)
-                        cost_updates[i] = -cur_delta;
+                    {
+                        cost_lo_updates[i] = cur_delta;
+                        cost_hi_updates[i] = 0.0;
+                    }
                     else if(signs[i] == 1)
-                        cost_updates[i] = +cur_delta;
+                    {
+                        cost_lo_updates[i] = 0.0;
+                        cost_hi_updates[i] = cur_delta;
+                    }
                     else if(signs[i] == 0)
                     {
-                        const double r = std::rand()/RAND_MAX;
-                        assert(1.0 <= r && r <= 1.0);
-                        cost_updates[i] = cur_delta * r;
+                        const double r = dis(gen);
+                        assert(-cur_delta <= r && r <= cur_delta);
+                        if(r < 0.0)
+                        {
+                            cost_lo_updates[i] = cur_delta * (-r);
+                            cost_hi_updates[i] = 0.0;
+                        }
+                        else
+                        {
+                            cost_hi_updates[i] = cur_delta * r;
+                            cost_lo_updates[i] = 0.0;
+                        }
                     }
                     else
                     {
                         assert(signs[i] == std::numeric_limits<char>::max());
-                        cost_updates[i] = 0.0; // there will be lower bound increase in this variable
+                        const auto mm_sum = [&]() {
+                            std::array<double,2> s = {0.0,0.0};
+                            for(size_t j=0; j<mms.size(i); ++j)
+                            {
+                                s[0] += mms(i,j)[0];
+                                s[1] += mms(i,j)[1];
+                            }
+                            return s;
+                        }();
+                        if(mm_sum[0] < mm_sum[1])
+                        {
+                            cost_lo_updates[i] = 0.0;
+                            cost_hi_updates[i] = cur_delta;
+                        }
+                        else
+                        {
+                            cost_lo_updates[i] = cur_delta;
+                            cost_hi_updates[i] = 0.0;
+                        }
                     }
                 }
-                s.update_costs(cost_updates.begin(), cost_updates.end());
+                s.update_costs(cost_lo_updates.begin(), cost_lo_updates.end(), cost_hi_updates.begin(), cost_hi_updates.end());
                 for(size_t solver_iter=0; solver_iter<5; ++solver_iter)
                     s.iteration();
+                std::cout << "[incremental primal rounding] lower bound = " << s.lower_bound() << "\n";
             }
 
             std::cout << "[incremental primal rounding] No solution found\n";

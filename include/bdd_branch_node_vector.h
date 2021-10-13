@@ -60,7 +60,7 @@ namespace LPMP {
             two_dim_variable_array<std::array<double,2>> min_marginals();
             void solve(const size_t max_iter, const double tolerance, const double time_limit); 
             double lower_bound() const { return lower_bound_; }
-            void update_cost(const double c, const size_t var);
+            void update_cost(const double lo_cost, const double hi_cost, const size_t var);
             void fix_variable(const size_t var, const bool value);
 
             // get variable costs from bdd
@@ -361,17 +361,20 @@ namespace LPMP {
     }
 
     template<typename BDD_BRANCH_NODE>
-    void bdd_mma_base<BDD_BRANCH_NODE>::update_cost(const double c, const size_t var)
-    {
-        assert(nr_bdds(var) > 0);
-        assert(std::isfinite(c));
+        void bdd_mma_base<BDD_BRANCH_NODE>::update_cost(const double lo_cost, const double hi_cost, const size_t var)
+        {
+            assert(nr_bdds(var) > 0);
+            assert(std::isfinite(std::min(lo_cost, hi_cost)));
 
-        lower_bound_ = -std::numeric_limits<double>::infinity();
-        message_passing_state_ = message_passing_state::none;
+            lower_bound_ = -std::numeric_limits<double>::infinity();
+            message_passing_state_ = message_passing_state::none;
 
-        for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
-            bdd_branch_nodes_[i].high_cost += c / value_type(nr_bdds(var));
-    }
+            for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
+            {
+                bdd_branch_nodes_[i].low_cost += lo_cost / value_type(nr_bdds(var));
+                bdd_branch_nodes_[i].high_cost += hi_cost / value_type(nr_bdds(var));
+            }
+        }
 
     template<typename BDD_BRANCH_NODE>
     void bdd_mma_base<BDD_BRANCH_NODE>::fix_variable(const size_t var, const bool value)

@@ -204,7 +204,8 @@ void test_problem(const char* instance, const double expected_lb)
     for(size_t i=0; i<solver.nr_variables(); ++i)
         solver.set_cost(ilp.objective()[i], i);
 
-    solver.solve(100, 1e-6, 100);
+    for(size_t iter=0; iter<100; ++iter)
+        solver.iteration();
     
     test(std::abs(solver.lower_bound() - expected_lb) <= 1e-6);
 }
