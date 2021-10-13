@@ -86,10 +86,10 @@ namespace LPMP {
         };
 
         auto solver_group = app.add_option_group("solver", "solver either a BDD solver, output of statistics or export of LP solved by BDD relaxation");
-        solver_group->add_option("-s, --solver", bdd_solver_impl_, "the name of solver for the relaxation")
+        solver_group->add_option("-s, --solver", bdd_solver_impl_, "name of solver for the relaxation")
             ->transform(CLI::CheckedTransformer(bdd_solver_impl_map, CLI::ignore_case));
 
-        auto solution_statistics_arg = app.add_flag("--solution_statistics", solution_statistics, "list min marginals and, objective after solving dual problem");
+        auto solution_statistics_arg = app.add_flag("--solution_statistics", solution_statistics, "list min marginals and objective after solving dual problem");
 
         std::unordered_map<std::string, bdd_solver_precision> bdd_solver_precision_map{
             {"float",bdd_solver_precision::single_prec},
@@ -121,9 +121,13 @@ namespace LPMP {
             ->transform(CLI::CheckedTransformer(fixing_var_value_map, CLI::ignore_case));
 
         auto incremental_rounding_param_group = app.add_option_group("incremental primal rounding parameters", "parameters for rounding a primal solution");
+
         incremental_rounding_param_group->add_option("--incremental_initial_perturbation", incremental_initial_perturbation, "value for initial perturbation for obtaining primal solutions by incremental primal rounding")
             ->check(CLI::PositiveNumber);
        incremental_rounding_param_group->needs(incremental_primal_arg);
+
+        incremental_rounding_param_group->add_option("--incremental_perturbation_growth_rate", incremental_growth_rate, "growth rate for increasing the perturbation for obtaining primal solutions by incremental primal rounding")
+            ->check(CLI::Range(1.0,std::numeric_limits<double>::max()));
 
 
         auto tighten_arg = app.add_flag("--tighten", tighten, "tighten relaxation flag");
@@ -135,6 +139,22 @@ namespace LPMP {
         solver_group->add_option("--export_bdd_graph", export_bdd_graph_file, "filename for export of BDD representation in .dot format");
 
         solver_group->require_option(1); // either a solver or statistics
+
+        // TODO: replace with needs as for incremental rounding options
+        /*
+        auto decomposition_mma_group = app.add_option_group("options for decomposition mma");
+        decomposition_mma_group
+            decomposition_mma_group->add_option("--nr_threads", decomposition_mma_options_.nr_threads, "number of threads (up to available nr of available units) for simultaneous optimization of the Lagrange decomposition")
+            ->required()
+            ->check(CLI::Range(2, omp_get_max_threads()));
+
+        decomposition_mma_group->add_flag("--force_thread_nr", decomposition_mma_options_.force_thread_nr , "force the number of threads be as specified, do not choose lower thread number even if subproblems become small");
+
+        decomposition_mma_group->add_option("--parallel_message_passing_weight", decomposition_mma_options_.parallel_message_passing_weight, "weight for passing messages between threads")
+            ->check(CLI::Range(0.0,1.0));
+
+        decomposition_mma_group->needs
+        */
 
         app.callback([this,&app]() {
                 CLI::App solver_app;
@@ -468,7 +488,7 @@ namespace LPMP {
                             || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma<float>>
                             || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma<double>>
                             )
-                    return incremental_mm_agreement_rounding_iter(s, options.incremental_initial_perturbation);
+                    return incremental_mm_agreement_rounding_iter(s, options.incremental_initial_perturbation, options.incremental_growth_rate);
                     else
                     {
                     throw std::runtime_error("solver not supported for incremental rounding");

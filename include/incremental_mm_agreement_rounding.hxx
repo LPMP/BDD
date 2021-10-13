@@ -8,53 +8,57 @@
 
 namespace LPMP {
 
+    enum class mm_type {
+        zero,
+        one,
+        equal,
+        inconsistent
+    };
+        
+
     template<typename REAL>
-    std::vector<char> mm_signs(const two_dim_variable_array<std::array<REAL,2>>& mms)
+    std::vector<mm_type> compute_mm_types(const two_dim_variable_array<std::array<REAL,2>>& mms)
     {
-        std::vector<char> signs(mms.size(),-1);
+        std::vector<mm_type> diffs(mms.size(),mm_type::inconsistent);
 
         for(size_t i=0; i<mms.size(); ++i)
         {
             assert(mms.size(i) > 0);
-            bool consistent = true;
-            auto signum = [](const auto x) -> int {
-                if(x == 0)
-                    return 0;
-                else if(x < 0)
-                    return -1;
-                else
-                    return 1;
-            };
+
             const bool all_equal = [&]() { // all min-marginals are equal
                 for(size_t j=0; j<mms.size(i); ++j)
                     if(std::abs(mms(i,j)[1] - mms(i,j)[0]) > 1e-6)
                         return false;
                 return true;
             }();
+
             const bool all_one = [&]() { // min-marginals indicate one variable should be taken
                 for(size_t j=0; j<mms.size(i); ++j)
-                    if(mms(i,j)[1] + 1e-6 < mms(i,j)[0])
+                    if(!(mms(i,j)[1] + 1e-6 < mms(i,j)[0]))
                         return false;
                 return true;
             }();
+
             const bool all_zero = [&]() { // min-marginals indicate zero variable should be taken
                 for(size_t j=0; j<mms.size(i); ++j)
-                    if(mms(i,j)[0] + 1e-6 < mms(i,j)[1])
+                    if(!(mms(i,j)[0] + 1e-6 < mms(i,j)[1]))
                         return false;
                 return true;
             }();
 
+            assert(int(all_zero) + int(all_one) + int(all_equal) <= 1);
+
             if(all_zero)
-                signs[i] = -1;
+                diffs[i] = mm_type::zero;
             else if(all_one)
-                signs[i] = 1;
+                diffs[i] = mm_type::one;
             else if(all_equal)
-                signs[i] = 0;
-            else // contradictory min-marginals, solvers may have further lower bound improvement if run for longer
-                signs[i] = std::numeric_limits<char>::max();
+                diffs[i] = mm_type::equal;
+            else
+                diffs[i] = mm_type::inconsistent;
         }
 
-        return signs;
+        return diffs;
     }
 
     template<typename REAL>
@@ -74,51 +78,52 @@ namespace LPMP {
     }
 
     template<typename SOLVER>
-        std::vector<char> incremental_mm_agreement_rounding_iter(SOLVER& s, double init_delta =std::numeric_limits<double>::infinity())
+        std::vector<char> incremental_mm_agreement_rounding_iter(SOLVER& s, double init_delta = std::numeric_limits<double>::infinity(), const double delta_growth_rate = 1.1)
         {
-            constexpr double delta_growth_factor = 1.2;
             assert(init_delta > 0.0);
+            assert(delta_growth_rate >= 1.0);
+
             if(init_delta == std::numeric_limits<double>::infinity())
                 init_delta = compute_initial_delta(s.min_marginals());
 
-            std::cout << "[incremental primal rounding] initial perturbation delta = " << init_delta << "\n";
+            std::cout << "[incremental primal rounding] initial perturbation delta = " << init_delta << ", growth rate for perturbation " << delta_growth_rate << "\n";
 
-            double cur_delta = 1.0/delta_growth_factor * init_delta;
+            double cur_delta = 1.0/delta_growth_rate * init_delta;
 
             std::random_device rd;
             std::mt19937 gen(rd());
 
             for(size_t round=0; round<100; ++round)
             {
-                cur_delta = cur_delta*delta_growth_factor;
+                cur_delta = cur_delta*delta_growth_rate;
                 std::cout << "[incremental primal rounding] round " << round << ", cost delta " << cur_delta << "\n";
 
                 const auto mms = s.min_marginals();
-                const auto signs = mm_signs(mms);
-                const size_t nr_positive_mm_diffs = std::count(signs.begin(), signs.end(), 1);
-                const size_t nr_negative_mm_diffs = std::count(signs.begin(), signs.end(), -1);
-                const size_t nr_zero_mm_diffs = std::count(signs.begin(), signs.end(), 0);
-                const size_t nr_disagreeing_mm_diffs = std::count(signs.begin(), signs.end(), std::numeric_limits<char>::max());
-                assert(nr_positive_mm_diffs + nr_negative_mm_diffs + nr_zero_mm_diffs + nr_disagreeing_mm_diffs == mms.size());
+                const auto mm_types = compute_mm_types(mms);
+                const size_t nr_one_mms = std::count(mm_types.begin(), mm_types.end(), mm_type::one);
+                const size_t nr_zero_mms = std::count(mm_types.begin(), mm_types.end(), mm_type::zero);
+                const size_t nr_equal_mms = std::count(mm_types.begin(), mm_types.end(), mm_type::equal);
+                const size_t nr_inconsistent_mms = std::count(mm_types.begin(), mm_types.end(), mm_type::inconsistent);
+                assert(nr_one_mms + nr_zero_mms + nr_equal_mms + nr_inconsistent_mms == mms.size());
 
                 std::cout << "[incremental primal rounding] " <<
-                    "#positive min-marg diffs = " << nr_positive_mm_diffs << " % " << double(100*nr_positive_mm_diffs)/double(mms.size()) << ", " <<  
-                    "#negative min-marg diffs = " << nr_negative_mm_diffs << " % " << double(100*nr_negative_mm_diffs)/double(mms.size()) << ", " << 
-                    "#zero min-marg diffs = " << nr_zero_mm_diffs << " % " << double(100*nr_zero_mm_diffs)/double(mms.size()) << ", " << 
-                    "#disagreeing min-marg diffs = " << nr_disagreeing_mm_diffs << " % " << double(100*nr_disagreeing_mm_diffs)/double(mms.size()) << "\n";
+                    "#one min-marg diffs = " << nr_one_mms << " % " << double(100*nr_one_mms)/double(mms.size()) << ", " <<  
+                    "#zero min-marg diffs = " << nr_zero_mms << " % " << double(100*nr_zero_mms)/double(mms.size()) << ", " << 
+                    "#equal min-marg diffs = " << nr_equal_mms << " % " << double(100*nr_equal_mms)/double(mms.size()) << ", " << 
+                    "#inconsistent min-marg diffs = " << nr_inconsistent_mms << " % " << double(100*nr_inconsistent_mms)/double(mms.size()) << "\n";
                 
                 std::uniform_real_distribution<> dis(-cur_delta, cur_delta);
 
-                if(nr_positive_mm_diffs + nr_negative_mm_diffs == signs.size())
+                if(nr_one_mms + nr_zero_mms == mms.size())
                 {
                     std::vector<char> sol(mms.size(),0);
                     for(size_t i=0; i<sol.size(); ++i)
                     {
-                        if(signs[i] == -1)
+                        if(mm_types[i] == mm_type::one)
                             sol[i] = 1;
                         else
                         {
-                            assert(signs[i] == 1);
+                            assert(mm_types[i] == mm_type::zero);
                             sol[i] = 0;
                         }
                     }
@@ -130,17 +135,17 @@ namespace LPMP {
                 std::vector<double> cost_hi_updates(mms.size(), 0.0);
                 for(size_t i=0; i<mms.size(); ++i)
                 {
-                    if(signs[i] == -1)
+                    if(mm_types[i] == mm_type::one)
                     {
                         cost_lo_updates[i] = cur_delta;
                         cost_hi_updates[i] = 0.0;
                     }
-                    else if(signs[i] == 1)
+                    else if(mm_types[i] == mm_type::zero)
                     {
                         cost_lo_updates[i] = 0.0;
                         cost_hi_updates[i] = cur_delta;
                     }
-                    else if(signs[i] == 0)
+                    else if(mm_types[i] == mm_type::equal)
                     {
                         const double r = dis(gen);
                         assert(-cur_delta <= r && r <= cur_delta);
@@ -157,7 +162,7 @@ namespace LPMP {
                     }
                     else
                     {
-                        assert(signs[i] == std::numeric_limits<char>::max());
+                        assert(mm_types[i] == mm_type::inconsistent);
                         const auto mm_sum = [&]() {
                             std::array<double,2> s = {0.0,0.0};
                             for(size_t j=0; j<mms.size(i); ++j)
