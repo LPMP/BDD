@@ -2,6 +2,7 @@
 
 #include <array>
 #include "bdd_collection/bdd_collection.h"
+#include "two_dimensional_variable_array.hxx"
 #include <cuda_runtime.h>
 #include <thrust/device_vector.h>
 
@@ -23,7 +24,7 @@ namespace LPMP {
                 void set_costs(COST_ITERATOR begin, COST_ITERATOR end);
             void set_cost(const double c, const size_t var);
             
-            std::vector<std::vector<std::array<float,2>>> min_marginals();
+            two_dim_variable_array<std::array<float,2>> min_marginals();
             std::tuple<thrust::device_vector<float>, thrust::device_vector<float>> min_marginals_cuda();
 
             size_t nr_variables() const { return nr_vars_; }
@@ -63,8 +64,9 @@ namespace LPMP {
             thrust::device_vector<int> num_vars_per_bdd_;
             thrust::device_vector<int> bdd_layer_width_; // Counts number of repetitions of a primal variable in a BDD. 
             thrust::device_vector<int> root_indices_, bot_sink_indices_, top_sink_indices_;
-            bool forward_state_valid_ = false;
-            bool backward_state_valid_ = false;
+            bool forward_state_valid_ = false; // true means cost from root valid.
+            bool backward_state_valid_ = false; // true means cost from terminal are valid.
+            bool path_costs_valid_ = false; // here valid means lo, hi path paths are valid.
 
         private:
             void initialize(const BDD::bdd_collection& bdd_col);

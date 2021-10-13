@@ -284,18 +284,14 @@ namespace LPMP {
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         forward_state_valid_ = false;
-        thrust::fill(cost_from_root_.begin(), cost_from_root_.end(), CUDART_INF_F_HOST);
-        thrust::fill(hi_path_cost_.begin(), hi_path_cost_.end(), CUDART_INF_F_HOST);
-        thrust::fill(lo_path_cost_.begin(), lo_path_cost_.end(), CUDART_INF_F_HOST);
+        path_costs_valid_ = false;
     }
 
     void bdd_cuda_base::flush_backward_states()
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         backward_state_valid_ = false;
-        thrust::fill(cost_from_terminal_.begin(), cost_from_terminal_.end(), CUDART_INF_F_HOST);
-        thrust::fill(hi_path_cost_.begin(), hi_path_cost_.end(), CUDART_INF_F_HOST);
-        thrust::fill(lo_path_cost_.begin(), lo_path_cost_.end(), CUDART_INF_F_HOST);
+        path_costs_valid_ = false;
     }
 
     void bdd_cuda_base::print_num_bdd_nodes_per_hop()
@@ -333,6 +329,8 @@ namespace LPMP {
         auto last = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.end(), hi_cost_.end()));
 
         thrust::for_each(first, last, func);
+        flush_forward_states();
+        flush_backward_states();
     }
 
     struct set_vars_costs_func {
@@ -366,6 +364,8 @@ namespace LPMP {
         auto last = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.end(), hi_cost_.end()));
 
         thrust::for_each(first, last, func);
+        flush_forward_states();
+        flush_backward_states();
     }
 
     template void bdd_cuda_base::set_costs(double*, double*);
@@ -475,7 +475,7 @@ namespace LPMP {
             if (!isinf(cur_lo_cost))
             {
                 cur_lo_cost_from_terminal = cost_from_terminal[lo_node] + cur_lo_cost;
-                hi_path_cost[bdd_idx] = cur_cost_from_root + cur_lo_cost_from_terminal;
+                lo_path_cost[bdd_idx] = cur_cost_from_root + cur_lo_cost_from_terminal;
             }
             cost_from_terminal[bdd_idx] = min(cur_hi_cost_from_terminal, cur_lo_cost_from_terminal);
         }
@@ -507,7 +507,8 @@ namespace LPMP {
     void bdd_cuda_base::backward_run(bool compute_path_costs)
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
-        if (backward_state_valid_)
+        if ((backward_state_valid_ && path_costs_valid_) ||
+            (!compute_path_costs && backward_state_valid_))
             return;
 
         // Set costs of top sinks to 0:
@@ -547,6 +548,8 @@ namespace LPMP {
 
         }
         backward_state_valid_ = true;
+        if (compute_path_costs)
+            path_costs_valid_ = true;
     }
 
     struct tuple_min
@@ -558,7 +561,7 @@ namespace LPMP {
         }
     };
 
-    // Computes min-marginals by reduction. Assumes that lo_path_cost_ and hi_path_cost_ are precomputed!
+    // Computes min-marginals by reduction.
     std::tuple<thrust::device_vector<float>, thrust::device_vector<float>> bdd_cuda_base::min_marginals_cuda()
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
@@ -580,7 +583,7 @@ namespace LPMP {
         return {min_marginals_lo, min_marginals_hi};
     }
 
-    std::vector<std::vector<std::array<float, 2>>> bdd_cuda_base::min_marginals()
+    two_dim_variable_array<std::array<float,2>> bdd_cuda_base::min_marginals()
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         thrust::device_vector<float> mm_0, mm_1;
@@ -612,8 +615,8 @@ namespace LPMP {
         std::vector<float> h_mm_1(mm_1.size());
         thrust::copy(mm_1.begin(), mm_1.end(), h_mm_1.begin());
 
-        std::vector<std::vector<std::array<float,2>>> min_margs(nr_bdds());
-
+        two_dim_variable_array<std::array<float,2>> min_margs(num_vars_per_bdd);
+        
         int idx_1d = 1; // ignore terminal nodes.
         for(int bdd_idx=0; bdd_idx < nr_bdds(); ++bdd_idx)
         {
@@ -621,7 +624,7 @@ namespace LPMP {
             {
                 assert(h_mm_primal_index[idx_1d] >= 0); // Should ignore terminal nodes.
                 std::array<float,2> mm = {h_mm_0[idx_1d], h_mm_1[idx_1d]};
-                min_margs[bdd_idx].push_back(mm);
+                min_margs(bdd_idx, var) = mm;
             }
             idx_1d += 1; // 2 terminal nodes per bdd (but are reduced to one during min-marginal computation).
         }

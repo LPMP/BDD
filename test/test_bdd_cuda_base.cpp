@@ -48,7 +48,7 @@ End)";
 
 int main(int argc, char** argv)
 {
-        {
+    {
         ILP_input ilp = ILP_parser::parse_string(one_simplex_problem);
         bdd_preprocessor bdd_pre(ilp);
         bdd_collection bdd_col = bdd_pre.get_bdd_collection();
@@ -67,9 +67,9 @@ int main(int argc, char** argv)
         test(mm.size() == 1);
         test(mm[0].size() == 3);
 
-        test(mm[0][0] == std::array<float,2>{-1.0, -2.0});
-        test(mm[0][1] == std::array<float,2>{-2.0, -1.0});
-        test(mm[0][2] == std::array<float,2>{-2.0, -1.0});
+        test(mm(0, 0) == std::array<float,2>{-1.0, -2.0});
+        test(mm(0, 1) == std::array<float,2>{-2.0, -1.0});
+        test(mm(0, 2) == std::array<float,2>{-2.0, -1.0});
     }
 
     {
@@ -92,13 +92,12 @@ int main(int argc, char** argv)
         test(mm[0].size() == 3);
         test(mm[1].size() == 3);
 
-        test(mm[0][0] == std::array<float,2>{1.0,2.0});
-        test(mm[0][1] == std::array<float,2>{1.0,1.0});
-        test(mm[0][2] == std::array<float,2>{1.0,1.0});
-
-        test(mm[1][0] == std::array<float,2>{1.0,0.0});
-        test(mm[1][1] == std::array<float,2>{0.0,1.0});
-        test(mm[1][2] == std::array<float,2>{3.0,0.0});
+        test(mm(0, 0) == std::array<float,2>{1.0,2.0});
+        test(mm(0, 1) == std::array<float,2>{1.0,1.0});
+        test(mm(0, 2) == std::array<float,2>{1.0,1.0});
+        test(mm(1, 0) == std::array<float,2>{1.0,0.0});
+        test(mm(1, 1) == std::array<float,2>{0.0,1.0});
+        test(mm(1, 2) == std::array<float,2>{3.0,0.0});
     }
 
     {

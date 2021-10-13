@@ -188,7 +188,8 @@ namespace LPMP {
         thrust::swap(delta_lo_in_, delta_lo_out_);
         thrust::swap(delta_hi_in_, delta_hi_out_);
         forward_state_valid_ = true;
-        backward_state_valid_ = false;
+        flush_backward_states();
+
         #ifndef NDEBUG
             cudaDeviceSynchronize();  // Not necessary, only to compute exact timing of this function.
         #endif
@@ -290,7 +291,8 @@ namespace LPMP {
         thrust::swap(delta_lo_in_, delta_lo_out_);
         thrust::swap(delta_hi_in_, delta_hi_out_);
         forward_state_valid_ = true;
-        backward_state_valid_ = false;
+        flush_backward_states();
+
         #ifndef NDEBUG
             cudaDeviceSynchronize();  // Not necessary, only to compute exact timing of this function.
         #endif
@@ -409,8 +411,9 @@ namespace LPMP {
         thrust::swap(delta_hi_in_, delta_hi_out_);
         thrust::swap(lo_cost_, lo_cost_out_);
         thrust::swap(hi_cost_, hi_cost_out_);
-        forward_state_valid_ = false;
+        flush_forward_states();
         backward_state_valid_ = true;
+
         #ifndef NDEBUG
             cudaDeviceSynchronize();  // Not necessary, only to compute exact timing of this function.
         #endif
