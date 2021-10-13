@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cuda_runtime.h>
+#include <math_constants.h>
 #include <thrust/copy.h>
 #include <thrust/device_vector.h>
 #include <thrust/gather.h>
@@ -28,7 +29,7 @@ inline float __int_as_float_host(int a)
     return u.b;
 }
 
-#define CUDART_INF_F __int_as_float_host(0x7f800000)
+#define CUDART_INF_F_HOST __int_as_float_host(0x7f800000)
 
 // copied from: https://github.com/treecode/Bonsai/blob/8904dd3ebf395ccaaf0eacef38933002b49fc3ba/runtime/profiling/derived_atomic_functions.h#L186
 __device__ __forceinline__ float atomicMin(float *address, float val)
