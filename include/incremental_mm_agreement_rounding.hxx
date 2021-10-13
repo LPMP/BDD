@@ -158,9 +158,25 @@ namespace LPMP {
                     else
                     {
                         assert(signs[i] == std::numeric_limits<char>::max());
-                        // there will be lower bound increase in this variable
-                        cost_lo_updates[i] = 0.0;
-                        cost_hi_updates[i] = 0.0;
+                        const auto mm_sum = [&]() {
+                            std::array<double,2> s = {0.0,0.0};
+                            for(size_t j=0; j<mms.size(i); ++j)
+                            {
+                                s[0] += mms(i,j)[0];
+                                s[1] += mms(i,j)[1];
+                            }
+                            return s;
+                        }();
+                        if(mm_sum[0] < mm_sum[1])
+                        {
+                            cost_lo_updates[i] = 0.0;
+                            cost_hi_updates[i] = cur_delta;
+                        }
+                        else
+                        {
+                            cost_lo_updates[i] = cur_delta;
+                            cost_hi_updates[i] = 0.0;
+                        }
                     }
                 }
                 s.update_costs(cost_lo_updates.begin(), cost_lo_updates.end(), cost_hi_updates.begin(), cost_hi_updates.end());
