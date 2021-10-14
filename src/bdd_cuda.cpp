@@ -48,28 +48,28 @@ namespace LPMP {
     bdd_cuda::~bdd_cuda()
     {}
 
-    void bdd_cuda::set_cost(const double c, const size_t var)
-    {
+    //void bdd_cuda::set_cost(const double c, const size_t var)
+    //{
 #ifdef WITH_CUDA
-        pimpl->pmma.set_cost(c, var);
+    //    pimpl->pmma.set_cost(c, var);
 #endif
-    }
+    //}
 
     template<typename COST_ITERATOR>
-    void bdd_cuda::set_costs(COST_ITERATOR costs_begin, COST_ITERATOR costs_end)
+    void bdd_cuda::update_costs(COST_ITERATOR costs_lo_begin, COST_ITERATOR costs_lo_end, COST_ITERATOR costs_hi_begin, COST_ITERATOR costs_hi_end)
     {
 #ifdef WITH_CUDA
-        pimpl->pmma.set_costs(costs_begin, costs_end);
+        pimpl->pmma.update_costs(costs_lo_begin, costs_lo_end, costs_hi_begin, costs_hi_end);
 #endif
     }
 
     // Need to have explicit instantiation in the base.
-    template void bdd_cuda::set_costs(double*, double*);
-    template void bdd_cuda::set_costs(float*, float*);
-    template void bdd_cuda::set_costs(std::vector<double>::iterator, std::vector<double>::iterator);
-    template void bdd_cuda::set_costs(std::vector<double>::const_iterator, std::vector<double>::const_iterator);
-    template void bdd_cuda::set_costs(std::vector<float>::iterator, std::vector<float>::iterator);
-    template void bdd_cuda::set_costs(std::vector<float>::const_iterator, std::vector<float>::const_iterator);
+    template void bdd_cuda::update_costs(double*, double*, double*, double*);
+    template void bdd_cuda::update_costs(float*, float*, float*, float*);
+    template void bdd_cuda::update_costs(std::vector<double>::iterator, std::vector<double>::iterator, std::vector<double>::iterator, std::vector<double>::iterator);
+    template void bdd_cuda::update_costs(std::vector<double>::const_iterator, std::vector<double>::const_iterator, std::vector<double>::const_iterator, std::vector<double>::const_iterator);
+    template void bdd_cuda::update_costs(std::vector<float>::iterator, std::vector<float>::iterator, std::vector<float>::iterator, std::vector<float>::iterator);
+    template void bdd_cuda::update_costs(std::vector<float>::const_iterator, std::vector<float>::const_iterator, std::vector<float>::const_iterator, std::vector<float>::const_iterator);
 
     void bdd_cuda::backward_run()
     {
@@ -95,9 +95,8 @@ namespace LPMP {
 
     two_dim_variable_array<std::array<double,2>> bdd_cuda::min_marginals()
     {
-        throw std::runtime_error("not implemented");
 #ifdef WITH_CUDA
-        //return pimpl->pmma.min_marginals();
+        return pimpl->pmma.min_marginals();
 #endif
     }
 

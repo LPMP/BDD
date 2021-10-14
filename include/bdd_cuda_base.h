@@ -21,10 +21,10 @@ namespace LPMP {
             double lower_bound();
 
             template<typename COST_ITERATOR>
-                void set_costs(COST_ITERATOR begin, COST_ITERATOR end);
+                void update_costs(COST_ITERATOR cost_lo_begin, COST_ITERATOR cost_lo_end, COST_ITERATOR cost_hi_begin, COST_ITERATOR cost_hi_end);
             void set_cost(const double c, const size_t var);
             
-            two_dim_variable_array<std::array<float,2>> min_marginals();
+            two_dim_variable_array<std::array<double,2>> min_marginals();
             std::tuple<thrust::device_vector<float>, thrust::device_vector<float>> min_marginals_cuda();
 
             size_t nr_variables() const { return nr_vars_; }

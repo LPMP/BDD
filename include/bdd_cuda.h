@@ -14,9 +14,9 @@ namespace LPMP {
             bdd_cuda(bdd_cuda&&);
             bdd_cuda& operator=(bdd_cuda&&);
             ~bdd_cuda();
-            void set_cost(const double c, const size_t var);
+            //void set_cost(const double c, const size_t var);
             template<typename ITERATOR>
-                void set_costs(ITERATOR cost_begin, ITERATOR cost_end);
+                void update_costs(ITERATOR cost_lo_begin, ITERATOR cost_lo_end, ITERATOR cost_hi_begin, ITERATOR cost_hi_end);
             double lower_bound();
             two_dim_variable_array<std::array<double,2>> min_marginals();
             void iteration();
@@ -31,7 +31,7 @@ namespace LPMP {
         bdd_cuda::bdd_cuda(BDD::bdd_collection& bdd_col, ITERATOR cost_begin, ITERATOR cost_end)
         : bdd_cuda(bdd_col)
         {
-            set_costs(cost_begin, cost_end);
+            update_costs(cost_begin, cost_begin, cost_begin, cost_end);
         }
 
 };

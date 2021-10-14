@@ -93,7 +93,7 @@ namespace LPMP {
             std::random_device rd;
             std::mt19937 gen(rd());
 
-            for(size_t round=0; round<100; ++round)
+            for(size_t round=0; round<10000; ++round)
             {
                 cur_delta = cur_delta*delta_growth_rate;
                 std::cout << "[incremental primal rounding] round " << round << ", cost delta " << cur_delta << "\n";
@@ -172,14 +172,15 @@ namespace LPMP {
                             }
                             return s;
                         }();
+                        const double r = dis(gen);
                         if(mm_sum[0] < mm_sum[1])
                         {
                             cost_lo_updates[i] = 0.0;
-                            cost_hi_updates[i] = cur_delta;
+                            cost_hi_updates[i] = std::abs(r)*cur_delta;
                         }
                         else
                         {
-                            cost_lo_updates[i] = cur_delta;
+                            cost_lo_updates[i] = std::abs(r)*cur_delta;
                             cost_hi_updates[i] = 0.0;
                         }
                     }
