@@ -65,9 +65,10 @@ namespace LPMP {
 
     // Need to have explicit instantiation in the base.
     template void bdd_cuda::update_costs(double*, double*, double*, double*);
-    template void bdd_cuda::update_costs(float*, float*, float*, float*);
     template void bdd_cuda::update_costs(std::vector<double>::iterator, std::vector<double>::iterator, std::vector<double>::iterator, std::vector<double>::iterator);
     template void bdd_cuda::update_costs(std::vector<double>::const_iterator, std::vector<double>::const_iterator, std::vector<double>::const_iterator, std::vector<double>::const_iterator);
+
+    template void bdd_cuda::update_costs(float*, float*, float*, float*);
     template void bdd_cuda::update_costs(std::vector<float>::iterator, std::vector<float>::iterator, std::vector<float>::iterator, std::vector<float>::iterator);
     template void bdd_cuda::update_costs(std::vector<float>::const_iterator, std::vector<float>::const_iterator, std::vector<float>::const_iterator, std::vector<float>::const_iterator);
 

@@ -4,6 +4,9 @@
 #include <array>
 #include <vector>
 #include <limits>
+#include <chrono>
+#include <iostream>
+#include <iomanip>
 #include "two_dimensional_variable_array.hxx"
 
 namespace LPMP {
@@ -83,6 +86,8 @@ namespace LPMP {
             assert(init_delta > 0.0);
             assert(delta_growth_rate >= 1.0);
 
+            const auto start_time = std::chrono::steady_clock::now();
+
             if(init_delta == std::numeric_limits<double>::infinity())
                 init_delta = compute_initial_delta(s.min_marginals());
 
@@ -90,13 +95,16 @@ namespace LPMP {
 
             double cur_delta = 1.0/delta_growth_rate * init_delta;
 
-            std::random_device rd;
-            std::mt19937 gen(rd());
+            //std::random_device rd;
+            //std::mt19937 gen(rd);
+            std::default_random_engine gen{static_cast<long unsigned int>(0)}; // deterministic seed for repeatable experiments
 
             for(size_t round=0; round<10000; ++round)
             {
                 cur_delta = cur_delta*delta_growth_rate;
-                std::cout << "[incremental primal rounding] round " << round << ", cost delta " << cur_delta << "\n";
+                const auto time = std::chrono::steady_clock::now();
+                const double time_elapsed = (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000;
+                std::cout << "[incremental primal rounding] round " << round << ", cost delta " << cur_delta << ", time elapsed = " << time_elapsed << "\n";
 
                 const auto mms = s.min_marginals();
                 const auto mm_types = compute_mm_types(mms);
@@ -106,11 +114,14 @@ namespace LPMP {
                 const size_t nr_inconsistent_mms = std::count(mm_types.begin(), mm_types.end(), mm_type::inconsistent);
                 assert(nr_one_mms + nr_zero_mms + nr_equal_mms + nr_inconsistent_mms == mms.size());
 
+                const int old_precision = std::cout.precision();
+                std::cout << std::setprecision(2);
                 std::cout << "[incremental primal rounding] " <<
                     "#one min-marg diffs = " << nr_one_mms << " % " << double(100*nr_one_mms)/double(mms.size()) << ", " <<  
                     "#zero min-marg diffs = " << nr_zero_mms << " % " << double(100*nr_zero_mms)/double(mms.size()) << ", " << 
                     "#equal min-marg diffs = " << nr_equal_mms << " % " << double(100*nr_equal_mms)/double(mms.size()) << ", " << 
                     "#inconsistent min-marg diffs = " << nr_inconsistent_mms << " % " << double(100*nr_inconsistent_mms)/double(mms.size()) << "\n";
+                std::cout << std::setprecision(old_precision);
                 
                 std::uniform_real_distribution<> dis(-cur_delta, cur_delta);
 
@@ -151,13 +162,13 @@ namespace LPMP {
                         assert(-cur_delta <= r && r <= cur_delta);
                         if(r < 0.0)
                         {
-                            cost_lo_updates[i] = cur_delta * (-r);
+                            cost_lo_updates[i] = std::abs(r)*cur_delta;
                             cost_hi_updates[i] = 0.0;
                         }
                         else
                         {
-                            cost_hi_updates[i] = cur_delta * r;
                             cost_lo_updates[i] = 0.0;
+                            cost_hi_updates[i] = std::abs(r)*cur_delta;
                         }
                     }
                     else
