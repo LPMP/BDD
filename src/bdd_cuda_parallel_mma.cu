@@ -142,7 +142,8 @@ namespace LPMP {
     void bdd_cuda_parallel_mma::forward_iteration(const float omega)
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
-        assert(backward_state_valid_); //For the first iteration need to have costs from terminal. 
+        if(!backward_state_valid_)
+            backward_run(false); //For the first iteration need to have costs from terminal. 
         
         // Set costs from root to INF and of root nodes to itself to 0:
         thrust::fill(cost_from_root_.begin(), cost_from_root_.end(), CUDART_INF_F_HOST);
@@ -217,7 +218,7 @@ namespace LPMP {
         for (int layer_idx = start_index + start_offset; layer_idx < cur_num_bdd_nodes + start_offset; layer_idx += num_threads) 
         {
             const int cur_primal_idx = primal_variable_index[layer_idx];
-            if (cur_primal_idx < 0)
+            if (cur_primal_idx == INT_MAX)
                 continue; // terminal node.
 
             const float cur_mm_diff_hi_lo = mm_hi[layer_idx] - mm_lo[layer_idx];

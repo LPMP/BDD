@@ -109,7 +109,7 @@ namespace LPMP {
                 }
                 else
                 {
-                    primal_variable_index.push_back(-1);
+                    primal_variable_index.push_back(INT_MAX);
                     const int terminal_indicator = cur_instr.is_topsink() ? TOP_SINK_INDICATOR_CUDA: BOT_SINK_INDICATOR_CUDA;
                     lo_bdd_node_index.push_back(terminal_indicator);
                     hi_bdd_node_index.push_back(terminal_indicator);
@@ -126,7 +126,6 @@ namespace LPMP {
         bdd_index_ = thrust::device_vector<int>(bdd_index.begin(), bdd_index.end());
         lo_bdd_node_index_ = thrust::device_vector<int>(lo_bdd_node_index.begin(), lo_bdd_node_index.end());
         hi_bdd_node_index_ = thrust::device_vector<int>(hi_bdd_node_index.begin(), hi_bdd_node_index.end());
-        assert(nr_vars_ == *thrust::max_element(primal_variable_index_.begin(), primal_variable_index_.end()) + 1);
         thrust::device_vector<int> bdd_hop_dist_dev(bdd_hop_dist_root.begin(), bdd_hop_dist_root.end());
         thrust::device_vector<int> bdd_depth_dev(bdd_depth.begin(), bdd_depth.end());
         return {bdd_hop_dist_dev, bdd_depth_dev};
@@ -339,7 +338,7 @@ namespace LPMP {
         __host__ __device__ void operator()(const thrust::tuple<int, float&> t) const
         {
             const int cur_var_index = thrust::get<0>(t);
-            if (cur_var_index < 0)
+            if (cur_var_index == INT_MAX)
                 return; // terminal node.
             float& arc_cost = thrust::get<1>(t);
             if (isinf(arc_cost)) // Dont modify the cost going to bot sink.
@@ -630,14 +629,16 @@ namespace LPMP {
 
         two_dim_variable_array<std::array<double,2>> min_margs(num_bdds_per_var);
 
-        int idx_1d = nr_bdds_; // skip terminal nodes.
+        for (int i = 0; i < nr_bdds_; ++i)
+            assert(h_mm_primal_index[h_mm_primal_index.size() - 1 - i] == INT_MAX);
+        int idx_1d = 0;
         for(int var = 0; var < nr_vars_; ++var)
         {
             assert(num_bdds_per_var[var] > 0);
             for(int bdd_idx = 0; bdd_idx < num_bdds_per_var[var]; ++bdd_idx, ++idx_1d)
             {
-                assert(idx_1d < h_mm_primal_index.size() && idx_1d < h_mm_0.size() && idx_1d < h_mm_1.size());
-                assert(h_mm_primal_index[idx_1d] >= 0); // Should ignore terminal nodes.
+                assert(idx_1d < h_mm_primal_index.size() - nr_bdds_ && idx_1d < h_mm_0.size() - nr_bdds_ && idx_1d < h_mm_1.size() - nr_bdds_);
+                assert(h_mm_primal_index[idx_1d] < INT_MAX); // Should ignore terminal nodes.
                 std::array<double,2> mm = {h_mm_0[idx_1d], h_mm_1[idx_1d]};
                 min_margs(var, bdd_idx) = mm;
             }

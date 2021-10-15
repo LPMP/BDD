@@ -62,14 +62,6 @@ int main(int argc, char** argv)
 
         const double lb = bcb.lower_bound();
         test(lb == -2); 
-
-        const auto mm = bcb.min_marginals();
-        test(mm.size() == 1);
-        test(mm[0].size() == 3);
-
-        test(mm(0, 0) == std::array<double,2>{-1.0, -2.0});
-        test(mm(0, 1) == std::array<double,2>{-2.0, -1.0});
-        test(mm(0, 2) == std::array<double,2>{-2.0, -1.0});
     }
 
     {
@@ -87,17 +79,6 @@ int main(int argc, char** argv)
         const double lb = bcb.lower_bound();
         test(lb == 1 + 0); 
 
-        const auto mm = bcb.min_marginals();
-        test(mm.size() == 2);
-        test(mm[0].size() == 3);
-        test(mm[1].size() == 3);
-
-        test(mm(0, 0) == std::array<double,2>{1.0,2.0});
-        test(mm(0, 1) == std::array<double,2>{1.0,1.0});
-        test(mm(0, 2) == std::array<double,2>{1.0,1.0});
-        test(mm(1, 0) == std::array<double,2>{1.0,0.0});
-        test(mm(1, 1) == std::array<double,2>{0.0,1.0});
-        test(mm(1, 2) == std::array<double,2>{3.0,0.0});
     }
 
     {
