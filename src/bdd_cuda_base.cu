@@ -65,10 +65,10 @@ namespace LPMP {
         // Initialize data per BDD node: 
         hi_cost_ = thrust::device_vector<float>(nr_bdd_nodes_, 0.0);
         lo_cost_ = thrust::device_vector<float>(nr_bdd_nodes_, 0.0);
-        cost_from_root_ = thrust::device_vector<float>(nr_bdd_nodes_, CUDART_INF_F_HOST);
-        cost_from_terminal_ = thrust::device_vector<float>(nr_bdd_nodes_, CUDART_INF_F_HOST);
-        hi_path_cost_ = thrust::device_vector<float>(nr_bdd_nodes_, CUDART_INF_F_HOST);
-        lo_path_cost_ = thrust::device_vector<float>(nr_bdd_nodes_, 0.0f);
+        cost_from_root_ = thrust::device_vector<float>(nr_bdd_nodes_);
+        cost_from_terminal_ = thrust::device_vector<float>(nr_bdd_nodes_);
+        hi_path_cost_ = thrust::device_vector<float>(nr_bdd_nodes_);
+        lo_path_cost_ = thrust::device_vector<float>(nr_bdd_nodes_);
     }
 
     std::tuple<thrust::device_vector<int>, thrust::device_vector<int>> bdd_cuda_base::populate_bdd_nodes(const BDD::bdd_collection& bdd_col)
@@ -167,29 +167,6 @@ namespace LPMP {
         thrust::copy(dev_cum_nr_bdd_nodes_per_hop_dist.begin(), dev_cum_nr_bdd_nodes_per_hop_dist.end(), cum_nr_bdd_nodes_per_hop_dist_.begin());
     }
 
-    struct set_cost_to_botsink_func {
-        int* lo_bdd_node_index;
-        int* hi_bdd_node_index;
-        __device__ void operator()(const thrust::tuple<int, float&, float&> t) const
-        {
-            const int bdd_node_idx = thrust::get<0>(t);
-            const int next_lo_node = lo_bdd_node_index[bdd_node_idx];
-            if (next_lo_node < 0) // is a terminal node itself.
-                return;
-            if(next_lo_node == BOT_SINK_INDICATOR_CUDA)
-            {
-                float& lo_cost = thrust::get<1>(t);
-                lo_cost = CUDART_INF_F;
-            }
-            const int next_hi_node = hi_bdd_node_index[bdd_node_idx];
-            if(next_hi_node == BOT_SINK_INDICATOR_CUDA)
-            {
-                float& hi_cost = thrust::get<2>(t);
-                hi_cost = CUDART_INF_F;
-            }
-        }
-    };
-
     void bdd_cuda_base::set_special_nodes_indices(const thrust::device_vector<int>& bdd_hop_dist_dev)
     {
         MEASURE_FUNCTION_EXECUTION_TIME
@@ -212,12 +189,14 @@ namespace LPMP {
                                             not_equal_to({thrust::raw_pointer_cast(lo_bdd_node_index_.data()), TOP_SINK_INDICATOR_CUDA}));
         top_sink_indices_.resize(std::distance(top_sink_indices_.begin(), last_top_sink));
 
-        // Set hi_cost_ and lo_cost_ to infinity for all arcs to bot_sinks
-        auto first = thrust::make_zip_iterator(thrust::make_tuple(thrust::make_counting_iterator<int>(0), lo_cost_.begin(), hi_cost_.begin()));
-        auto last = thrust::make_zip_iterator(thrust::make_tuple(thrust::make_counting_iterator<int>(0) + lo_cost_.size(), lo_cost_.end(), hi_cost_.end()));
+        // Set costs of top sinks to itself to 0:
+        thrust::scatter(thrust::make_constant_iterator<float>(0.0), thrust::make_constant_iterator<float>(0.0) + top_sink_indices_.size(),
+                        top_sink_indices_.begin(), cost_from_terminal_.begin());
 
-        set_cost_to_botsink_func func({thrust::raw_pointer_cast(lo_bdd_node_index_.data()), thrust::raw_pointer_cast(lo_bdd_node_index_.data())});
-        thrust::for_each(first, last, func);
+        // Set costs of bot sinks to itself to infinity:
+        thrust::scatter(thrust::make_constant_iterator<float>(CUDART_INF_F_HOST), thrust::make_constant_iterator<float>(CUDART_INF_F_HOST) + bot_sink_indices_.size(),
+                        bot_sink_indices_.begin(), cost_from_terminal_.begin());
+
     }
 
     // Removes redundant information in hi_costs, primal_index, bdd_index as it is duplicated across
@@ -312,8 +291,6 @@ namespace LPMP {
             if(cur_var_index != var_index)
                 return;
             float& arc_cost = thrust::get<1>(t);
-            if (isinf(arc_cost)) // Dont modify the cost going to bot sink.
-                return;
             arc_cost += cost;
         }
     };
@@ -341,9 +318,6 @@ namespace LPMP {
             if (cur_var_index == INT_MAX)
                 return; // terminal node.
             float& arc_cost = thrust::get<1>(t);
-            if (isinf(arc_cost)) // Dont modify the cost going to bot sink.
-                return;
-
             const int count = var_counts[cur_var_index];
             assert(count > 0);
             arc_cost += primal_costs[cur_var_index] / count;
@@ -418,11 +392,10 @@ namespace LPMP {
         if (forward_state_valid_)
             return;
 
+        thrust::fill(cost_from_root_.begin(), cost_from_root_.end(), CUDART_INF_F_HOST);
         // Set costs of root nodes to 0:
-        thrust::scatter(thrust::make_constant_iterator<float>(0.0), 
-                        thrust::make_constant_iterator<float>(0.0) + root_indices_.size(),
-                        root_indices_.begin(),
-                        cost_from_root_.begin());
+        thrust::scatter(thrust::make_constant_iterator<float>(0.0), thrust::make_constant_iterator<float>(0.0) + root_indices_.size(),
+                        root_indices_.begin(), cost_from_root_.begin());
 
         const int num_steps = cum_nr_bdd_nodes_per_hop_dist_.size() - 1;
         int num_nodes_processed = 0;
@@ -441,11 +414,6 @@ namespace LPMP {
             num_nodes_processed += cur_num_bdd_nodes;
         }
         forward_state_valid_ = true;
-        // Set costs of bot sinks to infinity:
-        // thrust::scatter(thrust::make_constant_iterator<float>(CUDART_INF_F), 
-        //                 thrust::make_constant_iterator<float>(CUDART_INF_F) + bot_sink_indices_.size(),
-        //                 bot_sink_indices_.begin(), 
-        //                 cost_from_root_.begin());
     }
 
     __global__ void backward_step_with_path_costs(const int cur_num_bdd_nodes, const int start_offset,
@@ -469,23 +437,12 @@ namespace LPMP {
             const int hi_node = hi_bdd_node_index[bdd_idx];
 
             const int layer_idx = bdd_node_to_layer_map[bdd_idx];
-            const float cur_hi_cost = hi_cost[layer_idx];
-            const float cur_lo_cost = lo_cost[layer_idx];
-            float cur_hi_cost_from_terminal = CUDART_INF_F;
-            float cur_lo_cost_from_terminal = CUDART_INF_F;
+            float cur_hi_cost_from_terminal = cost_from_terminal[hi_node] + hi_cost[layer_idx];
+            float cur_lo_cost_from_terminal = cost_from_terminal[lo_node] + lo_cost[layer_idx];
             const float cur_cost_from_root = cost_from_root[bdd_idx];
 
-            if (!isinf(cur_hi_cost))
-            {
-                cur_hi_cost_from_terminal = cost_from_terminal[hi_node] + cur_hi_cost;
-                hi_path_cost[bdd_idx] = cur_cost_from_root + cur_hi_cost_from_terminal;
-            }
-
-            if (!isinf(cur_lo_cost))
-            {
-                cur_lo_cost_from_terminal = cost_from_terminal[lo_node] + cur_lo_cost;
-                lo_path_cost[bdd_idx] = cur_cost_from_root + cur_lo_cost_from_terminal;
-            }
+            hi_path_cost[bdd_idx] = cur_cost_from_root + cur_hi_cost_from_terminal;
+            lo_path_cost[bdd_idx] = cur_cost_from_root + cur_lo_cost_from_terminal;
             cost_from_terminal[bdd_idx] = min(cur_hi_cost_from_terminal, cur_lo_cost_from_terminal);
         }
     }
@@ -519,12 +476,6 @@ namespace LPMP {
         if ((backward_state_valid_ && path_costs_valid_) ||
             (!compute_path_costs && backward_state_valid_))
             return;
-
-        // Set costs of top sinks to 0:
-        thrust::scatter(thrust::make_constant_iterator<float>(0.0), 
-                        thrust::make_constant_iterator<float>(0.0) + top_sink_indices_.size(),
-                        top_sink_indices_.begin(), 
-                        cost_from_terminal_.begin());
 
         for (int s = cum_nr_bdd_nodes_per_hop_dist_.size() - 2; s >= 0; s--)
         {

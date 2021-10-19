@@ -367,10 +367,6 @@ namespace LPMP {
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         assert(forward_state_valid_); 
-        
-        // Set costs of top sinks to 0:
-        thrust::scatter(thrust::make_constant_iterator<float>(0.0), thrust::make_constant_iterator<float>(0.0) + top_sink_indices_.size(),
-                        top_sink_indices_.begin(), cost_from_terminal_.begin());
 
         // Set delta_out to zero:
         thrust::fill(delta_lo_out_.begin(), delta_lo_out_.end(), 0.0f);
