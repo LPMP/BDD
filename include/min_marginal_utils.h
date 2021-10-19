@@ -86,4 +86,15 @@ namespace LPMP {
         return perm_mms;
     }
 
+    template<typename REAL>
+    void print_mm(const two_dim_variable_array<std::array<REAL,2>>& min_marginals)
+    {
+        std::cout<<"Min-marginals: "<<"\n";
+        for(size_t var=0; var<min_marginals.size(); ++var)
+        {
+            const size_t nr_bdds = min_marginals.size(var);
+            for(size_t i=0; i<nr_bdds; ++i)
+                std::cout<<"var: "<<var<<", bdd: "<<i<<", mm_hi: "<<min_marginals(var,i)[1]<<", mm_lo: "<<min_marginals(var,i)[0]<<"\n";
+        }
+    }
 }

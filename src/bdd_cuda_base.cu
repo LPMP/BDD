@@ -176,12 +176,14 @@ namespace LPMP {
         auto last_root = thrust::remove_if(root_indices_.begin(), root_indices_.end(),
                                             not_equal_to({thrust::raw_pointer_cast(bdd_hop_dist_dev.data()), 0})); //TODO: This needs to be changed when multiple BDDs are in one row.
         root_indices_.resize(std::distance(root_indices_.begin(), last_root));
+        assert(root_indices_.size() == nr_bdds_);
 
         bot_sink_indices_ = thrust::device_vector<int>(nr_bdd_nodes_);
         thrust::sequence(bot_sink_indices_.begin(), bot_sink_indices_.end());
         auto last_bot_sink = thrust::remove_if(bot_sink_indices_.begin(), bot_sink_indices_.end(),
                                             not_equal_to({thrust::raw_pointer_cast(lo_bdd_node_index_.data()), BOT_SINK_INDICATOR_CUDA}));
         bot_sink_indices_.resize(std::distance(bot_sink_indices_.begin(), last_bot_sink));
+        assert(bot_sink_indices_.size() == nr_bdds_);
 
         top_sink_indices_ = thrust::device_vector<int>(nr_bdd_nodes_);
         thrust::sequence(top_sink_indices_.begin(), top_sink_indices_.end());
@@ -193,10 +195,11 @@ namespace LPMP {
         thrust::scatter(thrust::make_constant_iterator<float>(0.0), thrust::make_constant_iterator<float>(0.0) + top_sink_indices_.size(),
                         top_sink_indices_.begin(), cost_from_terminal_.begin());
 
-        // Set costs of bot sinks to itself to infinity:
+        // Set costs of bot sinks to top to infinity:
         thrust::scatter(thrust::make_constant_iterator<float>(CUDART_INF_F_HOST), thrust::make_constant_iterator<float>(CUDART_INF_F_HOST) + bot_sink_indices_.size(),
                         bot_sink_indices_.begin(), cost_from_terminal_.begin());
 
+        assert(top_sink_indices_.size() == nr_bdds_);
     }
 
     // Removes redundant information in hi_costs, primal_index, bdd_index as it is duplicated across
@@ -209,10 +212,10 @@ namespace LPMP {
         thrust::device_vector<int> primal_index_compressed(primal_variable_index_.size()); 
         thrust::device_vector<int> bdd_index_compressed(bdd_index_.size());
         
-        auto first_key = thrust::make_zip_iterator(thrust::make_tuple(bdd_index_.begin(), primal_variable_index_.begin()));
-        auto last_key = thrust::make_zip_iterator(thrust::make_tuple(bdd_index_.end(), primal_variable_index_.end()));
+        auto first_key = thrust::make_zip_iterator(thrust::make_tuple(bdd_hop_dist_dev.begin(), bdd_index_.begin(), primal_variable_index_.begin()));
+        auto last_key = thrust::make_zip_iterator(thrust::make_tuple(bdd_hop_dist_dev.end(), bdd_index_.end(), primal_variable_index_.end()));
 
-        auto first_out_key = thrust::make_zip_iterator(thrust::make_tuple(bdd_index_compressed.begin(), primal_index_compressed.begin()));
+        auto first_out_key = thrust::make_zip_iterator(thrust::make_tuple(thrust::make_discard_iterator(), bdd_index_compressed.begin(), primal_index_compressed.begin()));
 
         // Compute number of BDD nodes in each layer:
         bdd_layer_width_ = thrust::device_vector<int>(nr_bdd_nodes_);
@@ -401,7 +404,7 @@ namespace LPMP {
         int num_nodes_processed = 0;
         for (int s = 0; s < num_steps; s++)
         {
-            int threadCount = 256;
+            int threadCount = NUM_THREADS;
             int cur_num_bdd_nodes = cum_nr_bdd_nodes_per_hop_dist_[s] - num_nodes_processed;
             int blockCount = ceil(cur_num_bdd_nodes / (float) threadCount);
             forward_step<<<blockCount, threadCount>>>(cur_num_bdd_nodes, num_nodes_processed,
