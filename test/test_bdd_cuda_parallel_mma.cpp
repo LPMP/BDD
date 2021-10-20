@@ -207,6 +207,7 @@ void test_problem(const char* instance, const double expected_lb)
     for(size_t iter=0; iter<100; ++iter)
         solver.iteration();
     
+    std::cout<<"Final lower bound: "<<solver.lower_bound()<<", Expected: "<<expected_lb<<"\n";
     test(std::abs(solver.lower_bound() - expected_lb) <= 1e-6);
 }
 

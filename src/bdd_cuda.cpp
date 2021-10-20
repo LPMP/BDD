@@ -120,7 +120,9 @@ namespace LPMP {
 #endif
     }
 
+#ifdef WITH_CUDA
     template class bdd_cuda<float>;
     template class bdd_cuda<double>;
+#endif
 
 }

@@ -130,7 +130,7 @@ namespace LPMP {
 
             // Select the leader thread for each BDD layer which will write out to delta_out
             // Leader thread would be the thread operating on first BDD node of each layer.
-            bool is_leader = start_index == 0 || layer_idx != bdd_node_to_layer_map[bdd_node_idx - 1];
+            bool is_leader = bdd_node_idx == 0 || layer_idx != bdd_node_to_layer_map[bdd_node_idx - 1];
             if  (is_leader)
             {
                 lo_cost_out[layer_idx] = cur_lo_cost;
@@ -166,9 +166,9 @@ namespace LPMP {
             // 1. Compute min-marginals using costs from root, costs from terminal and hi_costs, lo_costs for current hop
             min_marginals_from_directional_costs(s);
 
-            int threadCount = 256;
-            int cur_num_bdd_nodes = this->cum_nr_bdd_nodes_per_hop_dist_[s] - num_nodes_processed;
-            int blockCount = ceil(cur_num_bdd_nodes / (REAL) threadCount);
+            const int threadCount = NUM_THREADS;
+            const int cur_num_bdd_nodes = this->cum_nr_bdd_nodes_per_hop_dist_[s] - num_nodes_processed;
+            const int blockCount = ceil(cur_num_bdd_nodes / (float) threadCount);
 
             // 2. Subtract from hi_costs, update costs from root and add to delta_hi_out, delta_lo_out.
             forward_step_with_solve<<<blockCount, threadCount>>>(cur_num_bdd_nodes, num_nodes_processed, omega,
@@ -274,9 +274,9 @@ namespace LPMP {
             // 1. Compute min-marginals using costs from root, costs from terminal and hi_costs, lo_costs for current hop
             min_marginals_from_directional_costs(s);
 
-            int threadCount = 256;
-            int cur_num_layers = this->cum_nr_layers_per_hop_dist_[s] - num_layers_processed;
-            int blockCount = ceil(cur_num_layers / (REAL) threadCount);
+            const int threadCount = NUM_THREADS;
+            const int cur_num_layers = this->cum_nr_layers_per_hop_dist_[s] - num_layers_processed;
+            const int blockCount = ceil(cur_num_layers / (float) threadCount);
 
             // 2. Subtract from hi_costs, update costs from root and add to delta_hi_out, delta_lo_out.
             forward_step_with_solve_layer<<<blockCount, threadCount>>>(cur_num_layers, num_layers_processed, omega,
@@ -339,26 +339,17 @@ namespace LPMP {
             const REAL cur_mm_diff_hi_lo = mm_hi[layer_idx] - mm_lo[layer_idx];
             const int cur_primal_idx = primal_variable_index[layer_idx];
 
-            const REAL cur_hi_cost = hi_cost_in[layer_idx] + omega * min(-cur_mm_diff_hi_lo, 0.0f) + delta_hi_in[cur_primal_idx] / num_bdds_per_var[cur_primal_idx];
-            const REAL cur_lo_cost = lo_cost_in[layer_idx] + omega * min(cur_mm_diff_hi_lo, 0.0f) + delta_lo_in[cur_primal_idx] / num_bdds_per_var[cur_primal_idx];
+            const REAL cur_hi_cost = hi_cost_in[layer_idx] + (omega * min(-cur_mm_diff_hi_lo, 0.0f)) + (delta_hi_in[cur_primal_idx] / num_bdds_per_var[cur_primal_idx]);
+            const REAL cur_lo_cost = lo_cost_in[layer_idx] + (omega * min(cur_mm_diff_hi_lo, 0.0f)) + (delta_lo_in[cur_primal_idx] / num_bdds_per_var[cur_primal_idx]);
 
             const int next_hi_node = hi_bdd_node_index[bdd_node_idx];
 
-            // TODO: Skip following check by setting all arcs going to bot sink to infty.
-            const bool is_lo_bot_sink = lo_bdd_node_index[next_lo_node] == BOT_SINK_INDICATOR_CUDA;
-            const bool is_hi_bot_sink = lo_bdd_node_index[next_hi_node] == BOT_SINK_INDICATOR_CUDA;
-
             // Update costs from terminal:
-            if(!is_lo_bot_sink && !is_hi_bot_sink)
-                cost_from_terminal[bdd_node_idx] = min(cur_hi_cost + cost_from_terminal[next_hi_node], cur_lo_cost + cost_from_terminal[next_lo_node]);
-            else if(!is_hi_bot_sink)
-                cost_from_terminal[bdd_node_idx] = cur_hi_cost + cost_from_terminal[next_hi_node];
-            else if(!is_lo_bot_sink)
-                cost_from_terminal[bdd_node_idx] = cur_lo_cost + cost_from_terminal[next_lo_node];
+            cost_from_terminal[bdd_node_idx] = min(cur_hi_cost + cost_from_terminal[next_hi_node], cur_lo_cost + cost_from_terminal[next_lo_node]);
 
             // Select the leader thread for each BDD layer which will write out to delta_out
             // Leader thread would be the thread operating on first BDD node of each layer.
-            bool is_leader = start_index == 0 || layer_idx != bdd_node_to_layer_map[bdd_node_idx - 1]; //TODO: Try warp shuffle.
+            bool is_leader = bdd_node_idx == 0 || layer_idx != bdd_node_to_layer_map[bdd_node_idx - 1]; //TODO: Try warp shuffle.
             if  (is_leader)
             {
                 lo_cost_out[layer_idx] = cur_lo_cost;
@@ -377,10 +368,6 @@ namespace LPMP {
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         assert(this->forward_state_valid_); 
-        
-        // Set costs of top sinks to 0:
-        thrust::scatter(thrust::make_constant_iterator<REAL>(0.0), thrust::make_constant_iterator<REAL>(0.0) + this->top_sink_indices_.size(),
-                        this->top_sink_indices_.begin(), this->cost_from_terminal_.begin());
 
         // Set delta_out to zero:
         thrust::fill(delta_lo_out_.begin(), delta_lo_out_.end(), 0.0f);
@@ -391,13 +378,13 @@ namespace LPMP {
             // 1. Compute min-marginals using costs from root, costs from terminal and hi_costs, lo_costs for current hop
             min_marginals_from_directional_costs(s);
 
-            int threadCount = 256;
+            const int threadCount = NUM_THREADS;
             int start_offset = 0;
             if(s > 0)
                 start_offset = this->cum_nr_bdd_nodes_per_hop_dist_[s - 1];
 
-            int cur_num_bdd_nodes = this->cum_nr_bdd_nodes_per_hop_dist_[s] - start_offset;
-            int blockCount = ceil(cur_num_bdd_nodes / (REAL) threadCount);
+            const int cur_num_bdd_nodes = this->cum_nr_bdd_nodes_per_hop_dist_[s] - start_offset;
+            const int blockCount = ceil(cur_num_bdd_nodes / (REAL) threadCount);
 
             // 2. Subtract from hi_costs, update costs from terminal and add to delta_hi_out, delta_lo_out.
             backward_step_with_solve<<<blockCount, threadCount>>>(cur_num_bdd_nodes, start_offset, omega,

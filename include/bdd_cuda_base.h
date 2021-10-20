@@ -8,6 +8,7 @@
 
 #define TOP_SINK_INDICATOR_CUDA -1
 #define BOT_SINK_INDICATOR_CUDA -2
+#define NUM_THREADS 256
 
 namespace LPMP {
 
@@ -31,7 +32,7 @@ namespace LPMP {
             size_t nr_variables() const { return nr_vars_; }
             size_t nr_bdds() const { return nr_bdds_; }
 
-            void forward_run(); //TODO: Should these functions be called from outside?
+            void forward_run();
             void backward_run(bool compute_path_costs = true);
 
         protected:
@@ -67,9 +68,9 @@ namespace LPMP {
             thrust::device_vector<int> root_indices_, bot_sink_indices_, top_sink_indices_;
             bool forward_state_valid_ = false; // true means cost from root valid.
             bool backward_state_valid_ = false; // true means cost from terminal are valid.
-            bool path_costs_valid_ = false; // here valid means lo, hi path paths are valid.
 
         private:
+            bool path_costs_valid_ = false; // here valid means lo, hi path paths are valid.
             void initialize(const BDD::bdd_collection& bdd_col);
             std::tuple<thrust::device_vector<int>, thrust::device_vector<int>> populate_bdd_nodes(const BDD::bdd_collection& bdd_col);
             void reorder_bdd_nodes(thrust::device_vector<int>& bdd_hop_dist_root, thrust::device_vector<int>& bdd_depth);

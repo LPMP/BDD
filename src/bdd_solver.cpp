@@ -436,6 +436,8 @@ namespace LPMP {
             {
                 std::cout << options.ilp.get_var_name(var_perm[i]) << ", position = " << var_perm[i] << ", c = " << options.ilp.objective(var_perm[i]) << ", min marginal = " << mm_diffs[i] << "\n";
             }
+
+            print_mm(mms);
         }
     }
 
