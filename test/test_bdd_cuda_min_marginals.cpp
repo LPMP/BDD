@@ -19,7 +19,7 @@ int main(int argc, char** argv)
     const ILP_input ilp = ILP_parser::parse_string(two_simplex_problem);
     bdd_preprocessor pre(ilp);
 
-    bdd_cuda_base solver(pre.get_bdd_collection());
+    bdd_cuda_base<float> solver(pre.get_bdd_collection());
     solver.update_costs(ilp.objective().begin(), ilp.objective().begin(), ilp.objective().begin(), ilp.objective().end());
 
     const auto mms = solver.min_marginals();

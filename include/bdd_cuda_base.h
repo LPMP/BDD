@@ -11,6 +11,7 @@
 
 namespace LPMP {
 
+    template<typename REAL>
     class bdd_cuda_base {
         public:
             bdd_cuda_base(const BDD::bdd_collection& bdd_col);
@@ -35,12 +36,12 @@ namespace LPMP {
 
         protected:
 
-            void update_costs(const thrust::device_vector<float>& update_vec);
+            void update_costs(const thrust::device_vector<REAL>& update_vec);
 
             // Following arrays have one entry per layer of BDD in each BDD:
             thrust::device_vector<int> primal_variable_index_;
             thrust::device_vector<int> bdd_index_;
-            thrust::device_vector<float> hi_cost_, lo_cost_;
+            thrust::device_vector<REAL> hi_cost_, lo_cost_;
 
             thrust::device_vector<int> layer_offsets_; // Similar to CSR representation where row is layer index, and column is bdd node.
             std::vector<int> cum_nr_layers_per_hop_dist_; // Similar to cum_nr_bdd_nodes_per_hop_dist_ but for BDD layer instead of BDD node.
@@ -48,12 +49,12 @@ namespace LPMP {
             // Following arrays are allocated for each bdd node:
             thrust::device_vector<int> lo_bdd_node_index_; // = 0
             thrust::device_vector<int> hi_bdd_node_index_; // = 1
-            thrust::device_vector<float> cost_from_root_;
-            thrust::device_vector<float> cost_from_terminal_;
+            thrust::device_vector<REAL> cost_from_root_;
+            thrust::device_vector<REAL> cost_from_terminal_;
             thrust::device_vector<int> bdd_node_to_layer_map_;
 
-            thrust::device_vector<float> hi_path_cost_; // Cost of shortest path through BDD node where hi arc is used.
-            thrust::device_vector<float> lo_path_cost_; // Cost of shortest path through BDD node where lo arc is used. 
+            thrust::device_vector<REAL> hi_path_cost_; // Cost of shortest path through BDD node where hi arc is used.
+            thrust::device_vector<REAL> lo_path_cost_; // Cost of shortest path through BDD node where lo arc is used. 
 
             // Other information:
             size_t nr_vars_, nr_bdds_;

@@ -324,7 +324,12 @@ namespace LPMP {
         }
         else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::mma_cuda)
         {
-            solver = std::move(bdd_cuda(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
+            if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::single_prec)
+                solver = std::move(bdd_cuda<float>(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
+            else if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::double_prec)
+                solver = std::move(bdd_cuda<double>(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
+            else
+                throw std::runtime_error("only float and double precision allowed");
             std::cout << "constructed CUDA based mma solver\n"; 
         }
         else
@@ -487,7 +492,8 @@ namespace LPMP {
                             || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_vec<double>>
                             || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma<float>>
                             || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma<double>>
-                            || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda>
+                            || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<float>>
+                            || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<double>>
                             )
                     return incremental_mm_agreement_rounding_iter(s, options.incremental_initial_perturbation, options.incremental_growth_rate);
                     else

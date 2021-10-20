@@ -52,7 +52,7 @@ int main(int argc, char** argv)
         ILP_input ilp = ILP_parser::parse_string(one_simplex_problem);
         bdd_preprocessor bdd_pre(ilp);
         bdd_collection bdd_col = bdd_pre.get_bdd_collection();
-        bdd_cuda_base bcb(bdd_col);
+        bdd_cuda_base<float> bcb(bdd_col);
 
         test(bcb.nr_variables() == 3);
         test(bcb.nr_bdds() == 1);
@@ -68,7 +68,7 @@ int main(int argc, char** argv)
         ILP_input ilp = ILP_parser::parse_string(two_simplex_problem);
         bdd_preprocessor bdd_pre(ilp);
         bdd_collection bdd_col = bdd_pre.get_bdd_collection();
-        bdd_cuda_base bcb(bdd_col);
+        bdd_cuda_base<float> bcb(bdd_col);
 
         test(bcb.nr_variables() == 6);
         test(bcb.nr_bdds() == 2);
@@ -85,7 +85,7 @@ int main(int argc, char** argv)
         ILP_input ilp = ILP_parser::parse_string(two_simplex_diff_size_problem);
         bdd_preprocessor bdd_pre(ilp);
         bdd_collection bdd_col = bdd_pre.get_bdd_collection();
-        bdd_cuda_base bcb(bdd_col);
+        bdd_cuda_base<float> bcb(bdd_col);
 
         test(bcb.nr_variables() == 6);
         test(bcb.nr_bdds() == 2);
@@ -102,7 +102,7 @@ int main(int argc, char** argv)
         ILP_input ilp = ILP_parser::parse_string(matching_3x3);
         bdd_preprocessor bdd_pre(ilp);
         bdd_collection bdd_col = bdd_pre.get_bdd_collection();
-        bdd_cuda_base bcb(bdd_col);
+        bdd_cuda_base<float> bcb(bdd_col);
 
         test(bcb.nr_variables() == 9);
         test(bcb.nr_bdds() == 6);

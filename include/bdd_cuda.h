@@ -6,6 +6,7 @@
 
 namespace LPMP {
 
+    template<typename REAL>
     class bdd_cuda {
         public:
             bdd_cuda(BDD::bdd_collection& bdd_col);
@@ -27,8 +28,9 @@ namespace LPMP {
             std::unique_ptr<impl> pimpl;
     };
 
-    template<typename ITERATOR>
-        bdd_cuda::bdd_cuda(BDD::bdd_collection& bdd_col, ITERATOR cost_begin, ITERATOR cost_end)
+    template<typename REAL>
+        template<typename ITERATOR>
+        bdd_cuda<REAL>::bdd_cuda(BDD::bdd_collection& bdd_col, ITERATOR cost_begin, ITERATOR cost_end)
         : bdd_cuda(bdd_col)
         {
             update_costs(cost_begin, cost_begin, cost_begin, cost_end);

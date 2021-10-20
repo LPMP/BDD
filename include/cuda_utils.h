@@ -44,6 +44,18 @@ __device__ __forceinline__ float atomicMin(float *address, float val)
     return __int_as_float(ret);
 }
 
+__device__ __forceinline__ double atomicMin(double *address, double val)
+{
+    unsigned long long int ret = __double_as_longlong(*address);
+    while(val < __longlong_as_double(ret))
+    {
+        unsigned long long int old = ret;
+        if((ret = atomicCAS((unsigned long long int *)address, old, __double_as_longlong(val))) == old)
+            break;
+    }
+    return __longlong_as_double(ret);
+}
+
 // float atomicMax
 __device__ __forceinline__ float atomicMax(float *address, float val)
 {
@@ -57,6 +69,27 @@ __device__ __forceinline__ float atomicMax(float *address, float val)
     return __int_as_float(ret);
 }
 
+// copied from https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html
+#if !defined(__CUDA_ARCH__) || __CUDA_ARCH__ >= 600
+#else
+__device__ double atomicAdd(double* address, double val)
+{
+    unsigned long long int* address_as_ull =
+        (unsigned long long int*)address;
+    unsigned long long int old = *address_as_ull, assumed;
+
+    do {
+        assumed = old;
+        old = atomicCAS(address_as_ull, assumed,
+                __double_as_longlong(val +
+                    __longlong_as_double(assumed)));
+
+        // Note: uses integer comparison to avoid hang in case of NaN (since NaN != NaN)
+    } while (assumed != old);
+
+    return __longlong_as_double(old);
+}
+#endif
 
 inline int get_cuda_device()
 {   

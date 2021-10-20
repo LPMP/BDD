@@ -199,7 +199,7 @@ void test_problem(const char* instance, const double expected_lb)
     ILP_input ilp = ILP_parser::parse_string(instance);
     bdd_preprocessor bdd_pre(ilp);
     bdd_collection bdd_col = bdd_pre.get_bdd_collection();
-    bdd_cuda_parallel_mma solver(bdd_col);
+    bdd_cuda_parallel_mma<float> solver(bdd_col);
 
     for(size_t i=0; i<solver.nr_variables(); ++i)
         solver.set_cost(ilp.objective()[i], i);

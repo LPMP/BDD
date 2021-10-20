@@ -16,8 +16,7 @@ namespace LPMP {
         one,
         equal,
         inconsistent
-    };
-        
+    }; 
 
     template<typename REAL>
     std::vector<mm_type> compute_mm_types(const two_dim_variable_array<std::array<REAL,2>>& mms)

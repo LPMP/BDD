@@ -28,7 +28,8 @@ namespace LPMP {
         }
     };
 
-    bdd_cuda_base::bdd_cuda_base(const BDD::bdd_collection& bdd_col)
+    template<typename REAL>
+    bdd_cuda_base<REAL>::bdd_cuda_base(const BDD::bdd_collection& bdd_col)
     {
         initialize(bdd_col);
         thrust::device_vector<int> bdd_hop_dist_root, bdd_depth;
@@ -39,7 +40,8 @@ namespace LPMP {
         print_num_bdd_nodes_per_hop();
     }
 
-    void bdd_cuda_base::initialize(const BDD::bdd_collection& bdd_col)
+    template<typename REAL>
+    void bdd_cuda_base<REAL>::initialize(const BDD::bdd_collection& bdd_col)
     {
         MEASURE_FUNCTION_EXECUTION_TIME
         nr_vars_ = [&]() {
@@ -63,15 +65,16 @@ namespace LPMP {
         num_bdds_per_var_ = thrust::device_vector<int>(primal_variable_counts.begin(), primal_variable_counts.end());
         num_vars_per_bdd_ = thrust::device_vector<int>(num_vars_per_bdd.begin(), num_vars_per_bdd.end());
         // Initialize data per BDD node: 
-        hi_cost_ = thrust::device_vector<float>(nr_bdd_nodes_, 0.0);
-        lo_cost_ = thrust::device_vector<float>(nr_bdd_nodes_, 0.0);
-        cost_from_root_ = thrust::device_vector<float>(nr_bdd_nodes_, CUDART_INF_F_HOST);
-        cost_from_terminal_ = thrust::device_vector<float>(nr_bdd_nodes_, CUDART_INF_F_HOST);
-        hi_path_cost_ = thrust::device_vector<float>(nr_bdd_nodes_, CUDART_INF_F_HOST);
-        lo_path_cost_ = thrust::device_vector<float>(nr_bdd_nodes_, 0.0f);
+        hi_cost_ = thrust::device_vector<REAL>(nr_bdd_nodes_, 0.0);
+        lo_cost_ = thrust::device_vector<REAL>(nr_bdd_nodes_, 0.0);
+        cost_from_root_ = thrust::device_vector<REAL>(nr_bdd_nodes_, CUDART_INF_F_HOST);
+        cost_from_terminal_ = thrust::device_vector<REAL>(nr_bdd_nodes_, CUDART_INF_F_HOST);
+        hi_path_cost_ = thrust::device_vector<REAL>(nr_bdd_nodes_, CUDART_INF_F_HOST);
+        lo_path_cost_ = thrust::device_vector<REAL>(nr_bdd_nodes_, 0.0f);
     }
 
-    std::tuple<thrust::device_vector<int>, thrust::device_vector<int>> bdd_cuda_base::populate_bdd_nodes(const BDD::bdd_collection& bdd_col)
+    template<typename REAL>
+    std::tuple<thrust::device_vector<int>, thrust::device_vector<int>> bdd_cuda_base<REAL>::populate_bdd_nodes(const BDD::bdd_collection& bdd_col)
     {
         MEASURE_FUNCTION_EXECUTION_TIME
         std::vector<int> primal_variable_index;
@@ -131,7 +134,8 @@ namespace LPMP {
         return {bdd_hop_dist_dev, bdd_depth_dev};
     }
 
-    void bdd_cuda_base::reorder_bdd_nodes(thrust::device_vector<int>& bdd_hop_dist_dev, thrust::device_vector<int>& bdd_depth_dev)
+    template<typename REAL>
+    void bdd_cuda_base<REAL>::reorder_bdd_nodes(thrust::device_vector<int>& bdd_hop_dist_dev, thrust::device_vector<int>& bdd_depth_dev)
     {
         MEASURE_FUNCTION_EXECUTION_TIME
         // Make nodes with same hop distance, BDD depth and bdd index contiguous in that order.
@@ -170,7 +174,8 @@ namespace LPMP {
     struct set_cost_to_botsink_func {
         int* lo_bdd_node_index;
         int* hi_bdd_node_index;
-        __device__ void operator()(const thrust::tuple<int, float&, float&> t) const
+        template<typename REAL>
+        __device__ void operator()(const thrust::tuple<int, REAL&, REAL&> t) const
         {
             const int bdd_node_idx = thrust::get<0>(t);
             const int next_lo_node = lo_bdd_node_index[bdd_node_idx];
@@ -178,19 +183,20 @@ namespace LPMP {
                 return;
             if(next_lo_node == BOT_SINK_INDICATOR_CUDA)
             {
-                float& lo_cost = thrust::get<1>(t);
+                REAL& lo_cost = thrust::get<1>(t);
                 lo_cost = CUDART_INF_F;
             }
             const int next_hi_node = hi_bdd_node_index[bdd_node_idx];
             if(next_hi_node == BOT_SINK_INDICATOR_CUDA)
             {
-                float& hi_cost = thrust::get<2>(t);
+                REAL& hi_cost = thrust::get<2>(t);
                 hi_cost = CUDART_INF_F;
             }
         }
     };
 
-    void bdd_cuda_base::set_special_nodes_indices(const thrust::device_vector<int>& bdd_hop_dist_dev)
+    template<typename REAL>
+    void bdd_cuda_base<REAL>::set_special_nodes_indices(const thrust::device_vector<int>& bdd_hop_dist_dev)
     {
         MEASURE_FUNCTION_EXECUTION_TIME
         // Set indices of BDD nodes which are root, top, bot sinks.
@@ -222,11 +228,12 @@ namespace LPMP {
 
     // Removes redundant information in hi_costs, primal_index, bdd_index as it is duplicated across
     // multiple BDD nodes for each layer.
-    void bdd_cuda_base::compress_bdd_nodes_to_layer(const thrust::device_vector<int>& bdd_hop_dist_dev)
+    template<typename REAL>
+    void bdd_cuda_base<REAL>::compress_bdd_nodes_to_layer(const thrust::device_vector<int>& bdd_hop_dist_dev)
     {
         MEASURE_FUNCTION_EXECUTION_TIME
-        thrust::device_vector<float> hi_cost_compressed(hi_cost_.size());
-        thrust::device_vector<float> lo_cost_compressed(lo_cost_.size());
+        thrust::device_vector<REAL> hi_cost_compressed(hi_cost_.size());
+        thrust::device_vector<REAL> lo_cost_compressed(lo_cost_.size());
         thrust::device_vector<int> primal_index_compressed(primal_variable_index_.size()); 
         thrust::device_vector<int> bdd_index_compressed(bdd_index_.size());
         
@@ -279,21 +286,24 @@ namespace LPMP {
         thrust::copy(dev_cum_nr_layers_per_hop_dist.begin(), dev_cum_nr_layers_per_hop_dist.end(), cum_nr_layers_per_hop_dist_.begin());
     }
 
-    void bdd_cuda_base::flush_forward_states()
+    template<typename REAL>
+    void bdd_cuda_base<REAL>::flush_forward_states()
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         forward_state_valid_ = false;
         path_costs_valid_ = false;
     }
 
-    void bdd_cuda_base::flush_backward_states()
+    template<typename REAL>
+    void bdd_cuda_base<REAL>::flush_backward_states()
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         backward_state_valid_ = false;
         path_costs_valid_ = false;
     }
 
-    void bdd_cuda_base::print_num_bdd_nodes_per_hop()
+    template<typename REAL>
+    void bdd_cuda_base<REAL>::print_num_bdd_nodes_per_hop()
     {
         int prev = 0;
         for(int i = 0; i < cum_nr_bdd_nodes_per_hop_dist_.size(); i++)
@@ -303,26 +313,28 @@ namespace LPMP {
         }
     }
 
+    template<typename REAL>
     struct set_var_cost_func {
         int var_index;
-        float cost;
-        __device__ void operator()(const thrust::tuple<int, float&> t) const
+        REAL cost;
+        __device__ void operator()(const thrust::tuple<int, REAL&> t) const
         {
             const int cur_var_index = thrust::get<0>(t);
             if(cur_var_index != var_index)
                 return;
-            float& arc_cost = thrust::get<1>(t);
+            REAL& arc_cost = thrust::get<1>(t);
             if (isinf(arc_cost)) // Dont modify the cost going to bot sink.
                 return;
             arc_cost += cost;
         }
     };
 
-    void bdd_cuda_base::set_cost(const double c, const size_t var)
+    template<typename REAL>
+    void bdd_cuda_base<REAL>::set_cost(const double c, const size_t var)
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         assert(var < nr_vars_);
-        set_var_cost_func func({(int) var, (float) c / num_bdds_per_var_[var]});
+        set_var_cost_func<REAL> func({(int) var, (REAL) c / num_bdds_per_var_[var]});
 
         auto first = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.begin(), hi_cost_.begin()));
         auto last = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.end(), hi_cost_.end()));
@@ -332,15 +344,16 @@ namespace LPMP {
         flush_backward_states();
     }
 
+    template<typename REAL>
     struct set_vars_costs_func {
         int* var_counts;
-        float* primal_costs;
-        __host__ __device__ void operator()(const thrust::tuple<int, float&> t) const
+        REAL* primal_costs;
+        __host__ __device__ void operator()(const thrust::tuple<int, REAL&> t) const
         {
             const int cur_var_index = thrust::get<0>(t);
             if (cur_var_index == INT_MAX)
                 return; // terminal node.
-            float& arc_cost = thrust::get<1>(t);
+            REAL& arc_cost = thrust::get<1>(t);
             if (isinf(arc_cost)) // Dont modify the cost going to bot sink.
                 return;
 
@@ -350,17 +363,18 @@ namespace LPMP {
         }
     };
 
+    template<typename REAL>
     template<typename COST_ITERATOR> 
-    void bdd_cuda_base::update_costs(COST_ITERATOR cost_lo_begin, COST_ITERATOR cost_lo_end, COST_ITERATOR cost_hi_begin, COST_ITERATOR cost_hi_end)
+    void bdd_cuda_base<REAL>::update_costs(COST_ITERATOR cost_lo_begin, COST_ITERATOR cost_lo_end, COST_ITERATOR cost_hi_begin, COST_ITERATOR cost_hi_end)
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME;
         assert(std::distance(cost_lo_begin, cost_lo_end) == nr_variables() || std::distance(cost_lo_begin, cost_lo_end) == 0);
         assert(std::distance(cost_hi_begin, cost_hi_end) == nr_variables() || std::distance(cost_hi_begin, cost_hi_end) == 0);
 
         auto populate_costs = [&](auto cost_begin, auto cost_end, auto base_cost_begin, auto base_cost_end) {
-            thrust::device_vector<float> primal_costs(cost_begin, cost_end);
+            thrust::device_vector<REAL> primal_costs(cost_begin, cost_end);
 
-            set_vars_costs_func func({thrust::raw_pointer_cast(num_bdds_per_var_.data()), 
+            set_vars_costs_func<REAL> func({thrust::raw_pointer_cast(num_bdds_per_var_.data()), 
                     thrust::raw_pointer_cast(primal_costs.data())});
             auto first = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.begin(), base_cost_begin));
             auto last = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.end(), base_cost_end));
@@ -377,21 +391,29 @@ namespace LPMP {
         flush_backward_states();
     }
 
-    template void bdd_cuda_base::update_costs(double*, double*, double*, double*);
-    template void bdd_cuda_base::update_costs(float*, float*, float*, float*);
-    template void bdd_cuda_base::update_costs(std::vector<double>::iterator, std::vector<double>::iterator, std::vector<double>::iterator, std::vector<double>::iterator);
-    template void bdd_cuda_base::update_costs(std::vector<double>::const_iterator, std::vector<double>::const_iterator, std::vector<double>::const_iterator, std::vector<double>::const_iterator);
-    template void bdd_cuda_base::update_costs(std::vector<float>::iterator, std::vector<float>::iterator, std::vector<float>::iterator, std::vector<float>::iterator);
-    template void bdd_cuda_base::update_costs(std::vector<float>::const_iterator, std::vector<float>::const_iterator, std::vector<float>::const_iterator, std::vector<float>::const_iterator);
+    template void bdd_cuda_base<float>::update_costs(double*, double*, double*, double*);
+    template void bdd_cuda_base<float>::update_costs(float*, float*, float*, float*);
+    template void bdd_cuda_base<float>::update_costs(std::vector<double>::iterator, std::vector<double>::iterator, std::vector<double>::iterator, std::vector<double>::iterator);
+    template void bdd_cuda_base<float>::update_costs(std::vector<double>::const_iterator, std::vector<double>::const_iterator, std::vector<double>::const_iterator, std::vector<double>::const_iterator);
+    template void bdd_cuda_base<float>::update_costs(std::vector<float>::iterator, std::vector<float>::iterator, std::vector<float>::iterator, std::vector<float>::iterator);
+    template void bdd_cuda_base<float>::update_costs(std::vector<float>::const_iterator, std::vector<float>::const_iterator, std::vector<float>::const_iterator, std::vector<float>::const_iterator);
+
+    template void bdd_cuda_base<double>::update_costs(double*, double*, double*, double*);
+    template void bdd_cuda_base<double>::update_costs(float*, float*, float*, float*);
+    template void bdd_cuda_base<double>::update_costs(std::vector<double>::iterator, std::vector<double>::iterator, std::vector<double>::iterator, std::vector<double>::iterator);
+    template void bdd_cuda_base<double>::update_costs(std::vector<double>::const_iterator, std::vector<double>::const_iterator, std::vector<double>::const_iterator, std::vector<double>::const_iterator);
+    template void bdd_cuda_base<double>::update_costs(std::vector<float>::iterator, std::vector<float>::iterator, std::vector<float>::iterator, std::vector<float>::iterator);
+    template void bdd_cuda_base<double>::update_costs(std::vector<float>::const_iterator, std::vector<float>::const_iterator, std::vector<float>::const_iterator, std::vector<float>::const_iterator);
 
 
+    template<typename REAL>
     __global__ void forward_step(const int cur_num_bdd_nodes, const int start_offset,
                                 const int* const __restrict__ lo_bdd_node_index, 
                                 const int* const __restrict__ hi_bdd_node_index, 
                                 const int* const __restrict__ bdd_node_to_layer_map, 
-                                const float* const __restrict__ lo_cost,
-                                const float* const __restrict__ hi_cost,
-                                float* __restrict__ cost_from_root)
+                                const REAL* const __restrict__ lo_cost,
+                                const REAL* const __restrict__ hi_cost,
+                                REAL* __restrict__ cost_from_root)
     {
         const int start_index = blockIdx.x * blockDim.x + threadIdx.x;
         const int num_threads = blockDim.x * gridDim.x;
@@ -403,7 +425,7 @@ namespace LPMP {
 
             const int next_hi_node = hi_bdd_node_index[bdd_idx];
 
-            const float cur_c_from_root = cost_from_root[bdd_idx];
+            const REAL cur_c_from_root = cost_from_root[bdd_idx];
             const int layer_idx = bdd_node_to_layer_map[bdd_idx];
 
             // Uncoalesced writes:
@@ -412,15 +434,16 @@ namespace LPMP {
         }
     }
 
-    void bdd_cuda_base::forward_run()
+    template<typename REAL>
+    void bdd_cuda_base<REAL>::forward_run()
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         if (forward_state_valid_)
             return;
 
         // Set costs of root nodes to 0:
-        thrust::scatter(thrust::make_constant_iterator<float>(0.0), 
-                        thrust::make_constant_iterator<float>(0.0) + root_indices_.size(),
+        thrust::scatter(thrust::make_constant_iterator<REAL>(0.0), 
+                        thrust::make_constant_iterator<REAL>(0.0) + root_indices_.size(),
                         root_indices_.begin(),
                         cost_from_root_.begin());
 
@@ -430,7 +453,7 @@ namespace LPMP {
         {
             int threadCount = 256;
             int cur_num_bdd_nodes = cum_nr_bdd_nodes_per_hop_dist_[s] - num_nodes_processed;
-            int blockCount = ceil(cur_num_bdd_nodes / (float) threadCount);
+            int blockCount = ceil(cur_num_bdd_nodes / (REAL) threadCount);
             forward_step<<<blockCount, threadCount>>>(cur_num_bdd_nodes, num_nodes_processed,
                                                     thrust::raw_pointer_cast(lo_bdd_node_index_.data()),
                                                     thrust::raw_pointer_cast(hi_bdd_node_index_.data()),
@@ -448,16 +471,17 @@ namespace LPMP {
         //                 cost_from_root_.begin());
     }
 
+    template<typename REAL>
     __global__ void backward_step_with_path_costs(const int cur_num_bdd_nodes, const int start_offset,
                                                 const int* const __restrict__ lo_bdd_node_index, 
                                                 const int* const __restrict__ hi_bdd_node_index, 
                                                 const int* const __restrict__ bdd_node_to_layer_map, 
-                                                const float* const __restrict__ lo_cost,
-                                                const float* const __restrict__ hi_cost,
-                                                const float* __restrict__ cost_from_root, 
-                                                float* __restrict__ cost_from_terminal,
-                                                float* __restrict__ lo_path_cost, 
-                                                float* __restrict__ hi_path_cost)
+                                                const REAL* const __restrict__ lo_cost,
+                                                const REAL* const __restrict__ hi_cost,
+                                                const REAL* __restrict__ cost_from_root, 
+                                                REAL* __restrict__ cost_from_terminal,
+                                                REAL* __restrict__ lo_path_cost, 
+                                                REAL* __restrict__ hi_path_cost)
     {
         const int start_index = blockIdx.x * blockDim.x + threadIdx.x;
         const int num_threads = blockDim.x * gridDim.x;
@@ -469,11 +493,11 @@ namespace LPMP {
             const int hi_node = hi_bdd_node_index[bdd_idx];
 
             const int layer_idx = bdd_node_to_layer_map[bdd_idx];
-            const float cur_hi_cost = hi_cost[layer_idx];
-            const float cur_lo_cost = lo_cost[layer_idx];
-            float cur_hi_cost_from_terminal = CUDART_INF_F;
-            float cur_lo_cost_from_terminal = CUDART_INF_F;
-            const float cur_cost_from_root = cost_from_root[bdd_idx];
+            const REAL cur_hi_cost = hi_cost[layer_idx];
+            const REAL cur_lo_cost = lo_cost[layer_idx];
+            REAL cur_hi_cost_from_terminal = CUDART_INF_F;
+            REAL cur_lo_cost_from_terminal = CUDART_INF_F;
+            const REAL cur_cost_from_root = cost_from_root[bdd_idx];
 
             if (!isinf(cur_hi_cost))
             {
@@ -490,13 +514,14 @@ namespace LPMP {
         }
     }
 
+    template<typename REAL>
     __global__ void backward_step(const int cur_num_bdd_nodes, const int start_offset,
                                     const int* const __restrict__ lo_bdd_node_index, 
                                     const int* const __restrict__ hi_bdd_node_index, 
                                     const int* const __restrict__ bdd_node_to_layer_map, 
-                                    const float* const __restrict__ lo_cost,
-                                    const float* const __restrict__ hi_cost,
-                                    float* __restrict__ cost_from_terminal)
+                                    const REAL* const __restrict__ lo_cost,
+                                    const REAL* const __restrict__ hi_cost,
+                                    REAL* __restrict__ cost_from_terminal)
     {
         const int start_index = blockIdx.x * blockDim.x + threadIdx.x;
         const int num_threads = blockDim.x * gridDim.x;
@@ -513,7 +538,8 @@ namespace LPMP {
     }
 
 
-    void bdd_cuda_base::backward_run(bool compute_path_costs)
+    template<typename REAL>
+    void bdd_cuda_base<REAL>::backward_run(bool compute_path_costs)
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         if ((backward_state_valid_ && path_costs_valid_) ||
@@ -521,8 +547,8 @@ namespace LPMP {
             return;
 
         // Set costs of top sinks to 0:
-        thrust::scatter(thrust::make_constant_iterator<float>(0.0), 
-                        thrust::make_constant_iterator<float>(0.0) + top_sink_indices_.size(),
+        thrust::scatter(thrust::make_constant_iterator<REAL>(0.0), 
+                        thrust::make_constant_iterator<REAL>(0.0) + top_sink_indices_.size(),
                         top_sink_indices_.begin(), 
                         cost_from_terminal_.begin());
 
@@ -534,7 +560,7 @@ namespace LPMP {
                 start_offset = cum_nr_bdd_nodes_per_hop_dist_[s - 1];
 
             int cur_num_bdd_nodes = cum_nr_bdd_nodes_per_hop_dist_[s] - start_offset;
-            int blockCount = ceil(cur_num_bdd_nodes / (float) threadCount);
+            int blockCount = ceil(cur_num_bdd_nodes / (REAL) threadCount);
             if (compute_path_costs)
                 backward_step_with_path_costs<<<blockCount, threadCount>>>(cur_num_bdd_nodes, start_offset,
                                                         thrust::raw_pointer_cast(lo_bdd_node_index_.data()),
@@ -563,15 +589,17 @@ namespace LPMP {
 
     struct tuple_min
     {
+        template<typename REAL>
         __host__ __device__
-        thrust::tuple<float, float> operator()(const thrust::tuple<float, float>& t0, const thrust::tuple<float, float>& t1)
+        thrust::tuple<REAL, REAL> operator()(const thrust::tuple<REAL, REAL>& t0, const thrust::tuple<REAL, REAL>& t1)
         {
             return thrust::make_tuple(min(thrust::get<0>(t0), thrust::get<0>(t1)), min(thrust::get<1>(t0), thrust::get<1>(t1)));
         }
     };
 
     // Computes min-marginals by reduction.
-    std::tuple<thrust::device_vector<float>, thrust::device_vector<float>> bdd_cuda_base::min_marginals_cuda()
+    template<typename REAL>
+    std::tuple<thrust::device_vector<float>, thrust::device_vector<float>> bdd_cuda_base<REAL>::min_marginals_cuda()
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         forward_run();
@@ -592,7 +620,8 @@ namespace LPMP {
         return {min_marginals_lo, min_marginals_hi};
     }
 
-    two_dim_variable_array<std::array<double,2>> bdd_cuda_base::min_marginals()
+    template<typename REAL>
+    two_dim_variable_array<std::array<double,2>> bdd_cuda_base<REAL>::min_marginals()
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         thrust::device_vector<float> mm_0, mm_1;
@@ -647,14 +676,16 @@ namespace LPMP {
         return min_margs;
     }
 
-    void bdd_cuda_base::update_costs(const thrust::device_vector<float>& update_vec)
+    template<typename REAL>
+    void bdd_cuda_base<REAL>::update_costs(const thrust::device_vector<REAL>& update_vec)
     {
-        thrust::transform(hi_cost_.begin(), hi_cost_.end(), update_vec.begin(), hi_cost_.begin(), thrust::plus<float>());
+        thrust::transform(hi_cost_.begin(), hi_cost_.end(), update_vec.begin(), hi_cost_.begin(), thrust::plus<REAL>());
         flush_forward_states();
         flush_backward_states();
     }
 
-    double bdd_cuda_base::lower_bound()
+    template<typename REAL>
+    double bdd_cuda_base<REAL>::lower_bound()
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         backward_run(false);
@@ -662,4 +693,8 @@ namespace LPMP {
 
         return thrust::reduce(cost_from_terminal_.begin(), cost_from_terminal_.begin() + nr_bdds_, 0.0);
     }
+
+    template class bdd_cuda_base<float>;
+    template class bdd_cuda_base<double>;
+
 }
