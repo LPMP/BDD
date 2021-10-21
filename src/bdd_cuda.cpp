@@ -1,6 +1,7 @@
 #include "bdd_cuda.h"
 #ifdef WITH_CUDA
 #include "bdd_cuda_parallel_mma.h"
+#include "incremental_mm_agreement_rounding_cuda.h"
 #endif
 #include "time_measure_util.h"
 
@@ -120,9 +121,15 @@ namespace LPMP {
 #endif
     }
 
+    template<typename REAL>
+    std::vector<char> bdd_cuda<REAL>::incremental_mm_agreement_rounding(const double init_delta, const double delta_growth_rate)
+    {
 #ifdef WITH_CUDA
+        return incremental_mm_agreement_rounding_cuda(pimpl->pmma, init_delta, delta_growth_rate);
+#endif
+    }
+
     template class bdd_cuda<float>;
     template class bdd_cuda<double>;
-#endif
 
 }

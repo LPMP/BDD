@@ -15,6 +15,7 @@ namespace LPMP {
     template<typename REAL>
     class bdd_cuda_base {
         public:
+            using value_type = REAL;
             bdd_cuda_base(const BDD::bdd_collection& bdd_col);
 
             void flush_forward_states();
@@ -24,10 +25,11 @@ namespace LPMP {
 
             template<typename COST_ITERATOR>
                 void update_costs(COST_ITERATOR cost_lo_begin, COST_ITERATOR cost_lo_end, COST_ITERATOR cost_hi_begin, COST_ITERATOR cost_hi_end);
+            void update_costs(const thrust::device_vector<REAL>& cost_delta_0, const thrust::device_vector<REAL>& cost_delta_1);
             void set_cost(const double c, const size_t var);
             
             two_dim_variable_array<std::array<double,2>> min_marginals();
-            std::tuple<thrust::device_vector<float>, thrust::device_vector<float>> min_marginals_cuda();
+            std::tuple<thrust::device_vector<REAL>, thrust::device_vector<REAL>> min_marginals_cuda();
 
             size_t nr_variables() const { return nr_vars_; }
             size_t nr_bdds() const { return nr_bdds_; }
@@ -35,6 +37,7 @@ namespace LPMP {
             void forward_run();
             void backward_run(bool compute_path_costs = true);
 
+            const thrust::device_vector<int>& primal_variable_index() const { return primal_variable_index_; }
         protected:
 
             void update_costs(const thrust::device_vector<REAL>& update_vec);

@@ -11,72 +11,74 @@
 
 namespace LPMP {
 
-    enum class mm_type {
-        zero,
-        one,
-        equal,
-        inconsistent
-    }; 
+    namespace {
+        enum class mm_type {
+            zero,
+            one,
+            equal,
+            inconsistent
+        }; 
 
-    template<typename REAL>
-    std::vector<mm_type> compute_mm_types(const two_dim_variable_array<std::array<REAL,2>>& mms)
-    {
-        std::vector<mm_type> diffs(mms.size(),mm_type::inconsistent);
+        template<typename REAL>
+            std::vector<mm_type> compute_mm_types(const two_dim_variable_array<std::array<REAL,2>>& mms)
+            {
+                std::vector<mm_type> diffs(mms.size(),mm_type::inconsistent);
 
-        for(size_t i=0; i<mms.size(); ++i)
-        {
-            assert(mms.size(i) > 0);
+                for(size_t i=0; i<mms.size(); ++i)
+                {
+                    assert(mms.size(i) > 0);
 
-            const bool all_equal = [&]() { // all min-marginals are equal
-                for(size_t j=0; j<mms.size(i); ++j)
-                    if(std::abs(mms(i,j)[1] - mms(i,j)[0]) > 1e-6)
-                        return false;
-                return true;
-            }();
+                    const bool all_equal = [&]() { // all min-marginals are equal
+                        for(size_t j=0; j<mms.size(i); ++j)
+                            if(std::abs(mms(i,j)[1] - mms(i,j)[0]) > 1e-6)
+                                return false;
+                        return true;
+                    }();
 
-            const bool all_one = [&]() { // min-marginals indicate one variable should be taken
-                for(size_t j=0; j<mms.size(i); ++j)
-                    if(!(mms(i,j)[1] + 1e-6 < mms(i,j)[0]))
-                        return false;
-                return true;
-            }();
+                    const bool all_one = [&]() { // min-marginals indicate one variable should be taken
+                        for(size_t j=0; j<mms.size(i); ++j)
+                            if(!(mms(i,j)[1] + 1e-6 < mms(i,j)[0]))
+                                return false;
+                        return true;
+                    }();
 
-            const bool all_zero = [&]() { // min-marginals indicate zero variable should be taken
-                for(size_t j=0; j<mms.size(i); ++j)
-                    if(!(mms(i,j)[0] + 1e-6 < mms(i,j)[1]))
-                        return false;
-                return true;
-            }();
+                    const bool all_zero = [&]() { // min-marginals indicate zero variable should be taken
+                        for(size_t j=0; j<mms.size(i); ++j)
+                            if(!(mms(i,j)[0] + 1e-6 < mms(i,j)[1]))
+                                return false;
+                        return true;
+                    }();
 
-            assert(int(all_zero) + int(all_one) + int(all_equal) <= 1);
+                    assert(int(all_zero) + int(all_one) + int(all_equal) <= 1);
 
-            if(all_zero)
-                diffs[i] = mm_type::zero;
-            else if(all_one)
-                diffs[i] = mm_type::one;
-            else if(all_equal)
-                diffs[i] = mm_type::equal;
-            else
-                diffs[i] = mm_type::inconsistent;
-        }
+                    if(all_zero)
+                        diffs[i] = mm_type::zero;
+                    else if(all_one)
+                        diffs[i] = mm_type::one;
+                    else if(all_equal)
+                        diffs[i] = mm_type::equal;
+                    else
+                        diffs[i] = mm_type::inconsistent;
+                }
 
-        return diffs;
-    }
+                return diffs;
+            }
 
-    template<typename REAL>
-    double compute_initial_delta(const two_dim_variable_array<std::array<REAL,2>>& mms)
-    {
-        std::vector<double> mm_diffs(mms.size());;
-        for(size_t i=0; i<mms.size(); ++i)
-        {
-            for(size_t j=0; j<mms.size(i); ++j)
-                mm_diffs[i] += mms(i,j)[1] - mms(i,j)[0];
-            mm_diffs[i] = std::abs(mm_diffs[i])/double(mms.size(i));
-        }
-        nth_element(mm_diffs.begin(), mm_diffs.begin() + 0.1*mms.size(), mm_diffs.end());
-        const double computed_delta = mm_diffs[0.1*mms.size()];
-        std::cout << "[incremental primal rounding] computed delta = " << computed_delta << "\n";
-        return computed_delta;
+        template<typename REAL>
+            double compute_initial_delta(const two_dim_variable_array<std::array<REAL,2>>& mms)
+            {
+                std::vector<double> mm_diffs(mms.size());;
+                for(size_t i=0; i<mms.size(); ++i)
+                {
+                    for(size_t j=0; j<mms.size(i); ++j)
+                        mm_diffs[i] += mms(i,j)[1] - mms(i,j)[0];
+                    mm_diffs[i] = std::abs(mm_diffs[i])/double(mms.size(i));
+                }
+                nth_element(mm_diffs.begin(), mm_diffs.begin() + 0.1*mms.size(), mm_diffs.end());
+                const double computed_delta = mm_diffs[0.1*mms.size()];
+                std::cout << "[incremental primal rounding] computed delta = " << computed_delta << "\n";
+                return computed_delta;
+            }
     }
 
     template<typename SOLVER>
@@ -121,7 +123,7 @@ namespace LPMP {
                     "#equal min-marg diffs = " << nr_equal_mms << " % " << double(100*nr_equal_mms)/double(mms.size()) << ", " << 
                     "#inconsistent min-marg diffs = " << nr_inconsistent_mms << " % " << double(100*nr_inconsistent_mms)/double(mms.size()) << "\n";
                 std::cout << std::setprecision(old_precision);
-                
+
                 std::uniform_real_distribution<> dis(-cur_delta, cur_delta);
 
                 if(nr_one_mms + nr_zero_mms == mms.size())
@@ -182,7 +184,7 @@ namespace LPMP {
                             }
                             return s;
                         }();
-                        const double r = dis(gen);
+                        const double r = 5.0*dis(gen);
                         if(mm_sum[0] < mm_sum[1])
                         {
                             cost_lo_updates[i] = 0.0;

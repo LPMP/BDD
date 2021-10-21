@@ -22,6 +22,8 @@ namespace LPMP {
             two_dim_variable_array<std::array<double,2>> min_marginals();
             void iteration();
             void backward_run(); 
+
+            std::vector<char> incremental_mm_agreement_rounding(const double init_delta, const double delta_grwoth_rate);
         private:
 
             class impl;

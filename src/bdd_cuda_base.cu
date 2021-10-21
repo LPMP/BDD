@@ -197,11 +197,11 @@ namespace LPMP {
         top_sink_indices_.resize(std::distance(top_sink_indices_.begin(), last_top_sink));
 
         // Set costs of top sinks to itself to 0:
-        thrust::scatter(thrust::make_constant_iterator<float>(0.0), thrust::make_constant_iterator<float>(0.0) + top_sink_indices_.size(),
+        thrust::scatter(thrust::make_constant_iterator<REAL>(0.0), thrust::make_constant_iterator<REAL>(0.0) + top_sink_indices_.size(),
                         top_sink_indices_.begin(), cost_from_terminal_.begin());
 
         // Set costs of bot sinks to top to infinity:
-        thrust::scatter(thrust::make_constant_iterator<float>(CUDART_INF_F_HOST), thrust::make_constant_iterator<float>(CUDART_INF_F_HOST) + bot_sink_indices_.size(),
+        thrust::scatter(thrust::make_constant_iterator<REAL>(CUDART_INF_F_HOST), thrust::make_constant_iterator<REAL>(CUDART_INF_F_HOST) + bot_sink_indices_.size(),
                         bot_sink_indices_.begin(), cost_from_terminal_.begin());
 
         assert(top_sink_indices_.size() == nr_bdds_);
@@ -326,7 +326,7 @@ namespace LPMP {
     template<typename REAL>
     struct set_vars_costs_func {
         int* var_counts;
-        REAL* primal_costs;
+        const REAL* primal_costs;
         __host__ __device__ void operator()(const thrust::tuple<int, REAL&> t) const
         {
             const int cur_var_index = thrust::get<0>(t);
@@ -381,6 +381,30 @@ namespace LPMP {
     template void bdd_cuda_base<double>::update_costs(std::vector<float>::iterator, std::vector<float>::iterator, std::vector<float>::iterator, std::vector<float>::iterator);
     template void bdd_cuda_base<double>::update_costs(std::vector<float>::const_iterator, std::vector<float>::const_iterator, std::vector<float>::const_iterator, std::vector<float>::const_iterator);
 
+    template<typename REAL>
+    void bdd_cuda_base<REAL>::update_costs(const thrust::device_vector<REAL>& cost_delta_0, const thrust::device_vector<REAL>& cost_delta_1)
+    {
+        MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME;
+        assert(cost_delta_0.size() == 0 || cost_delta_0.size() == nr_variables());
+        assert(cost_delta_1.size() == 0 || cost_delta_1.size() == nr_variables());
+
+        auto populate_costs = [&](const thrust::device_vector<REAL>& cost_delta, auto base_cost_begin, auto base_cost_end) {
+            set_vars_costs_func<REAL> func({thrust::raw_pointer_cast(num_bdds_per_var_.data()), 
+                    thrust::raw_pointer_cast(cost_delta.data())});
+            auto first = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.begin(), base_cost_begin));
+            auto last = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.end(), base_cost_end));
+
+            thrust::for_each(first, last, func);
+        };
+
+        if(cost_delta_0.size() > 0)
+            populate_costs(cost_delta_0, lo_cost_.begin(), lo_cost_.end());
+        if(cost_delta_1.size() > 0)
+            populate_costs(cost_delta_1, hi_cost_.begin(), hi_cost_.end()); 
+
+        flush_forward_states();
+        flush_backward_states();
+    }
 
     template<typename REAL>
     __global__ void forward_step(const int cur_num_bdd_nodes, const int start_offset,
@@ -552,7 +576,7 @@ namespace LPMP {
 
     // Computes min-marginals by reduction.
     template<typename REAL>
-    std::tuple<thrust::device_vector<float>, thrust::device_vector<float>> bdd_cuda_base<REAL>::min_marginals_cuda()
+    std::tuple<thrust::device_vector<REAL>, thrust::device_vector<REAL>> bdd_cuda_base<REAL>::min_marginals_cuda()
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         forward_run();
@@ -560,8 +584,8 @@ namespace LPMP {
 
         auto first_val = thrust::make_zip_iterator(thrust::make_tuple(lo_path_cost_.begin(), hi_path_cost_.begin()));
 
-        thrust::device_vector<float> min_marginals_lo(hi_cost_.size());
-        thrust::device_vector<float> min_marginals_hi(hi_cost_.size());
+        thrust::device_vector<REAL> min_marginals_lo(hi_cost_.size());
+        thrust::device_vector<REAL> min_marginals_hi(hi_cost_.size());
         auto first_out_val = thrust::make_zip_iterator(thrust::make_tuple(min_marginals_lo.begin(), min_marginals_hi.begin()));
 
         thrust::equal_to<int> binary_pred;
@@ -577,7 +601,7 @@ namespace LPMP {
     two_dim_variable_array<std::array<double,2>> bdd_cuda_base<REAL>::min_marginals()
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
-        thrust::device_vector<float> mm_0, mm_1;
+        thrust::device_vector<REAL> mm_0, mm_1;
 
         std::tie(mm_0, mm_1) = min_marginals_cuda();
 
@@ -600,10 +624,10 @@ namespace LPMP {
         std::vector<int> h_mm_bdd_index(bdd_index_sorted.size());
         thrust::copy(bdd_index_sorted.begin(), bdd_index_sorted.end(), h_mm_bdd_index.begin());
 
-        std::vector<float> h_mm_0(mm_0.size());
+        std::vector<REAL> h_mm_0(mm_0.size());
         thrust::copy(mm_0.begin(), mm_0.end(), h_mm_0.begin());
 
-        std::vector<float> h_mm_1(mm_1.size());
+        std::vector<REAL> h_mm_1(mm_1.size());
         thrust::copy(mm_1.begin(), mm_1.end(), h_mm_1.begin());
 
         std::vector<int> h_bdd_node_to_layer_map(bdd_node_to_layer_map_.size());

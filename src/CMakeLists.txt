@@ -35,11 +35,14 @@ add_library(bdd_parallel_mma bdd_parallel_mma.cpp)
 target_link_libraries(bdd_parallel_mma LPMP-BDD) 
 
 if(WITH_CUDA)
+    add_library(incremental_mm_agreement_rounding_cuda incremental_mm_agreement_rounding_cuda.cu)
+    target_link_libraries(incremental_mm_agreement_rounding_cuda LPMP-BDD)
+
     add_library(bdd_cuda_base bdd_cuda_base.cu)
     target_link_libraries(bdd_cuda_base LPMP-BDD)
 
     add_library(bdd_cuda_parallel_mma bdd_cuda_parallel_mma.cu)
-    target_link_libraries(bdd_cuda_parallel_mma bdd_cuda_base LPMP-BDD)
+    target_link_libraries(bdd_cuda_parallel_mma bdd_cuda_base incremental_mm_agreement_rounding_cuda LPMP-BDD) 
 endif()
 
 add_library(bdd_cuda bdd_cuda.cpp)
@@ -54,7 +57,7 @@ target_link_libraries(bdd_fix LPMP-BDD)
 add_library(bdd_solver bdd_solver.cpp)
 target_link_libraries(bdd_solver bdd_mma_vec decomposition_bdd_mma bdd_parallel_mma bdd_cuda bdd_fix bdd_preprocessor ILP_parser OPB_parser bdd_storage ILP_input LPMP-BDD pthread)
 if(WITH_CUDA)
-    target_link_libraries(bdd_solver bdd_cuda_base bdd_cuda_parallel_mma)
+    target_link_libraries(bdd_solver bdd_cuda_base bdd_cuda_parallel_mma incremental_mm_agreement_rounding_cuda)
     target_compile_options(bdd_solver PRIVATE "$<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CUDA>>:--generate-line-info>")
 endif()
 
