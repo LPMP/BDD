@@ -441,6 +441,8 @@ namespace LPMP {
                                         thrust::raw_pointer_cast(this->num_bdds_per_var_.data())});
 
         thrust::for_each(first, last, func);
+        this->flush_forward_states();
+        this->flush_backward_states();
 
         thrust::fill(delta_lo_in_.begin(), delta_lo_in_.end(), 0.0f);
         thrust::fill(delta_hi_in_.begin(), delta_hi_in_.end(), 0.0f);
