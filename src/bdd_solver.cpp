@@ -2,6 +2,8 @@
 #include "ILP_parser.h"
 #include "OPB_parser.h"
 #include "min_marginal_utils.h"
+#include "incremental_mm_agreement_rounding_cuda.h"
+#include "incremental_mm_agreement_rounding.hxx"
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -494,11 +496,16 @@ namespace LPMP {
                             || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_vec<double>>
                             || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma<float>>
                             || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma<double>>
-                            || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<float>>
-                            || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<double>>
                             )
                     return incremental_mm_agreement_rounding_iter(s, options.incremental_initial_perturbation, options.incremental_growth_rate);
-                    else
+                    else if constexpr(
+                            std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<float>>
+    //                        || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<double>>
+                            )
+                    {
+                    return s.incremental_mm_agreement_rounding(options.incremental_initial_perturbation, options.incremental_growth_rate);
+                    }
+
                     {
                     throw std::runtime_error("solver not supported for incremental rounding");
                     return std::vector<char>{};
