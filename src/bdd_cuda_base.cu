@@ -44,18 +44,25 @@ namespace LPMP {
         
         std::priority_queue<BDD_group> bdd_groups;
         std::sort(bdds_to_schedule.begin(), bdds_to_schedule.end()); // Puts largest BDD at start.
+        const int max_allowed_hops = bdds_to_schedule[0].num_vars_in_bdd_;
         for (const auto &largest_bdd: bdds_to_schedule)
         {
-            if(bdd_groups.size() < max_num_groups)
+            int merged_size;
+            if (!bdd_groups.empty())
             {
-                BDD_group current_group; // create a new group with only one BDD.
+                BDD_group current_group = bdd_groups.top(); // pop the smallest group and append current bdd into it if combined size would be less than max_allowed_hops.
+                merged_size = current_group.total_num_hops_ + largest_bdd.num_vars_in_bdd_;
+            }
+            if (!bdd_groups.empty() && (merged_size < max_allowed_hops || bdd_groups.size() >= max_num_groups))
+            {
+                BDD_group current_group = bdd_groups.top();
+                bdd_groups.pop();
                 current_group.insert(largest_bdd.bdd_index_, largest_bdd.num_vars_in_bdd_);
                 bdd_groups.push(current_group);
             }
             else
             {
-                BDD_group current_group = bdd_groups.top(); // pop the smallest group and append current bdd into it.
-                bdd_groups.pop();
+                BDD_group current_group; // create a new group with only one BDD.
                 current_group.insert(largest_bdd.bdd_index_, largest_bdd.num_vars_in_bdd_);
                 bdd_groups.push(current_group);
             }
@@ -71,6 +78,7 @@ namespace LPMP {
                 bdd_group_indices[bdd_idx] = group_id;
             group_id--;
         }
+        assert(group_id == -1);
         return bdd_group_indices;
     }
 
@@ -80,7 +88,7 @@ namespace LPMP {
         MEASURE_FUNCTION_EXECUTION_TIME
         initialize(bdd_col);
         thrust::device_vector<int> bdd_node_hop_dist, bdd_node_group_idx;
-        std::tie(bdd_node_hop_dist, bdd_node_group_idx) = populate_bdd_nodes(bdd_col, 1048576 * 4);
+        std::tie(bdd_node_hop_dist, bdd_node_group_idx) = populate_bdd_nodes(bdd_col, INT_MAX);
         reorder_bdd_nodes(bdd_node_hop_dist, bdd_node_group_idx);
         compress_bdd_nodes_to_layer(bdd_node_hop_dist);
         set_terminal_nodes_costs();
