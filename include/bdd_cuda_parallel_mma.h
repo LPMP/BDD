@@ -25,6 +25,10 @@ namespace LPMP {
 
             void min_marginals_from_directional_costs(const int hop_index);
 
+            void distribute_delta();
+            void flush_mm();
+            void flush_delta_out();
+
             thrust::device_vector<REAL> delta_lo_in_, delta_hi_in_, delta_lo_out_, delta_hi_out_; // One entry in each per primal variable.
             thrust::device_vector<REAL> mm_lo_, mm_hi_, hi_cost_out_, lo_cost_out_; // One entry per BDD layer.
     };
