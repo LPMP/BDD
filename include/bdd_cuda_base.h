@@ -5,6 +5,7 @@
 #include "two_dimensional_variable_array.hxx"
 #include <cuda_runtime.h>
 #include <thrust/device_vector.h>
+#include <queue>
 
 #define TOP_SINK_INDICATOR_CUDA -1
 #define BOT_SINK_INDICATOR_CUDA -2
@@ -38,6 +39,7 @@ namespace LPMP {
         protected:
 
             void update_costs(const thrust::device_vector<REAL>& update_vec);
+            void flush_costs_from_root();
 
             // Following arrays have one entry per layer of BDD in each BDD:
             thrust::device_vector<int> primal_variable_index_;
@@ -72,13 +74,12 @@ namespace LPMP {
         private:
             bool path_costs_valid_ = false; // here valid means lo, hi path paths are valid.
             void initialize(const BDD::bdd_collection& bdd_col);
-            std::tuple<thrust::device_vector<int>, thrust::device_vector<int>> populate_bdd_nodes(const BDD::bdd_collection& bdd_col);
+            std::tuple<thrust::device_vector<int>, thrust::device_vector<int>> populate_bdd_nodes(const BDD::bdd_collection& bdd_col, const int max_num_groups);
             void reorder_bdd_nodes(thrust::device_vector<int>& bdd_hop_dist_root, thrust::device_vector<int>& bdd_depth);
             void populate_counts(const BDD::bdd_collection& bdd_col);
-            void set_special_nodes_indices(const thrust::device_vector<int>& bdd_hop_dist);
+            void set_terminal_nodes_costs();
             void compress_bdd_nodes_to_layer(const thrust::device_vector<int>& bdd_hop_dist);
             void print_num_bdd_nodes_per_hop();
 
     };
-
 }

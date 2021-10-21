@@ -78,12 +78,8 @@ namespace LPMP {
     void bdd_cuda_parallel_mma<REAL>::iteration()
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
-        thrust::fill(mm_lo_.begin(), mm_lo_.end(), CUDART_INF_F_HOST);
-        thrust::fill(mm_hi_.begin(), mm_hi_.end(), CUDART_INF_F_HOST);
         // forward_iteration_layer_based(0.5);
         forward_iteration(0.5);
-        thrust::fill(mm_lo_.begin(), mm_lo_.end(), CUDART_INF_F_HOST);
-        thrust::fill(mm_hi_.begin(), mm_hi_.end(), CUDART_INF_F_HOST);
         backward_iteration(0.5);
     }
 
@@ -151,13 +147,10 @@ namespace LPMP {
         if(!this->backward_state_valid_)
             this->backward_run(false); //For the first iteration need to have costs from terminal. 
         
-        // Set costs from root to INF and of root nodes to itself to 0:
-        thrust::fill(this->cost_from_root_.begin(), this->cost_from_root_.end(), CUDART_INF_F_HOST);
-        thrust::scatter(thrust::make_constant_iterator<REAL>(0.0), thrust::make_constant_iterator<REAL>(0.0) + this->root_indices_.size(), this->root_indices_.begin(), this->cost_from_root_.begin());
-
-        // Set delta_out to zero:
-        thrust::fill(delta_lo_out_.begin(), delta_lo_out_.end(), 0.0f);
-        thrust::fill(delta_hi_out_.begin(), delta_hi_out_.end(), 0.0f);
+        // Clear states.
+        this->flush_costs_from_root();
+        flush_delta_out();
+        flush_mm();
 
         const int num_steps = this->cum_nr_bdd_nodes_per_hop_dist_.size() - 1;
         int num_nodes_processed = 0;
@@ -259,13 +252,10 @@ namespace LPMP {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         assert(this->backward_state_valid_); //For the first iteration need to have costs from terminal. 
         
-        // Set costs from root to INF and of root nodes to itself to 0:
-        thrust::fill(this->cost_from_root_.begin(), this->cost_from_root_.end(), CUDART_INF_F_HOST);
-        thrust::scatter(thrust::make_constant_iterator<REAL>(0.0), thrust::make_constant_iterator<REAL>(0.0) + this->root_indices_.size(), this->root_indices_.begin(), this->cost_from_root_.begin());
-
-        // Set delta_out to zero:
-        thrust::fill(delta_lo_out_.begin(), delta_lo_out_.end(), 0.0f);
-        thrust::fill(delta_hi_out_.begin(), delta_hi_out_.end(), 0.0f);
+        // Clear states.
+        this->flush_costs_from_root();
+        flush_delta_out();
+        flush_mm();
 
         const int num_steps = this->cum_nr_bdd_nodes_per_hop_dist_.size() - 1;
         int num_layers_processed = 0;
@@ -369,9 +359,8 @@ namespace LPMP {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         assert(this->forward_state_valid_); 
 
-        // Set delta_out to zero:
-        thrust::fill(delta_lo_out_.begin(), delta_lo_out_.end(), 0.0f);
-        thrust::fill(delta_hi_out_.begin(), delta_hi_out_.end(), 0.0f);
+        flush_delta_out();
+        flush_mm();
 
         for (int s = this->cum_nr_bdd_nodes_per_hop_dist_.size() - 2; s >= 0; s--)
         {
@@ -415,6 +404,60 @@ namespace LPMP {
         #ifndef NDEBUG
             cudaDeviceSynchronize();  // Not necessary, only to compute exact timing of this function.
         #endif
+    }
+
+    template<typename REAL>
+    struct distribute_delta_func {
+        const REAL* delta_lo;
+        const REAL* delta_hi;
+        const int* num_bdds_per_var;
+        __host__ __device__ void operator()(const thrust::tuple<int, REAL&, REAL&> t) const
+        {
+            const int primal_index = thrust::get<0>(t);
+            if (primal_index == INT_MAX)
+                return; // terminal node.
+
+            REAL& lo_cost = thrust::get<1>(t);
+            REAL& hi_cost = thrust::get<2>(t);
+            lo_cost += delta_lo[primal_index] / num_bdds_per_var[primal_index];
+            hi_cost += delta_hi[primal_index] / num_bdds_per_var[primal_index];
+        }
+    };
+
+    template<typename REAL>
+    void bdd_cuda_parallel_mma<REAL>::distribute_delta()
+    {
+        assert(this->primal_variable_index_.size() == this->lo_cost_.size());
+        assert(this->primal_variable_index_.size() == this->hi_cost_.size());
+        assert(this->delta_lo_in_.size() == this->num_bdds_per_var_.size());
+        assert(this->delta_hi_in_.size() == this->num_bdds_per_var_.size());
+        assert(this->delta_hi_in_.size() == this->nr_vars_);
+
+        auto first = thrust::make_zip_iterator(thrust::make_tuple(this->primal_variable_index_.begin(), this->lo_cost_.begin(), this->hi_cost_.begin()));
+        auto last = thrust::make_zip_iterator(thrust::make_tuple(this->primal_variable_index_.end(), this->lo_cost_.end(), this->hi_cost_.end()));
+
+        distribute_delta_func<REAL> func({thrust::raw_pointer_cast(delta_lo_in_.data()),
+                                        thrust::raw_pointer_cast(delta_hi_in_.data()),
+                                        thrust::raw_pointer_cast(this->num_bdds_per_var_.data())});
+
+        thrust::for_each(first, last, func);
+
+        thrust::fill(delta_lo_in_.begin(), delta_lo_in_.end(), 0.0f);
+        thrust::fill(delta_hi_in_.begin(), delta_hi_in_.end(), 0.0f);
+    }
+
+    template<typename REAL>
+    void bdd_cuda_parallel_mma<REAL>::flush_delta_out()
+    {   // Makes delta out zero so that they can be populated again by in-place summation
+        thrust::fill(delta_lo_out_.begin(), delta_lo_out_.end(), 0.0f);
+        thrust::fill(delta_hi_out_.begin(), delta_hi_out_.end(), 0.0f);
+    }
+
+    template<typename REAL>
+    void bdd_cuda_parallel_mma<REAL>::flush_mm()
+    {   // Makes min marginals INF so that they can be populated again by in-place minimization
+        thrust::fill(mm_lo_.begin(), mm_lo_.end(), CUDART_INF_F_HOST);
+        thrust::fill(mm_hi_.begin(), mm_hi_.end(), CUDART_INF_F_HOST);
     }
 
     template class bdd_cuda_parallel_mma<float>;

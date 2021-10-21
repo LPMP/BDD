@@ -17,26 +17,73 @@ namespace LPMP {
         }
     };
 
-    struct not_equal_to
-    {
-        const int* values;
-        const int val_to_search;
-        __host__ __device__
-        bool operator()(const int i) const
+    struct BDD_group {
+        std::vector<size_t> bdd_indices_;
+        size_t total_num_hops_ = 0;
+        void insert(const size_t bdd_index, const int num_hops)
         {
-            return values[i] != val_to_search;
+            bdd_indices_.push_back(bdd_index);
+            total_num_hops_ += num_hops;
         }
+        bool operator<(const BDD_group& rhs) const { return total_num_hops_ > rhs.total_num_hops_; }
     };
+
+    std::vector<int> group_bdds(const BDD::bdd_collection& bdd_col, const int max_num_groups)
+    {
+        MEASURE_FUNCTION_EXECUTION_TIME
+        struct bdd_with_num_vars {
+            size_t bdd_index_;
+            size_t num_vars_in_bdd_;
+            bool operator<(const bdd_with_num_vars& rhs) const { return (num_vars_in_bdd_ > rhs.num_vars_in_bdd_); }
+        };
+        std::vector<bdd_with_num_vars> bdds_to_schedule;
+        bdds_to_schedule.reserve(bdd_col.nr_bdds());
+
+        for(size_t bdd_idx=0; bdd_idx < bdd_col.nr_bdds(); ++bdd_idx)
+            bdds_to_schedule.push_back(bdd_with_num_vars({bdd_idx, bdd_col.variables(bdd_idx).size() + 1})); // + 1 to account for terminal nodes.
+        
+        std::priority_queue<BDD_group> bdd_groups;
+        std::sort(bdds_to_schedule.begin(), bdds_to_schedule.end()); // Puts largest BDD at start.
+        for (const auto &largest_bdd: bdds_to_schedule)
+        {
+            if(bdd_groups.size() < max_num_groups)
+            {
+                BDD_group current_group; // create a new group with only one BDD.
+                current_group.insert(largest_bdd.bdd_index_, largest_bdd.num_vars_in_bdd_);
+                bdd_groups.push(current_group);
+            }
+            else
+            {
+                BDD_group current_group = bdd_groups.top(); // pop the smallest group and append current bdd into it.
+                bdd_groups.pop();
+                current_group.insert(largest_bdd.bdd_index_, largest_bdd.num_vars_in_bdd_);
+                bdd_groups.push(current_group);
+            }
+        }
+        // Now assign group index to each BDD:
+        std::vector<int> bdd_group_indices(bdd_col.nr_bdds());
+        int group_id = bdd_groups.size() - 1;
+        while(!bdd_groups.empty())
+        {
+            const BDD_group current_group = bdd_groups.top(); // pop the smallest group.
+            bdd_groups.pop();
+            for (const size_t bdd_idx: current_group.bdd_indices_)
+                bdd_group_indices[bdd_idx] = group_id;
+            group_id--;
+        }
+        return bdd_group_indices;
+    }
 
     template<typename REAL>
     bdd_cuda_base<REAL>::bdd_cuda_base(const BDD::bdd_collection& bdd_col)
     {
+        MEASURE_FUNCTION_EXECUTION_TIME
         initialize(bdd_col);
-        thrust::device_vector<int> bdd_hop_dist_root, bdd_depth;
-        std::tie(bdd_hop_dist_root, bdd_depth) = populate_bdd_nodes(bdd_col);
-        reorder_bdd_nodes(bdd_hop_dist_root, bdd_depth);
-        set_special_nodes_indices(bdd_hop_dist_root);
-        compress_bdd_nodes_to_layer(bdd_hop_dist_root);
+        thrust::device_vector<int> bdd_node_hop_dist, bdd_node_group_idx;
+        std::tie(bdd_node_hop_dist, bdd_node_group_idx) = populate_bdd_nodes(bdd_col, 1048576 * 4);
+        reorder_bdd_nodes(bdd_node_hop_dist, bdd_node_group_idx);
+        compress_bdd_nodes_to_layer(bdd_node_hop_dist);
+        set_terminal_nodes_costs();
         print_num_bdd_nodes_per_hop();
     }
 
@@ -74,25 +121,48 @@ namespace LPMP {
     }
 
     template<typename REAL>
-    std::tuple<thrust::device_vector<int>, thrust::device_vector<int>> bdd_cuda_base<REAL>::populate_bdd_nodes(const BDD::bdd_collection& bdd_col)
+    std::tuple<thrust::device_vector<int>, thrust::device_vector<int>> bdd_cuda_base<REAL>::populate_bdd_nodes(const BDD::bdd_collection& bdd_col, const int max_num_groups)
     {
         MEASURE_FUNCTION_EXECUTION_TIME
-        std::vector<int> primal_variable_index;
-        std::vector<int> lo_bdd_node_index;
-        std::vector<int> hi_bdd_node_index;
-        std::vector<int> bdd_index;
-        std::vector<int> bdd_depth;
-        // Store hop distance from root node, so that all nodes with same hop distance can be processed in parallel:
-        std::vector<int> bdd_hop_dist_root;
+        const std::vector<int> bdd_group_indices = group_bdds(bdd_col, max_num_groups); // Compute for each BDD which group does it belong to.
+        const int num_groups = *std::max_element(bdd_group_indices.begin(), bdd_group_indices.end()) + 1;
+        assert(num_groups <= max_num_groups);
+        assert(bdd_group_indices.size() == nr_bdds_);
+        std::vector<int> cur_hop_dist_per_group(num_groups, 0);
 
+        std::vector<int> primal_variable_index;
+        primal_variable_index.reserve(nr_bdd_nodes_);
+        std::vector<int> lo_bdd_node_index;
+        lo_bdd_node_index.reserve(nr_bdd_nodes_);
+        std::vector<int> hi_bdd_node_index;
+        hi_bdd_node_index.reserve(nr_bdd_nodes_);
+        std::vector<int> bdd_index;
+        bdd_index.reserve(nr_bdd_nodes_);
+        // Store hop distance from root node, so that all nodes with same hop distance can be processed in parallel:
+        std::vector<int> bdd_node_hop_dist;
+        bdd_node_hop_dist.reserve(nr_bdd_nodes_);
+        std::vector<int> bdd_node_group_idx;
+        bdd_node_group_idx.reserve(nr_bdd_nodes_);
+        std::vector<int> root_nodes_indices;
+        root_nodes_indices.reserve(nr_bdds_);
+        std::vector<int> bot_sink_indices;
+        bot_sink_indices.reserve(nr_bdds_);
+        std::vector<int> top_sink_indices;
+        top_sink_indices.reserve(nr_bdds_);
+
+        int index_flat = 0;
         for(size_t bdd_idx=0; bdd_idx < bdd_col.nr_bdds(); ++bdd_idx)
         {
             assert(bdd_col.is_qbdd(bdd_idx));
             assert(bdd_col.is_reordered(bdd_idx));
-            int cur_hop_dist = 0;
+            root_nodes_indices.push_back(index_flat);
+            const int group_idx = bdd_group_indices[bdd_idx];
+            // Initialize hop distance from current state of the group. Thus root nodes can still be at > 0 hop distance.
+            int cur_hop_dist = cur_hop_dist_per_group[group_idx]; 
             const size_t storage_offset = bdd_col.offset(bdd_idx);
             size_t prev_var = bdd_col(bdd_idx, storage_offset).index;
-            for(size_t bdd_node_idx=0; bdd_node_idx < bdd_col.nr_bdd_nodes(bdd_idx); ++bdd_node_idx)
+            bool prev_terminal = false;
+            for(size_t bdd_node_idx=0; bdd_node_idx < bdd_col.nr_bdd_nodes(bdd_idx); ++bdd_node_idx, ++index_flat)
             {
                 const auto cur_instr = bdd_col(bdd_idx, bdd_node_idx + storage_offset);
                 const size_t var = cur_instr.index;
@@ -100,7 +170,7 @@ namespace LPMP {
                 {
                     assert(prev_var < var || cur_instr.is_terminal());
                     prev_var = var;
-                    if(!cur_instr.is_topsink())
+                    if(!prev_terminal || !cur_instr.is_terminal())
                         cur_hop_dist++; // both terminal nodes can have same hop distance.
                 }
                 if(!cur_instr.is_terminal())
@@ -109,57 +179,83 @@ namespace LPMP {
                     primal_variable_index.push_back(var);
                     lo_bdd_node_index.push_back(cur_instr.lo);
                     hi_bdd_node_index.push_back(cur_instr.hi);
+                    prev_terminal = false;
                 }
                 else
                 {
                     primal_variable_index.push_back(INT_MAX);
-                    const int terminal_indicator = cur_instr.is_topsink() ? TOP_SINK_INDICATOR_CUDA: BOT_SINK_INDICATOR_CUDA;
-                    lo_bdd_node_index.push_back(terminal_indicator);
-                    hi_bdd_node_index.push_back(terminal_indicator);
+                    if (cur_instr.is_topsink())
+                    {
+                        top_sink_indices.push_back(index_flat);
+                        lo_bdd_node_index.push_back(TOP_SINK_INDICATOR_CUDA);
+                        hi_bdd_node_index.push_back(TOP_SINK_INDICATOR_CUDA);
+                    }
+                    else
+                    {
+                        bot_sink_indices.push_back(index_flat);
+                        lo_bdd_node_index.push_back(BOT_SINK_INDICATOR_CUDA);
+                        hi_bdd_node_index.push_back(BOT_SINK_INDICATOR_CUDA);
+                    }
+                    prev_terminal = true;
                     assert(bdd_node_idx >= bdd_col.nr_bdd_nodes(bdd_idx) - 2);
                 }
-                bdd_hop_dist_root.push_back(cur_hop_dist);
+                bdd_node_hop_dist.push_back(cur_hop_dist);
                 bdd_index.push_back(bdd_idx);
+                bdd_node_group_idx.push_back(group_idx);
             }
-            bdd_depth.insert(bdd_depth.end(), bdd_col.nr_bdd_nodes(bdd_idx), cur_hop_dist);
+            cur_hop_dist_per_group[group_idx] = cur_hop_dist;
         }
-
+        assert(root_nodes_indices.size() == nr_bdds_);
+        assert(bot_sink_indices.size() == nr_bdds_);
+        assert(top_sink_indices.size() == nr_bdds_);
+        
         // copy to GPU
         primal_variable_index_ = thrust::device_vector<int>(primal_variable_index.begin(), primal_variable_index.end());
         bdd_index_ = thrust::device_vector<int>(bdd_index.begin(), bdd_index.end());
         lo_bdd_node_index_ = thrust::device_vector<int>(lo_bdd_node_index.begin(), lo_bdd_node_index.end());
         hi_bdd_node_index_ = thrust::device_vector<int>(hi_bdd_node_index.begin(), hi_bdd_node_index.end());
-        thrust::device_vector<int> bdd_hop_dist_dev(bdd_hop_dist_root.begin(), bdd_hop_dist_root.end());
-        thrust::device_vector<int> bdd_depth_dev(bdd_depth.begin(), bdd_depth.end());
-        return {bdd_hop_dist_dev, bdd_depth_dev};
+        root_indices_ = thrust::device_vector<int>(root_nodes_indices.begin(), root_nodes_indices.end());
+        top_sink_indices_ = thrust::device_vector<int>(top_sink_indices.begin(), top_sink_indices.end());
+        bot_sink_indices_ = thrust::device_vector<int>(bot_sink_indices.begin(), bot_sink_indices.end());
+        thrust::device_vector<int> bdd_node_hop_dist_dev(bdd_node_hop_dist.begin(), bdd_node_hop_dist.end());
+        thrust::device_vector<int> bdd_node_group_idx_dev(bdd_node_group_idx.begin(), bdd_node_group_idx.end());
+        return {bdd_node_hop_dist_dev, bdd_node_group_idx_dev};
     }
 
     template<typename REAL>
-    void bdd_cuda_base<REAL>::reorder_bdd_nodes(thrust::device_vector<int>& bdd_hop_dist_dev, thrust::device_vector<int>& bdd_depth_dev)
+    void bdd_cuda_base<REAL>::reorder_bdd_nodes(thrust::device_vector<int>& bdd_node_hop_dist_dev, thrust::device_vector<int>& bdd_node_group_idx_dev)
     {
         MEASURE_FUNCTION_EXECUTION_TIME
         // Make nodes with same hop distance, BDD depth and bdd index contiguous in that order.
         thrust::device_vector<int> sorting_order(nr_bdd_nodes_);
         thrust::sequence(sorting_order.begin(), sorting_order.end());
         
-        auto first_key = thrust::make_zip_iterator(thrust::make_tuple(bdd_hop_dist_dev.begin(), bdd_depth_dev.begin(), bdd_index_.begin()));
-        auto last_key = thrust::make_zip_iterator(thrust::make_tuple(bdd_hop_dist_dev.end(), bdd_depth_dev.begin(), bdd_index_.end()));
+        // Sort the BDD nodes as per the following rules:
+        // Nodes with less hop distance are always earlier. For equal hop distance:
+        // -  Put all nodes with lower group index earlier (where lower group index corresponds to longer groups). For equal group index:
+        // -- Put all nodes within same BDD together.
 
-        auto first_bdd_val = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.begin(), lo_bdd_node_index_.begin(), 
-                                                                        hi_bdd_node_index_.begin(), sorting_order.begin()));
+        auto first_key = thrust::make_zip_iterator(thrust::make_tuple(bdd_node_hop_dist_dev.begin(), bdd_node_group_idx_dev.begin(), bdd_index_.begin()));
+        auto last_key = thrust::make_zip_iterator(thrust::make_tuple(bdd_node_hop_dist_dev.end(), bdd_node_group_idx_dev.begin(), bdd_index_.end()));
+
+        auto first_bdd_val = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.begin(), sorting_order.begin(),
+                                                                        lo_bdd_node_index_.begin(), hi_bdd_node_index_.begin()));
         thrust::sort_by_key(first_key, last_key, first_bdd_val);
         
-        // Since the ordering is changed so lo, hi indices also need to be updated:
+        // Since the ordering is changed so all previously assigned indices need to be updated:
         thrust::device_vector<int> new_indices(sorting_order.size());
         thrust::scatter(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + sorting_order.size(), 
                         sorting_order.begin(), new_indices.begin());
         assign_new_indices_func func({thrust::raw_pointer_cast(new_indices.data())});
         thrust::for_each(lo_bdd_node_index_.begin(), lo_bdd_node_index_.end(), func);
         thrust::for_each(hi_bdd_node_index_.begin(), hi_bdd_node_index_.end(), func);
+        thrust::for_each(root_indices_.begin(), root_indices_.end(), func);
+        thrust::for_each(top_sink_indices_.begin(), top_sink_indices_.end(), func);
+        thrust::for_each(bot_sink_indices_.begin(), bot_sink_indices_.end(), func);
 
         // Count number of BDD nodes per hop distance. Need for launching CUDA kernel with appropiate offset and threads:
         thrust::device_vector<int> dev_cum_nr_bdd_nodes_per_hop_dist(nr_bdd_nodes_);
-        auto last_red = thrust::reduce_by_key(bdd_hop_dist_dev.begin(), bdd_hop_dist_dev.end(), thrust::make_constant_iterator<int>(1), 
+        auto last_red = thrust::reduce_by_key(bdd_node_hop_dist_dev.begin(), bdd_node_hop_dist_dev.end(), thrust::make_constant_iterator<int>(1), 
                                                 thrust::make_discard_iterator(), 
                                                 dev_cum_nr_bdd_nodes_per_hop_dist.begin());
         dev_cum_nr_bdd_nodes_per_hop_dist.resize(thrust::distance(dev_cum_nr_bdd_nodes_per_hop_dist.begin(), last_red.second));
@@ -172,30 +268,9 @@ namespace LPMP {
     }
 
     template<typename REAL>
-    void bdd_cuda_base<REAL>::set_special_nodes_indices(const thrust::device_vector<int>& bdd_hop_dist_dev)
+    void bdd_cuda_base<REAL>::set_terminal_nodes_costs()
     {
         MEASURE_FUNCTION_EXECUTION_TIME
-        // Set indices of BDD nodes which are root, top, bot sinks.
-        root_indices_ = thrust::device_vector<int>(nr_bdd_nodes_);
-        thrust::sequence(root_indices_.begin(), root_indices_.end());
-        auto last_root = thrust::remove_if(root_indices_.begin(), root_indices_.end(),
-                                            not_equal_to({thrust::raw_pointer_cast(bdd_hop_dist_dev.data()), 0})); //TODO: This needs to be changed when multiple BDDs are in one row.
-        root_indices_.resize(std::distance(root_indices_.begin(), last_root));
-        assert(root_indices_.size() == nr_bdds_);
-
-        bot_sink_indices_ = thrust::device_vector<int>(nr_bdd_nodes_);
-        thrust::sequence(bot_sink_indices_.begin(), bot_sink_indices_.end());
-        auto last_bot_sink = thrust::remove_if(bot_sink_indices_.begin(), bot_sink_indices_.end(),
-                                            not_equal_to({thrust::raw_pointer_cast(lo_bdd_node_index_.data()), BOT_SINK_INDICATOR_CUDA}));
-        bot_sink_indices_.resize(std::distance(bot_sink_indices_.begin(), last_bot_sink));
-        assert(bot_sink_indices_.size() == nr_bdds_);
-
-        top_sink_indices_ = thrust::device_vector<int>(nr_bdd_nodes_);
-        thrust::sequence(top_sink_indices_.begin(), top_sink_indices_.end());
-        auto last_top_sink = thrust::remove_if(top_sink_indices_.begin(), top_sink_indices_.end(),
-                                            not_equal_to({thrust::raw_pointer_cast(lo_bdd_node_index_.data()), TOP_SINK_INDICATOR_CUDA}));
-        top_sink_indices_.resize(std::distance(top_sink_indices_.begin(), last_top_sink));
-
         // Set costs of top sinks to itself to 0:
         thrust::scatter(thrust::make_constant_iterator<float>(0.0), thrust::make_constant_iterator<float>(0.0) + top_sink_indices_.size(),
                         top_sink_indices_.begin(), cost_from_terminal_.begin());
@@ -203,14 +278,12 @@ namespace LPMP {
         // Set costs of bot sinks to top to infinity:
         thrust::scatter(thrust::make_constant_iterator<float>(CUDART_INF_F_HOST), thrust::make_constant_iterator<float>(CUDART_INF_F_HOST) + bot_sink_indices_.size(),
                         bot_sink_indices_.begin(), cost_from_terminal_.begin());
-
-        assert(top_sink_indices_.size() == nr_bdds_);
     }
 
     // Removes redundant information in hi_costs, primal_index, bdd_index as it is duplicated across
     // multiple BDD nodes for each layer.
     template<typename REAL>
-    void bdd_cuda_base<REAL>::compress_bdd_nodes_to_layer(const thrust::device_vector<int>& bdd_hop_dist_dev)
+    void bdd_cuda_base<REAL>::compress_bdd_nodes_to_layer(const thrust::device_vector<int>& bdd_node_hop_dist_dev)
     {
         MEASURE_FUNCTION_EXECUTION_TIME
         thrust::device_vector<REAL> hi_cost_compressed(hi_cost_.size());
@@ -218,8 +291,8 @@ namespace LPMP {
         thrust::device_vector<int> primal_index_compressed(primal_variable_index_.size()); 
         thrust::device_vector<int> bdd_index_compressed(bdd_index_.size());
         
-        auto first_key = thrust::make_zip_iterator(thrust::make_tuple(bdd_hop_dist_dev.begin(), bdd_index_.begin(), primal_variable_index_.begin()));
-        auto last_key = thrust::make_zip_iterator(thrust::make_tuple(bdd_hop_dist_dev.end(), bdd_index_.end(), primal_variable_index_.end()));
+        auto first_key = thrust::make_zip_iterator(thrust::make_tuple(bdd_node_hop_dist_dev.begin(), bdd_index_.begin(), primal_variable_index_.begin()));
+        auto last_key = thrust::make_zip_iterator(thrust::make_tuple(bdd_node_hop_dist_dev.end(), bdd_index_.end(), primal_variable_index_.end()));
 
         auto first_out_key = thrust::make_zip_iterator(thrust::make_tuple(thrust::make_discard_iterator(), bdd_index_compressed.begin(), primal_index_compressed.begin()));
 
@@ -235,7 +308,7 @@ namespace LPMP {
 
         // Compress hi_costs_, lo_costs_ (although initially they are infinity, 0 resp.) and also populate how many BDD layers per hop dist.
         thrust::device_vector<int> bdd_hop_dist_compressed(out_size);
-        auto first_cost_val = thrust::make_zip_iterator(thrust::make_tuple(hi_cost_.begin(), lo_cost_.begin(), bdd_hop_dist_dev.begin()));
+        auto first_cost_val = thrust::make_zip_iterator(thrust::make_tuple(hi_cost_.begin(), lo_cost_.begin(), bdd_node_hop_dist_dev.begin()));
         auto first_cost_val_compressed = thrust::make_zip_iterator(thrust::make_tuple(hi_cost_compressed.begin(), lo_cost_compressed.begin(), bdd_hop_dist_compressed.begin()));
 
         auto new_end_unique = thrust::unique_by_key_copy(first_key, last_key, first_cost_val, thrust::make_discard_iterator(), first_cost_val_compressed);
@@ -381,6 +454,14 @@ namespace LPMP {
     template void bdd_cuda_base<double>::update_costs(std::vector<float>::iterator, std::vector<float>::iterator, std::vector<float>::iterator, std::vector<float>::iterator);
     template void bdd_cuda_base<double>::update_costs(std::vector<float>::const_iterator, std::vector<float>::const_iterator, std::vector<float>::const_iterator, std::vector<float>::const_iterator);
 
+    template<typename REAL>
+    void bdd_cuda_base<REAL>::flush_costs_from_root()
+    {
+        thrust::fill(cost_from_root_.begin(), cost_from_root_.end(), CUDART_INF_F_HOST);
+        // Set costs of root nodes to 0:
+        thrust::scatter(thrust::make_constant_iterator<REAL>(0.0), thrust::make_constant_iterator<REAL>(0.0) + this->root_indices_.size(),
+                        this->root_indices_.begin(), this->cost_from_root_.begin());
+    }
 
     template<typename REAL>
     __global__ void forward_step(const int cur_num_bdd_nodes, const int start_offset,
@@ -396,7 +477,7 @@ namespace LPMP {
         for (int bdd_idx = start_index + start_offset; bdd_idx < cur_num_bdd_nodes + start_offset; bdd_idx += num_threads) 
         {
             const int next_lo_node = lo_bdd_node_index[bdd_idx];
-            if (next_lo_node < 0) // will matter when one row contains multiple BDDs, otherwise the terminal nodes are at the end anyway.
+            if (next_lo_node < 0)
                 continue; // nothing needs to be done for terminal node.
 
             const int next_hi_node = hi_bdd_node_index[bdd_idx];
@@ -417,11 +498,7 @@ namespace LPMP {
         if (forward_state_valid_)
             return;
 
-        thrust::fill(cost_from_root_.begin(), cost_from_root_.end(), CUDART_INF_F_HOST);
-        // Set costs of root nodes to 0:
-        thrust::scatter(thrust::make_constant_iterator<REAL>(0.0), thrust::make_constant_iterator<REAL>(0.0) + this->root_indices_.size(),
-                        this->root_indices_.begin(), this->cost_from_root_.begin());
-
+        flush_costs_from_root();
         const int num_steps = cum_nr_bdd_nodes_per_hop_dist_.size() - 1;
         int num_nodes_processed = 0;
         for (int s = 0; s < num_steps; s++)
@@ -642,9 +719,10 @@ namespace LPMP {
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         backward_run(false);
-        // Sum costs_from_terminal of all root nodes. Since root nodes are always at the start (unless one row contains > 1 BDD then have to change TODO.)
-
-        return thrust::reduce(cost_from_terminal_.begin(), cost_from_terminal_.begin() + nr_bdds_, 0.0);
+        // Sum costs_from_terminal of all root nodes:
+        // fuse gather with reduction: 
+        return thrust::reduce(thrust::make_permutation_iterator(cost_from_terminal_.begin(), root_indices_.begin()),
+                                thrust::make_permutation_iterator(cost_from_terminal_.begin(), root_indices_.end()), 0.0);
     }
 
     template class bdd_cuda_base<float>;
