@@ -417,10 +417,7 @@ namespace LPMP {
         if (forward_state_valid_)
             return;
 
-        thrust::fill(cost_from_root_.begin(), cost_from_root_.end(), CUDART_INF_F_HOST);
-        // Set costs of root nodes to 0:
-        thrust::scatter(thrust::make_constant_iterator<REAL>(0.0), thrust::make_constant_iterator<REAL>(0.0) + this->root_indices_.size(),
-                        this->root_indices_.begin(), this->cost_from_root_.begin());
+        flush_costs_from_root();
 
         const int num_steps = cum_nr_bdd_nodes_per_hop_dist_.size() - 1;
         int num_nodes_processed = 0;
@@ -645,6 +642,15 @@ namespace LPMP {
         // Sum costs_from_terminal of all root nodes. Since root nodes are always at the start (unless one row contains > 1 BDD then have to change TODO.)
 
         return thrust::reduce(cost_from_terminal_.begin(), cost_from_terminal_.begin() + nr_bdds_, 0.0);
+    }
+
+    template<typename REAL>
+    void bdd_cuda_base<REAL>::flush_costs_from_root()
+    {
+        thrust::fill(cost_from_root_.begin(), cost_from_root_.end(), CUDART_INF_F_HOST);
+        // Set costs of root nodes to 0:
+        thrust::scatter(thrust::make_constant_iterator<REAL>(0.0), thrust::make_constant_iterator<REAL>(0.0) + this->root_indices_.size(),
+                        this->root_indices_.begin(), this->cost_from_root_.begin());
     }
 
     template class bdd_cuda_base<float>;

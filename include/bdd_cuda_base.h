@@ -36,8 +36,8 @@ namespace LPMP {
             void backward_run(bool compute_path_costs = true);
 
         protected:
-
             void update_costs(const thrust::device_vector<REAL>& update_vec);
+            void flush_costs_from_root();
 
             // Following arrays have one entry per layer of BDD in each BDD:
             thrust::device_vector<int> primal_variable_index_;
