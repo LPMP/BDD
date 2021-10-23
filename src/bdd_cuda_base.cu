@@ -35,8 +35,9 @@ namespace LPMP {
         thrust::device_vector<int> bdd_hop_dist_root, bdd_depth;
         std::tie(bdd_hop_dist_root, bdd_depth) = populate_bdd_nodes(bdd_col);
         reorder_bdd_nodes(bdd_hop_dist_root, bdd_depth);
-        set_special_nodes_indices(bdd_hop_dist_root);
         compress_bdd_nodes_to_layer(bdd_hop_dist_root);
+        reorder_within_bdd_layers();
+        set_special_nodes_indices(bdd_hop_dist_root);
         print_num_bdd_nodes_per_hop();
     }
 
@@ -265,6 +266,77 @@ namespace LPMP {
 
         thrust::inclusive_scan(dev_cum_nr_layers_per_hop_dist.begin(), dev_cum_nr_layers_per_hop_dist.end(), dev_cum_nr_layers_per_hop_dist.begin());
         thrust::copy(dev_cum_nr_layers_per_hop_dist.begin(), dev_cum_nr_layers_per_hop_dist.end(), cum_nr_layers_per_hop_dist_.begin());
+    }
+
+    struct set_bdd_node_priority_func {
+        int* node_priority_lo;
+        int* node_priority_hi;
+        __device__ void operator()(const thrust::tuple<int, int, int>& t)
+        {
+            const int bdd_node_idx = thrust::get<0>(t);
+            const int next_lo_node = thrust::get<1>(t);
+            if(next_lo_node < 0)
+                return;
+            const int next_hi_node = thrust::get<2>(t);
+            atomicMin(&node_priority_lo[next_lo_node], bdd_node_idx);
+            atomicMin(&node_priority_hi[next_hi_node], bdd_node_idx);
+        }
+    };
+
+    template<typename REAL>
+    void bdd_cuda_base<REAL>::reorder_within_bdd_layers()
+    {
+        const int num_steps = this->cum_nr_bdd_nodes_per_hop_dist_.size() - 1;
+        thrust::device_vector<int> sorting_order(nr_bdd_nodes_);
+        thrust::sequence(sorting_order.begin(), sorting_order.end());
+        thrust::device_vector<int> node_priority_lo(nr_bdd_nodes_, INT_MAX); // lower values mean that BDD node should occur early in the layer and viceversa.
+        thrust::device_vector<int> node_priority_hi(nr_bdd_nodes_, INT_MAX);
+
+        set_bdd_node_priority_func set_priority({thrust::raw_pointer_cast(node_priority_lo.data()), 
+                                                thrust::raw_pointer_cast(node_priority_hi.data())});
+
+        for (int hop_index = 0; hop_index < num_steps; hop_index++)
+        {
+            int start_offset = 0;
+            if (hop_index > 0)
+                start_offset = this->cum_nr_bdd_nodes_per_hop_dist_[hop_index - 1];
+            const int end_offset = this->cum_nr_bdd_nodes_per_hop_dist_[hop_index];
+            // Set priority of nodes in hop i + 1 by checking when are these nodes required in hop i. 
+            auto first = thrust::make_zip_iterator(thrust::make_tuple(thrust::make_counting_iterator<int>(0) + start_offset, 
+                                                                    lo_bdd_node_index_.begin() + start_offset,
+                                                                    hi_bdd_node_index_.begin() + start_offset)); 
+            
+            auto last = thrust::make_zip_iterator(thrust::make_tuple(thrust::make_counting_iterator<int>(0) + end_offset, 
+                                                                    lo_bdd_node_index_.begin() + end_offset,
+                                                                    hi_bdd_node_index_.begin() + end_offset));
+            thrust::for_each(first, last, set_priority);
+
+            // Now sort nodes in hop i + 1 in the order of increasing priority w.r.t (bdd_node_to_layer_map_, node_priority_lo, node_priority_hi) i.e.
+            // first w.r.t bdd_node_to_layer_map_ to keep the nodes within confines of a layer and then by
+            // node_priority_lo and lastly by node_priority_hi
+
+            const int next_end_offset = this->cum_nr_bdd_nodes_per_hop_dist_[hop_index + 1];
+            auto first_key = thrust::make_zip_iterator(thrust::make_tuple(bdd_node_to_layer_map_.begin() + end_offset,
+                                                                    node_priority_lo.begin() + end_offset,
+                                                                    node_priority_hi.begin() + end_offset));
+
+            auto last_key = thrust::make_zip_iterator(thrust::make_tuple(bdd_node_to_layer_map_.begin() + next_end_offset,
+                                                                    node_priority_lo.begin() + next_end_offset,
+                                                                    node_priority_hi.begin() + next_end_offset));
+            
+            auto first_bdd_val = thrust::make_zip_iterator(thrust::make_tuple(lo_bdd_node_index_.begin() + end_offset, hi_bdd_node_index_.begin() + end_offset, 
+                                                                            sorting_order.begin() + end_offset));
+
+            thrust::sort_by_key(first_key, last_key, first_bdd_val);
+        }
+
+        // Since the ordering is changed so lo, hi indices also need to be updated. TODO : make function.
+        thrust::device_vector<int> new_indices(sorting_order.size());
+        thrust::scatter(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + sorting_order.size(), 
+                        sorting_order.begin(), new_indices.begin());
+        assign_new_indices_func func({thrust::raw_pointer_cast(new_indices.data())});
+        thrust::for_each(lo_bdd_node_index_.begin(), lo_bdd_node_index_.end(), func);
+        thrust::for_each(hi_bdd_node_index_.begin(), hi_bdd_node_index_.end(), func);
     }
 
     template<typename REAL>

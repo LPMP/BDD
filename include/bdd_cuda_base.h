@@ -80,6 +80,7 @@ namespace LPMP {
             void populate_counts(const BDD::bdd_collection& bdd_col);
             void set_special_nodes_indices(const thrust::device_vector<int>& bdd_hop_dist);
             void compress_bdd_nodes_to_layer(const thrust::device_vector<int>& bdd_hop_dist);
+            void reorder_within_bdd_layers();
             void print_num_bdd_nodes_per_hop();
 
     };
