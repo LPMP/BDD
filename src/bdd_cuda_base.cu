@@ -101,7 +101,7 @@ namespace LPMP {
                 {
                     assert(prev_var < var || cur_instr.is_terminal());
                     prev_var = var;
-                    if(!cur_instr.is_topsink())
+                    if(bdd_node_idx <= bdd_col.nr_bdd_nodes(bdd_idx) - 2)
                         cur_hop_dist++; // both terminal nodes can have same hop distance.
                 }
                 if(!cur_instr.is_terminal())
