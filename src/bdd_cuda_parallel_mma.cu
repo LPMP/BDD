@@ -14,12 +14,6 @@ namespace LPMP {
         // Copy from arc costs because it contains infinity for arcs to bot sink
         hi_cost_out_ = thrust::device_vector<REAL>(this->hi_cost_);
         lo_cost_out_ = thrust::device_vector<REAL>(this->lo_cost_);
-        // Populate primal variables sorting order to permute min-marginals such that reduction over adjacent values can be performed 
-        // to compute values for each primal variable e.g. min-marginals sum for each primal variable. etc.
-        primal_variable_sorting_order_ = thrust::device_vector<int>(this->primal_variable_index_.size());
-        thrust::sequence(primal_variable_sorting_order_.begin(), primal_variable_sorting_order_.end());
-        primal_variable_index_sorted_ = this->primal_variable_index_;
-        thrust::sort_by_key(primal_variable_index_sorted_.begin(), primal_variable_index_sorted_.end(), primal_variable_sorting_order_.begin());
     }
 
     template<typename REAL>
@@ -440,13 +434,13 @@ namespace LPMP {
     void bdd_cuda_parallel_mma<REAL>::compute_delta()
     {
         auto first_val = thrust::make_zip_iterator(thrust::make_tuple(
-            thrust::make_permutation_iterator(thrust::make_transform_iterator(mm_diff_.begin(), pos_part<REAL>()), primal_variable_sorting_order_.begin()),
-            thrust::make_permutation_iterator(thrust::make_transform_iterator(mm_diff_.begin(), abs_neg_part<REAL>()), primal_variable_sorting_order_.begin())));
+            thrust::make_permutation_iterator(thrust::make_transform_iterator(mm_diff_.begin(), pos_part<REAL>()), this->primal_variable_sorting_order_.begin()),
+            thrust::make_permutation_iterator(thrust::make_transform_iterator(mm_diff_.begin(), abs_neg_part<REAL>()), this->primal_variable_sorting_order_.begin())));
 
         auto first_out_val = thrust::make_zip_iterator(thrust::make_tuple(delta_hi_.begin(), delta_lo_.begin()));
 
         thrust::equal_to<int> binary_pred;
-        thrust::reduce_by_key(primal_variable_index_sorted_.begin(), primal_variable_index_sorted_.end(), first_val, 
+        thrust::reduce_by_key(this->primal_variable_index_sorted_.begin(), this->primal_variable_index_sorted_.end(), first_val, 
                             thrust::make_discard_iterator(), first_out_val, binary_pred, tuple_sum<REAL>());
         // thrust::reduce_by_key(thrust::make_permutation_iterator(this->primal_variable_index_.begin(), primal_variable_sorting_order_.begin()),
         //                     thrust::make_permutation_iterator(this->primal_variable_index_.end(), primal_variable_sorting_order_.end()), first_val, 

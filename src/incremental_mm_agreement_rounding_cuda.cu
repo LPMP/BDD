@@ -182,9 +182,9 @@ struct mm_type_to_sol {
                 std::cout << "[incremental primal rounding cuda] round " << round << ", cost delta " << cur_delta << ", time elapsed = " << time_elapsed << "\n";
 
                 const auto mms = s.min_marginals_cuda();
-                const thrust::device_vector<float>& mms_0 = std::get<0>(mms);
-                const thrust::device_vector<float>& mms_1 = std::get<1>(mms);
-                const thrust::device_vector<int>& primal_vars = s.primal_variable_index();
+                const thrust::device_vector<int>& primal_vars = std::get<0>(mms);
+                const thrust::device_vector<float>& mms_0 = std::get<1>(mms);
+                const thrust::device_vector<float>& mms_1 = std::get<2>(mms);
                 const auto mm_types = compute_mm_types(s.nr_variables(), mms_0, mms_1, primal_vars);
                 const size_t nr_one_mms = thrust::count(mm_types.begin(), mm_types.end(), mm_type::one);
                 const size_t nr_zero_mms = thrust::count(mm_types.begin(), mm_types.end(), mm_type::zero);

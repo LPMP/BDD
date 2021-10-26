@@ -33,7 +33,5 @@ namespace LPMP {
 
             thrust::device_vector<REAL> delta_lo_, delta_hi_; // One entry in each per primal variable.
             thrust::device_vector<REAL> mm_lo_, mm_diff_, hi_cost_out_, lo_cost_out_; // One entry per BDD layer.
-            thrust::device_vector<int> primal_variable_sorting_order_; // indices to sort primal_variables_indices_
-            thrust::device_vector<int> primal_variable_index_sorted_;  // to reduce min-marginals by key.
     };
 }

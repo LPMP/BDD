@@ -29,7 +29,7 @@ namespace LPMP {
             void set_cost(const double c, const size_t var);
             
             two_dim_variable_array<std::array<double,2>> min_marginals();
-            std::tuple<thrust::device_vector<REAL>, thrust::device_vector<REAL>> min_marginals_cuda();
+            std::tuple<thrust::device_vector<int>, thrust::device_vector<REAL>, thrust::device_vector<REAL>> min_marginals_cuda();
 
             size_t nr_variables() const { return nr_vars_; }
             size_t nr_bdds() const { return nr_bdds_; }
@@ -37,7 +37,6 @@ namespace LPMP {
             void forward_run();
             void backward_run(bool compute_path_costs = true);
 
-            const thrust::device_vector<int>& primal_variable_index() const { return primal_variable_index_; }
         protected:
             void update_costs(const thrust::device_vector<REAL>& update_vec);
             void flush_costs_from_root();
@@ -72,6 +71,9 @@ namespace LPMP {
             bool forward_state_valid_ = false; // true means cost from root valid.
             bool backward_state_valid_ = false; // true means cost from terminal are valid.
 
+            thrust::device_vector<int> primal_variable_sorting_order_; // indices to sort primal_variables_indices_
+            thrust::device_vector<int> primal_variable_index_sorted_;  // to reduce min-marginals by key.
+
         private:
             bool path_costs_valid_ = false; // here valid means lo, hi path paths are valid.
             void initialize(const BDD::bdd_collection& bdd_col);
@@ -82,6 +84,7 @@ namespace LPMP {
             void compress_bdd_nodes_to_layer(const thrust::device_vector<int>& bdd_hop_dist);
             void reorder_within_bdd_layers();
             void print_num_bdd_nodes_per_hop();
+            void find_primal_variable_ordering();
 
     };
 

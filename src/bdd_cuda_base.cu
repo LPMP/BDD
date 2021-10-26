@@ -38,6 +38,7 @@ namespace LPMP {
         compress_bdd_nodes_to_layer(bdd_hop_dist_root);
         reorder_within_bdd_layers();
         set_special_nodes_indices(bdd_hop_dist_root);
+        find_primal_variable_ordering();
         print_num_bdd_nodes_per_hop();
     }
 
@@ -337,6 +338,21 @@ namespace LPMP {
         assign_new_indices_func func({thrust::raw_pointer_cast(new_indices.data())});
         thrust::for_each(lo_bdd_node_index_.begin(), lo_bdd_node_index_.end(), func);
         thrust::for_each(hi_bdd_node_index_.begin(), hi_bdd_node_index_.end(), func);
+    }
+
+    template<typename REAL>
+    void bdd_cuda_base<REAL>::find_primal_variable_ordering()
+    {
+        // Populate primal variables sorting order to permute min-marginals such that reduction over adjacent values can be performed 
+        // to compute values for each primal variable e.g. min-marginals sum for each primal variable. etc.
+        primal_variable_sorting_order_ = thrust::device_vector<int>(primal_variable_index_.size());
+        thrust::sequence(primal_variable_sorting_order_.begin(), primal_variable_sorting_order_.end());
+        primal_variable_index_sorted_ = primal_variable_index_;
+        thrust::device_vector<int> bdd_index_sorted = bdd_index_;
+    
+        auto first_key = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_sorted_.begin(), bdd_index_sorted.begin()));
+        auto last_key = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_sorted_.end(), bdd_index_sorted.end()));
+        thrust::sort_by_key(first_key, last_key, primal_variable_sorting_order_.begin());
     }
 
     template<typename REAL>
@@ -645,7 +661,7 @@ namespace LPMP {
 
     // Computes min-marginals by reduction.
     template<typename REAL>
-    std::tuple<thrust::device_vector<REAL>, thrust::device_vector<REAL>> bdd_cuda_base<REAL>::min_marginals_cuda()
+    std::tuple<thrust::device_vector<int>, thrust::device_vector<REAL>, thrust::device_vector<REAL>> bdd_cuda_base<REAL>::min_marginals_cuda()
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         forward_run();
@@ -663,7 +679,18 @@ namespace LPMP {
         const int out_size = thrust::distance(first_out_val, new_end.second);
         assert(out_size == hi_cost_.size());
 
-        return {min_marginals_lo, min_marginals_hi};
+        thrust::device_vector<REAL> min_marginals_lo_sorted(hi_cost_.size());
+        thrust::device_vector<REAL> min_marginals_hi_sorted(hi_cost_.size());
+        thrust::device_vector<int> primal_variable_index_sorted_test(hi_cost_.size());
+        
+        thrust::gather(primal_variable_sorting_order_.begin(), primal_variable_sorting_order_.end(), primal_variable_index_.begin(), primal_variable_index_sorted_test.begin());
+
+        assert(thrust::equal(primal_variable_index_sorted_.begin(), primal_variable_index_sorted_.end(), primal_variable_index_sorted_test.begin()));
+
+        auto first_out_val_sorted = thrust::make_zip_iterator(thrust::make_tuple(min_marginals_lo_sorted.begin(), min_marginals_hi_sorted.begin()));
+        thrust::gather(primal_variable_sorting_order_.begin(), primal_variable_sorting_order_.end(), first_out_val, first_out_val_sorted);
+
+        return {primal_variable_index_sorted_, min_marginals_lo_sorted, min_marginals_hi_sorted};
     }
 
     template<typename REAL>
@@ -671,27 +698,12 @@ namespace LPMP {
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         thrust::device_vector<REAL> mm_0, mm_1;
+        thrust::device_vector<int> primal_variable_index_sorted;
 
-        std::tie(mm_0, mm_1) = min_marginals_cuda();
-
-        // sort the min-marginals per bdd_index, primal_index:
-        thrust::device_vector<int> bdd_index_sorted = bdd_index_;
-        thrust::device_vector<int> primal_variable_index_sorted = primal_variable_index_;
-        auto first_key = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_sorted.begin(), bdd_index_sorted.begin()));
-        auto last_key = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_sorted.end(), bdd_index_sorted.end()));
-
-        auto first_val = thrust::make_zip_iterator(thrust::make_tuple(mm_0.begin(), mm_1.begin()));
-
-        thrust::sort_by_key(first_key, last_key, first_val);
+        std::tie(primal_variable_index_sorted, mm_0, mm_1) = min_marginals_cuda();
 
         std::vector<int> num_bdds_per_var(num_bdds_per_var_.size());
         thrust::copy(num_bdds_per_var_.begin(), num_bdds_per_var_.end(), num_bdds_per_var.begin());
-
-        std::vector<int> h_mm_primal_index(primal_variable_index_sorted.size());
-        thrust::copy(primal_variable_index_sorted.begin(), primal_variable_index_sorted.end(), h_mm_primal_index.begin());
-
-        std::vector<int> h_mm_bdd_index(bdd_index_sorted.size());
-        thrust::copy(bdd_index_sorted.begin(), bdd_index_sorted.end(), h_mm_bdd_index.begin());
 
         std::vector<REAL> h_mm_0(mm_0.size());
         thrust::copy(mm_0.begin(), mm_0.end(), h_mm_0.begin());
@@ -699,21 +711,15 @@ namespace LPMP {
         std::vector<REAL> h_mm_1(mm_1.size());
         thrust::copy(mm_1.begin(), mm_1.end(), h_mm_1.begin());
 
-        std::vector<int> h_bdd_node_to_layer_map(bdd_node_to_layer_map_.size());
-        thrust::copy(bdd_node_to_layer_map_.begin(), bdd_node_to_layer_map_.end(), h_bdd_node_to_layer_map.begin());
-
         two_dim_variable_array<std::array<double,2>> min_margs(num_bdds_per_var);
 
-        for (int i = 0; i < nr_bdds_; ++i)
-            assert(h_mm_primal_index[h_mm_primal_index.size() - 1 - i] == INT_MAX);
         int idx_1d = 0;
         for(int var = 0; var < nr_vars_; ++var)
         {
             assert(num_bdds_per_var[var] > 0);
             for(int bdd_idx = 0; bdd_idx < num_bdds_per_var[var]; ++bdd_idx, ++idx_1d)
             {
-                assert(idx_1d < h_mm_primal_index.size() - nr_bdds_ && idx_1d < h_mm_0.size() - nr_bdds_ && idx_1d < h_mm_1.size() - nr_bdds_);
-                assert(h_mm_primal_index[idx_1d] < INT_MAX); // Should ignore terminal nodes.
+                assert(idx_1d < h_mm_0.size() - nr_bdds_ && idx_1d < h_mm_1.size() - nr_bdds_);
                 std::array<double,2> mm = {h_mm_0[idx_1d], h_mm_1[idx_1d]};
                 min_margs(var, bdd_idx) = mm;
             }
