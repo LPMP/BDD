@@ -22,72 +22,96 @@ namespace LPMP {
     }   
 
     template<typename REAL>
+    struct mm_diff_direction_func {
+        __host__ __device__ char operator()(const thrust::tuple<REAL, REAL> t) const
+        {
+            REAL mm_0 = thrust::get<0>(t);
+            REAL mm_1 = thrust::get<1>(t);
+            if(mm_0 + 1e-6 < mm_1)
+                return -1;
+            else if(mm_1 + 1e-6 < mm_0)
+                return 1;
+            else 
+                return 0;
+        }
+    };
+
     struct fill_mm_type_func
     {
         mm_type* mm_types;
         const int nr_vars;
 
         __host__ __device__
-        void operator()(const thrust::tuple<REAL, REAL, int> t) const
+        void operator()(const thrust::tuple<char, char, int> t) const
         {
-            const REAL mm_0 = thrust::get<0>(t);
-            const REAL mm_1 = thrust::get<1>(t);
+            const char mm_min = thrust::get<0>(t);
+            const char mm_max = thrust::get<1>(t);
             const int var = thrust::get<2>(t);
             if(var >= nr_vars)
                 return;
 
-            mm_type& cur_mm_type = mm_types[var];
+            if (mm_min >= 0 && mm_max > 0)
+                mm_types[var] = mm_type::one;
+            else if (mm_min < 0 && mm_max <= 0)
+                mm_types[var] = mm_type::zero;
+            else if(mm_max == 0 && mm_min == 0)
+                mm_types[var] = mm_type::equal;
+            else
+                mm_types[var] = mm_type::inconsistent;
+        }
+    };
 
-            if(mm_0 + 1e-6 < mm_1)
-            {
-                if(cur_mm_type == mm_type::one || cur_mm_type == mm_type::inconsistent)
-                    cur_mm_type = mm_type::inconsistent;
-                else
-                    cur_mm_type = mm_type::zero;
-            }
-            else if(mm_1 + 1e-6 < mm_0)
-            {
-                if(cur_mm_type == mm_type::zero || cur_mm_type == mm_type::inconsistent)
-                    cur_mm_type = mm_type::inconsistent;
-                else
-                    cur_mm_type = mm_type::one; 
-            }
-            else 
-            {
-                assert(std::abs(mm_1 - mm_0) <= 1e-6);
-            }
+
+    template<typename T>
+    struct tuple_min_max
+    {
+        __host__ __device__
+        thrust::tuple<T, T> operator()(const thrust::tuple<T, T>& t0, const thrust::tuple<T, T>& t1)
+        {
+            return thrust::make_tuple(min(thrust::get<0>(t0), thrust::get<0>(t1)), max(thrust::get<1>(t0), thrust::get<1>(t1)));
         }
     };
 
     template<typename REAL>
     thrust::device_vector<mm_type> compute_mm_types(const size_t nr_vars, const thrust::device_vector<REAL>& mm_0, const thrust::device_vector<REAL>& mm_1, const thrust::device_vector<int>& mm_vars)
-    {   
-        thrust::device_vector<mm_type> mm_types(nr_vars, mm_type::equal);
-        auto it_begin = thrust::zip_iterator(thrust::make_tuple(mm_0.begin(), mm_1.begin(), mm_vars.begin()));
-        auto it_end = thrust::zip_iterator(thrust::make_tuple(mm_0.end(), mm_1.end(), mm_vars.end()));
-        fill_mm_type_func<REAL> func({thrust::raw_pointer_cast(mm_types.data()), nr_vars});
-        thrust::for_each(it_begin, it_end, func);
+    {
+        assert(thrust::is_sorted(mm_vars.begin(), mm_vars.end()));
+        thrust::device_vector<char> mm_diff_direction(mm_0.size());
+        {
+            auto first = thrust::make_zip_iterator(thrust::make_tuple(mm_0.begin(), mm_1.begin()));
+            auto last = thrust::make_zip_iterator(thrust::make_tuple(mm_0.end(), mm_1.end()));
+            thrust::transform(first, last, mm_diff_direction.begin(), mm_diff_direction_func<REAL>());
+        }
+
+        thrust::device_vector<char> mm_diff_min(nr_vars + 1);
+        thrust::device_vector<char> mm_diff_max(nr_vars + 1);
+        {
+            auto first_val = thrust::make_zip_iterator(thrust::make_tuple(mm_diff_direction.begin(), mm_diff_direction.begin()));
+            auto first_out_val = thrust::make_zip_iterator(thrust::make_tuple(mm_diff_min.begin(), mm_diff_max.begin()));
+
+            thrust::equal_to<int> binary_pred;
+            auto new_end = thrust::reduce_by_key(mm_vars.begin(), mm_vars.end(), first_val, thrust::make_discard_iterator(), first_out_val, binary_pred, tuple_min_max<char>());
+            const int out_size = thrust::distance(first_out_val, new_end.second);
+            assert(out_size == mm_diff_min.size());
+        }
+        thrust::device_vector<mm_type> mm_types(nr_vars);
+        {
+            auto first_val = thrust::make_zip_iterator(thrust::make_tuple(mm_diff_min.begin(), mm_diff_max.begin(), thrust::make_counting_iterator<int>(0)));
+            auto last_val = thrust::make_zip_iterator(thrust::make_tuple(mm_diff_min.end(), mm_diff_max.end(),  thrust::make_counting_iterator<int>(0) + mm_diff_min.size()));
+
+            thrust::for_each(first_val, last_val, fill_mm_type_func({thrust::raw_pointer_cast(mm_types.data()), nr_vars}));
+        }
+
         return mm_types;
     }   
 
     template<typename REAL>
-    struct sum_mms_func
+    struct tuple_sum
     {
-        REAL* mm_sums_0;
-        REAL* mm_sums_1;
-        const int nr_vars;
-
         __host__ __device__
-        void operator()(const thrust::tuple<REAL, REAL, int> t) const
+        thrust::tuple<REAL, REAL> operator()(const thrust::tuple<REAL, REAL>& t0, const thrust::tuple<REAL, REAL>& t1)
         {
-            const REAL mm_0 = thrust::get<0>(t);
-            const REAL mm_1 = thrust::get<1>(t);
-            const int var = thrust::get<2>(t);
-            if(var >= nr_vars)
-                return;
-
-            atomicAdd(&mm_sums_0[var], mm_0);
-            atomicAdd(&mm_sums_1[var], mm_1);
+            return thrust::make_tuple(thrust::get<0>(t0) + thrust::get<0>(t1), thrust::get<1>(t0) + thrust::get<1>(t1));
         }
     };
 
@@ -96,14 +120,23 @@ namespace LPMP {
     {   
         assert(mm_0.size() == mm_vars.size());
         assert(mm_1.size() == mm_vars.size());
-        thrust::device_vector<REAL> mm_sums_0(nr_vars, 0.0);
-        thrust::device_vector<REAL> mm_sums_1(nr_vars, 0.0);
-        auto it_begin = thrust::zip_iterator(thrust::make_tuple(mm_0.begin(), mm_1.begin(), mm_vars.begin()));
-        auto it_end = thrust::zip_iterator(thrust::make_tuple(mm_0.end(), mm_1.end(), mm_vars.end()));
-        sum_mms_func<REAL> func({thrust::raw_pointer_cast(mm_sums_0.data()), thrust::raw_pointer_cast(mm_sums_1.data()), nr_vars});
-        thrust::for_each(it_begin, it_end, func);
+        assert(thrust::is_sorted(mm_vars.begin(), mm_vars.end()));
+        thrust::device_vector<REAL> mm_sums_0(nr_vars + 1);
+        thrust::device_vector<REAL> mm_sums_1(nr_vars + 1);
+
+        auto first_val = thrust::make_zip_iterator(thrust::make_tuple(mm_0.begin(), mm_1.begin()));
+        auto first_out_val = thrust::make_zip_iterator(thrust::make_tuple(mm_sums_0.begin(), mm_sums_1.begin()));
+
+        thrust::equal_to<int> binary_pred;
+        auto new_end = thrust::reduce_by_key(mm_vars.begin(), mm_vars.end(), first_val, thrust::make_discard_iterator(), first_out_val, binary_pred, tuple_sum<REAL>());
+        const int out_size = thrust::distance(first_out_val, new_end.second);
+        assert(out_size == mm_sums_0.size());
+
+        // remove terminal nodes:
+        mm_sums_0.resize(nr_vars);
+        mm_sums_1.resize(nr_vars);
         return {mm_sums_0, mm_sums_1};
-    }   
+    }
 
     template<typename REAL>
     struct mm_types_transform {
@@ -130,21 +163,18 @@ namespace LPMP {
                 assert(false);
                 // typically does not happen
             }
+            assert(mmt == mm_type::inconsistent);
+
+            thrust::default_random_engine rng;
+            thrust::uniform_real_distribution<float> dist(delta/5.0, delta);
+            const int id = blockIdx.x * blockDim.x + threadIdx.x;
+            rng.discard(id); // TODO: have other source for randomness here!
+            const float r = dist(rng);
+
+            if(mm_0 < mm_1)
+                return {0.0, 3.0*r};
             else
-            {   
-                assert(mmt == mm_type::inconsistent);
-
-                thrust::default_random_engine rng;
-                thrust::uniform_real_distribution<float> dist(delta/5.0, delta);
-                const int id = blockIdx.x * blockDim.x + threadIdx.x;
-                rng.discard(id); // TODO: have other source for randomness here!
-                const float r = dist(rng);
-
-                if(mm_0 < mm_1)
-                    return {0.0, 3.0*r};
-                else
-                    return {3.0*r, 0.0};
-            }
+                return {3.0*r, 0.0};
         }
     };
 
