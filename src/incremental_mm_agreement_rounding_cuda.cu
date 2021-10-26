@@ -157,13 +157,13 @@ namespace LPMP {
             {
                 return {0.0, delta};
             }
-            else if(mmt == mm_type::equal)
-            {
-                printf("equal min marginals not implemented\n");
-                assert(false);
-                // typically does not happen
-            }
-            assert(mmt == mm_type::inconsistent);
+            // else if(mmt == mm_type::equal)
+            // {
+            //     printf("equal min marginals not implemented\n");
+            //     assert(false);
+            //     // typically does not happen
+            // }
+            // assert(mmt == mm_type::inconsistent);
 
             thrust::default_random_engine rng;
             thrust::uniform_real_distribution<float> dist(delta/5.0, delta);
@@ -253,9 +253,17 @@ struct mm_type_to_sol {
                 thrust::transform(it_begin, it_end, delta_it_begin, mm_types_transform<typename SOLVER::value_type>{cur_delta});
 
                 s.update_costs(cost_delta_0, cost_delta_1);
-                for(size_t solver_iter=0; solver_iter<5; ++solver_iter)
+                float lb_prev;
+                size_t solver_iter;
+                for(solver_iter=0; solver_iter<100; ++solver_iter)
+                {
                     s.iteration();
-                std::cout << "[incremental primal rounding cuda] lower bound = " << s.lower_bound() << "\n";
+                    float lb_post = s.lower_bound();
+                    if (solver_iter > 0 && std::abs(lb_prev-lb_post) < std::abs(1e-6 * lb_prev))
+                        break;
+                    lb_prev = lb_post;
+                }
+                std::cout << "[incremental primal rounding cuda] lower bound = " << lb_prev << ", iterations: "<<solver_iter<<"\n";
             }
 
             std::cout << "[incremental primal rounding cuda] No solution found\n";
