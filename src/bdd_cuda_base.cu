@@ -681,11 +681,6 @@ namespace LPMP {
 
         thrust::device_vector<REAL> min_marginals_lo_sorted(hi_cost_.size());
         thrust::device_vector<REAL> min_marginals_hi_sorted(hi_cost_.size());
-        thrust::device_vector<int> primal_variable_index_sorted_test(hi_cost_.size());
-        
-        thrust::gather(primal_variable_sorting_order_.begin(), primal_variable_sorting_order_.end(), primal_variable_index_.begin(), primal_variable_index_sorted_test.begin());
-
-        assert(thrust::equal(primal_variable_index_sorted_.begin(), primal_variable_index_sorted_.end(), primal_variable_index_sorted_test.begin()));
 
         auto first_out_val_sorted = thrust::make_zip_iterator(thrust::make_tuple(min_marginals_lo_sorted.begin(), min_marginals_hi_sorted.begin()));
         thrust::gather(primal_variable_sorting_order_.begin(), primal_variable_sorting_order_.end(), first_out_val, first_out_val_sorted);
