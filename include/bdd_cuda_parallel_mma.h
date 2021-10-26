@@ -12,6 +12,7 @@ namespace LPMP {
             bdd_cuda_parallel_mma(const BDD::bdd_collection& bdd_col);
 
             void iteration();
+            void distribute_delta();
 
             // about memory coalescing:
             // https://forums.developer.nvidia.com/t/accessing-same-global-memory-address-within-warps/66574/2
@@ -25,7 +26,6 @@ namespace LPMP {
 
             void min_marginals_from_directional_costs(const int hop_index, const REAL omega);
 
-            void distribute_delta();
             void normalize_delta();
             void compute_delta();
             void flush_mm();

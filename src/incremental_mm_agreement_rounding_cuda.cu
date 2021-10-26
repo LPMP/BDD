@@ -199,6 +199,8 @@ struct mm_type_to_sol {
             MEASURE_FUNCTION_EXECUTION_TIME;
 
             const auto start_time = std::chrono::steady_clock::now();
+            s.distribute_delta();
+            std::cout<<"Lower bound after distributing delta: "<<s.lower_bound()<<"\n";
 
             std::cout << "[incremental primal rounding cuda] initial perturbation delta = " << init_delta << ", growth rate for perturbation " << delta_growth_rate << "\n";
 
@@ -210,7 +212,8 @@ struct mm_type_to_sol {
                 const auto time = std::chrono::steady_clock::now();
                 const double time_elapsed = (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000;
                 std::cout << "[incremental primal rounding cuda] round " << round << ", cost delta " << cur_delta << ", time elapsed = " << time_elapsed << "\n";
-
+                
+                s.distribute_delta();
                 const auto mms = s.min_marginals_cuda();
                 const thrust::device_vector<int>& primal_vars = std::get<0>(mms);
                 const thrust::device_vector<float>& mms_0 = std::get<1>(mms);
@@ -255,7 +258,7 @@ struct mm_type_to_sol {
                 s.update_costs(cost_delta_0, cost_delta_1);
                 float lb_prev;
                 size_t solver_iter;
-                for(solver_iter=0; solver_iter<100; ++solver_iter)
+                for(solver_iter=0; solver_iter<200; ++solver_iter)
                 {
                     s.iteration();
                     float lb_post = s.lower_bound();
