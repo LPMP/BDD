@@ -144,10 +144,17 @@ namespace LPMP {
         thrust::device_vector<int> sorting_order(nr_bdd_nodes_);
         thrust::sequence(sorting_order.begin(), sorting_order.end());
         
-        auto first_key = thrust::make_zip_iterator(thrust::make_tuple(bdd_hop_dist_dev.begin(), bdd_depth_dev.begin(), bdd_index_.begin()));
-        auto last_key = thrust::make_zip_iterator(thrust::make_tuple(bdd_hop_dist_dev.end(), bdd_depth_dev.begin(), bdd_index_.end()));
+        // auto first_key = thrust::make_zip_iterator(thrust::make_tuple(bdd_hop_dist_dev.begin(), bdd_depth_dev.begin(), bdd_index_.begin()));
+        // auto last_key = thrust::make_zip_iterator(thrust::make_tuple(bdd_hop_dist_dev.end(), bdd_depth_dev.begin(), bdd_index_.end()));
 
-        auto first_bdd_val = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.begin(), lo_bdd_node_index_.begin(), 
+        // auto first_bdd_val = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.begin(), lo_bdd_node_index_.begin(), 
+        //                                                                 hi_bdd_node_index_.begin(), sorting_order.begin()));
+
+        // Sort by primal indices within one BDD column, this is faster than the above scheme. (faster on MRF, CT, GM but slightly slower on QAPLib).
+        auto first_key = thrust::make_zip_iterator(thrust::make_tuple(bdd_hop_dist_dev.begin(), primal_variable_index_.begin(), bdd_index_.begin()));
+        auto last_key = thrust::make_zip_iterator(thrust::make_tuple(bdd_hop_dist_dev.end(), primal_variable_index_.end(), bdd_index_.end()));
+
+        auto first_bdd_val = thrust::make_zip_iterator(thrust::make_tuple(bdd_depth_dev.begin(), lo_bdd_node_index_.begin(), 
                                                                         hi_bdd_node_index_.begin(), sorting_order.begin()));
         thrust::sort_by_key(first_key, last_key, first_bdd_val);
         

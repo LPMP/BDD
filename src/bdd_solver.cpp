@@ -131,6 +131,8 @@ namespace LPMP {
         incremental_rounding_param_group->add_option("--incremental_perturbation_growth_rate", incremental_growth_rate, "growth rate for increasing the perturbation for obtaining primal solutions by incremental primal rounding")
             ->check(CLI::Range(1.0,std::numeric_limits<double>::max()));
 
+        incremental_rounding_param_group->add_option("--incremental_primal_num_itr_lb", incremental_primal_num_itr_lb, "number of iterations of dual optimization during incremental primal rounding")
+            ->check(CLI::Range(1,std::numeric_limits<int>::max()));
 
         auto tighten_arg = app.add_flag("--tighten", tighten, "tighten relaxation flag");
         
@@ -497,13 +499,13 @@ namespace LPMP {
                             || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma<float>>
                             || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma<double>>
                             )
-                    return incremental_mm_agreement_rounding_iter(s, options.incremental_initial_perturbation, options.incremental_growth_rate);
+                    return incremental_mm_agreement_rounding_iter(s, options.incremental_initial_perturbation, options.incremental_growth_rate, options.incremental_primal_num_itr_lb);
                     else if constexpr(
                             std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<float>>
     //                        || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<double>>
                             )
                     {
-                    return s.incremental_mm_agreement_rounding(options.incremental_initial_perturbation, options.incremental_growth_rate);
+                    return s.incremental_mm_agreement_rounding(options.incremental_initial_perturbation, options.incremental_growth_rate, options.incremental_primal_num_itr_lb);
                     }
 
                     {

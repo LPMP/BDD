@@ -192,7 +192,7 @@ struct mm_type_to_sol {
 };
 
     template<typename SOLVER>
-        std::vector<char> incremental_mm_agreement_rounding_cuda(SOLVER& s, double init_delta, const double delta_growth_rate)
+        std::vector<char> incremental_mm_agreement_rounding_cuda(SOLVER& s, double init_delta, const double delta_growth_rate, const int num_itr_lb)
         {
             assert(delta_growth_rate > 0);
             assert(init_delta > 0);
@@ -200,7 +200,8 @@ struct mm_type_to_sol {
 
             const auto start_time = std::chrono::steady_clock::now();
             s.distribute_delta();
-            std::cout<<"Lower bound after distributing delta: "<<s.lower_bound()<<"\n";
+            const double lb = s.lower_bound();
+            std::cout<<"Lower bound after distributing delta: "<<lb<<"\n";
 
             std::cout << "[incremental primal rounding cuda] initial perturbation delta = " << init_delta << ", growth rate for perturbation " << delta_growth_rate << "\n";
 
@@ -208,7 +209,7 @@ struct mm_type_to_sol {
 
             for(size_t round=0; round<10000; ++round)
             {
-                cur_delta = cur_delta*delta_growth_rate;
+                cur_delta = min(cur_delta*delta_growth_rate, 1000.0);
                 const auto time = std::chrono::steady_clock::now();
                 const double time_elapsed = (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000;
                 std::cout << "[incremental primal rounding cuda] round " << round << ", cost delta " << cur_delta << ", time elapsed = " << time_elapsed << "\n";
@@ -240,6 +241,7 @@ struct mm_type_to_sol {
                     std::vector<char> sol(s.nr_variables());
                     thrust::copy(device_sol.begin(), device_sol.end(), sol.begin());
                     std::cout << "[incremental primal rounding cuda] reconstructed solution\n";
+                    std::cout << "[incremental primal rounding cuda] Lower bound with 0 delta: "<<lb<<"\n";
                     return sol;
                 }
 
@@ -258,7 +260,7 @@ struct mm_type_to_sol {
                 s.update_costs(cost_delta_0, cost_delta_1);
                 float lb_prev;
                 size_t solver_iter;
-                for(solver_iter=0; solver_iter<200; ++solver_iter)
+                for(solver_iter=0; solver_iter < num_itr_lb; ++solver_iter)
                 {
                     s.iteration();
                     float lb_post = s.lower_bound();
@@ -273,6 +275,6 @@ struct mm_type_to_sol {
             return {};
         }
 
-    template std::vector<char> incremental_mm_agreement_rounding_cuda(bdd_cuda_parallel_mma<float>& , double , const double );
-    template std::vector<char> incremental_mm_agreement_rounding_cuda(bdd_cuda_parallel_mma<double>& , double , const double );
+    template std::vector<char> incremental_mm_agreement_rounding_cuda(bdd_cuda_parallel_mma<float>& , double , const double, const int );
+    template std::vector<char> incremental_mm_agreement_rounding_cuda(bdd_cuda_parallel_mma<double>& , double , const double, const int );
 }

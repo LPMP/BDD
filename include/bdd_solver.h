@@ -52,6 +52,7 @@ namespace LPMP {
         bool incremental_primal_rounding = false;
         double incremental_initial_perturbation = std::numeric_limits<double>::infinity();
         double incremental_growth_rate = 1.1;
+        int incremental_primal_num_itr_lb = 500;
 
         bool diving_primal_rounding = false;
         bdd_fix_options fixing_options_;

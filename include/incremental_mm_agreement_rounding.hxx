@@ -82,7 +82,7 @@ namespace LPMP {
     }
 
     template<typename SOLVER>
-        std::vector<char> incremental_mm_agreement_rounding_iter(SOLVER& s, double init_delta = std::numeric_limits<double>::infinity(), const double delta_growth_rate = 1.1)
+        std::vector<char> incremental_mm_agreement_rounding_iter(SOLVER& s, double init_delta = std::numeric_limits<double>::infinity(), const double delta_growth_rate = 1.1, const int num_itr_lb = 100)
         {
             assert(init_delta > 0.0);
             assert(delta_growth_rate >= 1.0);
@@ -198,7 +198,7 @@ namespace LPMP {
                     }
                 }
                 s.update_costs(cost_lo_updates.begin(), cost_lo_updates.end(), cost_hi_updates.begin(), cost_hi_updates.end());
-                for(size_t solver_iter=0; solver_iter<5; ++solver_iter)
+                for(size_t solver_iter=0; solver_iter<num_itr_lb; ++solver_iter)
                     s.iteration();
                 std::cout << "[incremental primal rounding] lower bound = " << s.lower_bound() << "\n";
             }
