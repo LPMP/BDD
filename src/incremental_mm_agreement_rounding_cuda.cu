@@ -209,7 +209,7 @@ struct mm_type_to_sol {
 
             for(size_t round=0; round<10000; ++round)
             {
-                cur_delta = min(cur_delta*delta_growth_rate, 1000.0);
+                cur_delta = min(cur_delta*delta_growth_rate, 1e6);
                 const auto time = std::chrono::steady_clock::now();
                 const double time_elapsed = (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000;
                 std::cout << "[incremental primal rounding cuda] round " << round << ", cost delta " << cur_delta << ", time elapsed = " << time_elapsed << "\n";
