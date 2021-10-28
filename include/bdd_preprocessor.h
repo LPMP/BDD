@@ -6,8 +6,6 @@
 #include "convert_pb_to_bdd.h"
 #include "lineq_bdd.h"
 #include "two_dimensional_variable_array.hxx"
-//#include "edge_cover.h"
-//#include "graph.hxx"
 #include <cassert>
 #include <vector>
 
@@ -15,7 +13,7 @@ namespace LPMP {
     
     class bdd_preprocessor {
         public:
-            bdd_preprocessor(const ILP_input& ilp);
+            bdd_preprocessor(const ILP_input& ilp, const bool constraint_groups = true);
 
             template<typename VARIABLE_ITERATOR>
                 void add_bdd(BDD::node_ref bdd, VARIABLE_ITERATOR var_begin, VARIABLE_ITERATOR var_end);

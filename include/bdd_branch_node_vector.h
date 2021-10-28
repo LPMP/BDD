@@ -56,80 +56,78 @@ namespace LPMP {
                 void compute_lower_bound_after_forward_pass(); 
                 void compute_lower_bound_after_backward_pass(); 
 
-            //std::vector<double> total_min_marginals();
-            two_dim_variable_array<std::array<double,2>> min_marginals();
-            void solve(const size_t max_iter, const double tolerance, const double time_limit); 
-            double lower_bound() const { return lower_bound_; }
-            void update_cost(const double lo_cost, const double hi_cost, const size_t var);
-            void fix_variable(const size_t var, const bool value);
+                two_dim_variable_array<std::array<double,2>> min_marginals();
+                void solve(const size_t max_iter, const double tolerance, const double time_limit); 
+                double lower_bound() const { return lower_bound_; }
+                void update_cost(const double lo_cost, const double hi_cost, const size_t var);
+                void fix_variable(const size_t var, const bool value);
 
-            // get variable costs from bdd
-            std::vector<value_type> get_costs(const size_t bdd_nr);
-            // add costs from cost iterator to costs of bdd. Assume that variables given are subset of variables of bdd
-            template<typename COST_ITERATOR, typename VARIABLE_ITERATOR>
-                void update_costs(const size_t bdd_nr,
-                        COST_ITERATOR cost_begin, COST_ITERATOR cost_end,
-                        VARIABLE_ITERATOR variable_begin, VARIABLE_ITERATOR variable_end);
-            template<typename COST_ITERATOR>
-                void update_costs(COST_ITERATOR cost_begin, COST_ITERATOR cost_end);
+                // get variable costs from bdd
+                std::vector<value_type> get_costs(const size_t bdd_nr);
+                // add costs from cost iterator to costs of bdd. Assume that variables given are subset of variables of bdd
+                template<typename COST_ITERATOR, typename VARIABLE_ITERATOR>
+                    void update_costs(const size_t bdd_nr,
+                            COST_ITERATOR cost_begin, COST_ITERATOR cost_end,
+                            VARIABLE_ITERATOR variable_begin, VARIABLE_ITERATOR variable_end);
+                template<typename COST_ITERATOR>
+                    void update_costs(COST_ITERATOR cost_begin, COST_ITERATOR cost_end);
 
-            template<typename ITERATOR>
-                void update_arc_costs(const size_t first_node, ITERATOR begin, ITERATOR end);
-            void transfer_cost(const size_t from_bdd_nr, const size_t to_bdd_nr);
-            void get_arc_marginals(const size_t first_node, const size_t last_node, std::vector<double>& arc_marginals);
+                template<typename ITERATOR>
+                    void update_arc_costs(const size_t first_node, ITERATOR begin, ITERATOR end);
+                void transfer_cost(const size_t from_bdd_nr, const size_t to_bdd_nr);
+                void get_arc_marginals(const size_t first_node, const size_t last_node, std::vector<double>& arc_marginals);
 
-            std::array<size_t,2> bdd_branch_node_offset(const size_t var, const size_t bdd_index) const;
-            size_t variable(const size_t bdd_offset) const;
+                std::array<size_t,2> bdd_branch_node_offset(const size_t var, const size_t bdd_index) const;
+                size_t variable(const size_t bdd_offset) const;
 
-            void export_graphviz(const char* filename);
-            void export_graphviz(const std::string& filename);
-            template<typename STREAM>
-                void export_graphviz(STREAM& s, const size_t bdd_nr);
+                void export_graphviz(const char* filename);
+                void export_graphviz(const std::string& filename);
+                template<typename STREAM>
+                    void export_graphviz(STREAM& s, const size_t bdd_nr);
 
-        protected:
-            std::vector<BDD_BRANCH_NODE> bdd_branch_nodes_;
-            std::vector<size_t> bdd_branch_node_offsets_; // offsets into where bdd branch nodes belonging to a variable start 
-            // TODO: remove all group stuff
-            std::vector<size_t> bdd_branch_node_group_offsets_; // offsets into where bdd branch nodes belonging to a variable group start 
-            std::vector<size_t> nr_bdds_; // nr bdds per variable
-            // TODO: use std::vector<std::array<size_t,2>> for range of first resp. last bdd nodes of each BDD. Also sort them for faster access time
-            two_dim_variable_array<size_t> first_bdd_node_indices_;  // used for computing lower bound
-            two_dim_variable_array<size_t> last_bdd_node_indices_;  // used for computing lower bound
-            double lower_bound_ = -std::numeric_limits<double>::infinity();
+            protected:
+                std::vector<BDD_BRANCH_NODE> bdd_branch_nodes_;
+                std::vector<size_t> bdd_branch_node_offsets_; // offsets into where bdd branch nodes belonging to a variable start 
+                // TODO: remove all group stuff
+                std::vector<size_t> bdd_branch_node_group_offsets_; // offsets into where bdd branch nodes belonging to a variable group start 
+                std::vector<size_t> nr_bdds_; // nr bdds per variable
+                // TODO: use std::vector<std::array<size_t,2>> for range of first resp. last bdd nodes of each BDD. Also sort them for faster access time
+                two_dim_variable_array<size_t> first_bdd_node_indices_;  // used for computing lower bound
+                two_dim_variable_array<size_t> last_bdd_node_indices_;  // used for computing lower bound
+                double lower_bound_ = -std::numeric_limits<double>::infinity();
 
-            enum class message_passing_state {
-                after_forward_pass,
-                after_backward_pass,
-                none 
-            } message_passing_state_ = message_passing_state::none;
+                enum class message_passing_state {
+                    after_forward_pass,
+                    after_backward_pass,
+                    none 
+                } message_passing_state_ = message_passing_state::none;
 
-        private:
-            std::vector<size_t> compute_bdd_branch_instruction_variables() const;
-            void tighten_bdd(const float eps);
-            two_dim_variable_array<size_t> tighten_bdd_groups(const std::vector<char>& tighten_variables);
-            mutable std::vector<size_t> bdd_branch_instruction_variables_;
+            private:
+                std::vector<size_t> compute_bdd_branch_instruction_variables() const;
+                void tighten_bdd(const float eps);
+                two_dim_variable_array<size_t> tighten_bdd_groups(const std::vector<char>& tighten_variables);
+                mutable std::vector<size_t> bdd_branch_instruction_variables_;
 
-        public: // TODO: change to private again
-            template<typename LAMBDA>
-                void visit_nodes(const size_t bdd_nr, LAMBDA&& f);
+            public: // TODO: change to private again
+                template<typename LAMBDA>
+                    void visit_nodes(const size_t bdd_nr, LAMBDA&& f);
 
-            // for BDD tightening
-        public:
-            //std::vector<float> min_marginal_differences(const float eps);
-            // min marginals for each variable and each bdd
-            //two_dim_variable_array<std::array<float,2>> min_marginals();
-            // export BDDs that cover the given variables
-            // TODO: unify with init?
-            void add_bdds(BDD::bdd_collection& bdd_col);
-            template<typename BDD_NR_ITERATOR>
-                std::vector<size_t> add_bdds(BDD::bdd_collection& bdd_col, BDD_NR_ITERATOR bdd_nrs_begin, BDD_NR_ITERATOR bdd_nrs_end);
+                // for BDD tightening
+            public:
+                //std::vector<float> min_marginal_differences(const float eps);
+                // min marginals for each variable and each bdd
+                //two_dim_variable_array<std::array<float,2>> min_marginals();
+                // export BDDs that cover the given variables
+                // TODO: unify with init?
+                void add_bdds(BDD::bdd_collection& bdd_col);
+                template<typename BDD_NR_ITERATOR>
+                    std::vector<size_t> add_bdds(BDD::bdd_collection& bdd_col, BDD_NR_ITERATOR bdd_nrs_begin, BDD_NR_ITERATOR bdd_nrs_end);
 
-            std::vector<size_t> variables(const size_t bdd_idx);
-            std::vector<bdd_branch_instruction<float,uint32_t>> export_bdd(const size_t bdd_idx);
-            size_t export_bdd(BDD::bdd_collection& bdd_col, const size_t bdd_idx);
-            std::tuple<BDD::node_ref, std::vector<size_t>> export_bdd(BDD::bdd_mgr& bdd_mgr, const size_t bdd_idx);
-
-    };
+                std::vector<size_t> variables(const size_t bdd_idx);
+                std::vector<bdd_branch_instruction<float,uint32_t>> export_bdd(const size_t bdd_idx);
+                size_t export_bdd(BDD::bdd_collection& bdd_col, const size_t bdd_idx);
+                std::tuple<BDD::node_ref, std::vector<size_t>> export_bdd(BDD::bdd_mgr& bdd_mgr, const size_t bdd_idx);
+        };
 
     template<typename BDD_BRANCH_NODE>
     size_t bdd_mma_base<BDD_BRANCH_NODE>::nr_variables() const
@@ -577,10 +575,6 @@ namespace LPMP {
                 bdd_branch_nodes_[first_bdd_node_indices_(bdd_index,j)].m = 0.0;
 
         two_dim_variable_array<std::array<double,2>> mms;
-
-        //total_min_marginals_vec.reserve(nr_variables());
-
-        std::cout << "after forward run\n";
 
         for(size_t var=0; var<this->nr_variables(); ++var)
         {

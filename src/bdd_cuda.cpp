@@ -119,6 +119,7 @@ namespace LPMP {
 #ifdef WITH_CUDA
         return pimpl->pmma.min_marginals();
 #endif
+        return {};
     }
 
     template<typename REAL>
@@ -127,6 +128,7 @@ namespace LPMP {
 #ifdef WITH_CUDA
         return incremental_mm_agreement_rounding_cuda(pimpl->pmma, init_delta, delta_growth_rate, num_itr_lb);
 #endif
+        return {};
     }
 
     template class bdd_cuda<float>;

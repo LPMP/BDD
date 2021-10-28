@@ -60,6 +60,8 @@ namespace LPMP {
         bool statistics = false;
         std::string export_bdd_lp_file = "";
         std::string export_bdd_graph_file = "";
+
+        bool constraint_groups = true; // allow constraint groups to be formed e.g. from indicators in the input lp files
     };
 
     class bdd_solver {

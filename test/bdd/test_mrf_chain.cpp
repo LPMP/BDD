@@ -73,8 +73,6 @@ node_ref create_mrf_chain_2(bdd_mgr& mgr, const size_t nr_labels)
         ps = ps & marg_constrs.back();
     }
 
-    //node_ref mc = mgr.and_rec(marg_constrs.begin(), marg_constrs.end());
-    //return mc & us1 & us2 & ps;
     return us1 & us2 & ps;
 }
 

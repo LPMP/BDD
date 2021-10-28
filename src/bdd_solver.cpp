@@ -75,6 +75,8 @@ namespace LPMP {
         app.add_option("--tolerance", tolerance, "lower bound relative progress tolerance, default value = 1e-06")
             ->check(CLI::PositiveNumber);
 
+        app.add_option("--constraint_groups", constraint_groups, "allow multiple constraints to be fused into one, default = true");
+
         app.add_option("-l, --time_limit", time_limit, "time limit in seconds, default value = 3600")
             ->check(CLI::PositiveNumber);
 
@@ -245,12 +247,7 @@ namespace LPMP {
 
         costs = options.ilp.objective();
 
-        // print variable order
-        // for (size_t v = 0; v < ilp.nr_variables(); v++)
-        //     std::cout << ilp.get_var_name(v) << std::endl;
-
-        bdd_preprocessor bdd_pre(options.ilp);
-        //bdd_pre.construct_bdd_collection(); // this is only needed if bdd collection is used in bdd preprocessor
+        bdd_preprocessor bdd_pre(options.ilp, options.constraint_groups);
         bdd_storage stor(bdd_pre);
 
         std::cout << std::setprecision(10);

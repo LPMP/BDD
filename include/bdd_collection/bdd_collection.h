@@ -207,6 +207,9 @@ namespace BDD {
             size_t simplex_constraint(const size_t n);
             size_t not_all_false_constraint(const size_t n);
 
+            // merge BDDs from another bdd_collection
+            void append(const bdd_collection& o);
+
         private:
             size_t bdd_and_impl(const size_t i, const size_t j, const size_t node_limit);
             template<size_t N>

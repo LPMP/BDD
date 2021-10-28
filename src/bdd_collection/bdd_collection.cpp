@@ -448,7 +448,9 @@ namespace BDD {
 
     bool bdd_collection::is_qbdd(const size_t bdd_nr) const
     {
-        return bdd_basic_check(bdd_nr) && contiguous_vars(bdd_nr) && has_no_isomorphic_subgraphs(bdd_nr);
+        assert(bdd_basic_check(bdd_nr));
+        assert(has_no_isomorphic_subgraphs(bdd_nr));
+        return contiguous_vars(bdd_nr);
     }
 
     bool bdd_collection::bdd_basic_check(const size_t bdd_nr) const
@@ -1101,6 +1103,26 @@ namespace BDD {
         reorder(bdd_delimiters.size()-2);
 
         return bdd_delimiters.size() - 2;
+    }
+
+    void bdd_collection::append(const bdd_collection& o)
+    {
+        const size_t offset = bdd_instructions.size();
+        for(size_t o_bdd_nr=0; o_bdd_nr<o.nr_bdds(); ++o_bdd_nr)
+        {
+            for(size_t j=o.bdd_delimiters[o_bdd_nr]; j<o.bdd_delimiters[o_bdd_nr+1]; ++j)
+            {
+                assert(j < o.bdd_instructions.size());
+                bdd_instruction o_bdd = o.bdd_instructions[j];
+                if(!o_bdd.is_terminal())
+                {
+                    o_bdd.lo += offset;
+                    o_bdd.hi += offset;
+                }
+                bdd_instructions.push_back(o_bdd);
+            }
+            bdd_delimiters.push_back(bdd_instructions.size());
+        }
     }
 
     //////////////////////////
