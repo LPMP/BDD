@@ -141,9 +141,11 @@ namespace LPMP {
     template<typename REAL>
     struct mm_types_transform {
         const REAL delta;
+        const int* ranking_inconsistent;
+        const REAL decay_factor_inconsistent;
 
         __host__ __device__
-        thrust::tuple<REAL, REAL> operator()(const thrust::tuple<mm_type,REAL,REAL> t)
+        thrust::tuple<REAL, REAL> operator()(const thrust::tuple<mm_type,REAL,REAL,int> t) const
         {
             const mm_type mmt = thrust::get<0>(t);
             const REAL mm_0 = thrust::get<1>(t);
@@ -157,26 +159,78 @@ namespace LPMP {
             {
                 return {0.0, delta};
             }
-            // else if(mmt == mm_type::equal)
-            // {
-            //     printf("equal min marginals not implemented\n");
-            //     assert(false);
-            //     // typically does not happen
-            // }
-            // assert(mmt == mm_type::inconsistent);
+            else if(mmt == mm_type::equal)
+            {
+                thrust::default_random_engine rng;
+                thrust::uniform_real_distribution<float> dist(delta/5.0, delta);
+                const int id = blockIdx.x * blockDim.x + threadIdx.x;
+                rng.discard(id); // TODO: have other source for randomness here!
+                const float r = dist(rng);
 
-            thrust::default_random_engine rng;
-            thrust::uniform_real_distribution<float> dist(delta/5.0, delta);
-            const int id = blockIdx.x * blockDim.x + threadIdx.x;
-            rng.discard(id); // TODO: have other source for randomness here!
-            const float r = dist(rng);
-
-            if(mm_0 < mm_1)
-                return {0.0, 3.0*r};
+                if(mm_0 < mm_1)
+                    return {0.0, 3.0*r};
+                else
+                    return {3.0*r, 0.0};
+            }
             else
-                return {3.0*r, 0.0};
+            {
+                const int primal_index = thrust::get<3>(t);
+                const int rank = ranking_inconsistent[primal_index];
+                assert(rank > 0);
+                if(mm_0 < mm_1)
+                    return {0.0, delta / pow(rank, decay_factor_inconsistent)};
+                else
+                    return {delta / pow(rank, decay_factor_inconsistent), 0.0};
+            }
         }
     };
+
+    template<typename REAL>
+    struct mm_abs_diff_func
+    {
+        __host__ __device__
+        REAL operator()(const REAL& m1, const REAL& m0)
+        {
+            return abs(m1 - m0);
+        }
+    };
+
+    template<typename REAL>
+    struct is_consistent_func
+    {
+        const mm_type* mm_types;
+        __host__ __device__
+        bool operator()(const thrust::tuple<REAL, int>& t) const
+        {
+            const int var = thrust::get<1>(t);
+            return mm_types[var] != mm_type::inconsistent; 
+        }
+    };
+
+    template<typename REAL>
+    thrust::device_vector<int> compute_inconsistent_ranking(const thrust::device_vector<mm_type>& mm_types, const thrust::device_vector<REAL>& mm_sum_0, const thrust::device_vector<REAL>& mm_sum_1)
+    {
+        thrust::device_vector<REAL> mm_abs_diff(mm_sum_0.size());
+        thrust::transform(mm_sum_1.begin(), mm_sum_1.end(), mm_sum_0.begin(), mm_abs_diff.begin(), mm_abs_diff_func<REAL>());
+        
+        thrust::device_vector<int> inconsistent_primal_vars(mm_types.size());
+        thrust::sequence(inconsistent_primal_vars.begin(), inconsistent_primal_vars.end());
+
+        auto first = thrust::make_zip_iterator(thrust::make_tuple(mm_abs_diff.begin(), inconsistent_primal_vars.begin()));
+        auto last = thrust::make_zip_iterator(thrust::make_tuple(mm_abs_diff.end(), inconsistent_primal_vars.end()));
+
+        auto new_last = thrust::remove_if(first, last, is_consistent_func<REAL>({thrust::raw_pointer_cast(mm_types.data())}));
+        const int num_inconsistent = thrust::distance(first, new_last);
+        mm_abs_diff.resize(num_inconsistent);
+        inconsistent_primal_vars.resize(num_inconsistent);
+
+        thrust::sort_by_key(mm_abs_diff.begin(), mm_abs_diff.end(), inconsistent_primal_vars.begin(), thrust::greater<REAL>());
+
+        thrust::device_vector<int> ranking(mm_types.size(), 0); // not inconsistent variables have rank 0.
+        thrust::scatter(thrust::make_counting_iterator<int>(1), thrust::make_counting_iterator<int>(1) + num_inconsistent, inconsistent_primal_vars.begin(), ranking.begin());
+        return ranking;
+    }
+
 
 struct mm_type_to_sol {
     __host__ __device__
@@ -251,11 +305,13 @@ struct mm_type_to_sol {
                 const auto mm_sums = compute_mm_sums(s.nr_variables(), mms_0, mms_1, primal_vars);
                 const auto& mm_sums_0 = std::get<0>(mm_sums);
                 const auto& mm_sums_1 = std::get<1>(mm_sums);
+                thrust::device_vector<int> inconsistent_ranking =  compute_inconsistent_ranking(mm_types, mm_sums_0, mm_sums_1);
 
                 auto delta_it_begin = thrust::zip_iterator(thrust::make_tuple(cost_delta_0.begin(), cost_delta_1.begin()));
-                auto it_begin = thrust::zip_iterator(thrust::make_tuple(mm_types.begin(), mm_sums_0.begin(), mm_sums_1.begin()));
-                auto it_end = thrust::zip_iterator(thrust::make_tuple(mm_types.end(), mm_sums_0.end(), mm_sums_1.end()));
-                thrust::transform(it_begin, it_end, delta_it_begin, mm_types_transform<typename SOLVER::value_type>{cur_delta});
+                auto first = thrust::zip_iterator(thrust::make_tuple(mm_types.begin(), mm_sums_0.begin(), mm_sums_1.begin(), thrust::make_counting_iterator<int>(0)));
+                auto last = thrust::zip_iterator(thrust::make_tuple(mm_types.end(), mm_sums_0.end(), mm_sums_1.end(), thrust::make_counting_iterator<int>(0) + mm_types.size()));
+
+                thrust::transform(first, last, delta_it_begin, mm_types_transform<typename SOLVER::value_type>{cur_delta, thrust::raw_pointer_cast(inconsistent_ranking.data()), 3.0});
 
                 s.update_costs(cost_delta_0, cost_delta_1);
                 float lb_prev;

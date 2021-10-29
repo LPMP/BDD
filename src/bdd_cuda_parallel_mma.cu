@@ -440,8 +440,9 @@ namespace LPMP {
         auto first_out_val = thrust::make_zip_iterator(thrust::make_tuple(delta_hi_.begin(), delta_lo_.begin()));
 
         thrust::equal_to<int> binary_pred;
-        thrust::reduce_by_key(this->primal_variable_index_sorted_.begin(), this->primal_variable_index_sorted_.end(), first_val, 
+        auto new_end = thrust::reduce_by_key(this->primal_variable_index_sorted_.begin(), this->primal_variable_index_sorted_.end() - this->nr_bdds_, first_val, 
                             thrust::make_discard_iterator(), first_out_val, binary_pred, tuple_sum<REAL>());
+        assert(thrust::distance(first_out_val, new_end.second) == delta_hi_.size());
         // thrust::reduce_by_key(thrust::make_permutation_iterator(this->primal_variable_index_.begin(), primal_variable_sorting_order_.begin()),
         //                     thrust::make_permutation_iterator(this->primal_variable_index_.end(), primal_variable_sorting_order_.end()), first_val, 
         //                     thrust::make_discard_iterator(), first_out_val, binary_pred, tuple_sum<REAL>()); // Uses less memory but slower.
