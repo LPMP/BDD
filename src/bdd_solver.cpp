@@ -72,8 +72,11 @@ namespace LPMP {
         app.add_option("-m, --max_iter", max_iter, "maximal number of iterations, default value = 10000")
             ->check(CLI::PositiveNumber);
 
-        app.add_option("--tolerance", tolerance, "lower bound relative progress tolerance, default value = 1e-06")
+        app.add_option("--tolerance", tolerance, "termination criterion: lower bound relative progress tolerance, default value = " + std::to_string(tolerance))
             ->check(CLI::PositiveNumber);
+
+        app.add_option("--improvement_slope", improvement_slope, "termination criterion: improvement between iterations as compared to improvement after first iterations, default value = " + std::to_string(improvement_slope))
+            ->check(CLI::Range(0.0, 1.0));
 
         app.add_option("--constraint_groups", constraint_groups, "allow multiple constraints to be fused into one, default = true");
 
@@ -168,7 +171,7 @@ namespace LPMP {
                 if(bdd_solver_impl_ == bdd_solver_impl::decomposition_mma)
                 {
 #ifdef _OPENMP
-                    std::cout << "use decomposition mma solver\n";
+                    std::cout << "[bdd solver] use decomposition mma solver\n";
                     solver_app.add_option("--nr_threads", decomposition_mma_options_.nr_threads, "number of threads (up to available nr of available units) for simultaneous optimization of the Lagrange decomposition")
                         ->required()
                         ->check(CLI::Range(2, omp_get_max_threads()));
@@ -194,12 +197,12 @@ namespace LPMP {
             {
                 if(input_file.substr(input_file.find_last_of(".") + 1) == "opb")
                 {
-                    std::cout << "Parse opb file\n";
+                    std::cout << "[bdd solver] Parse opb file\n";
                     return OPB_parser::parse_file(input_file);
                 }
                 else
                 {
-                    std::cout << "Parse lp file\n";
+                    std::cout << "[bdd solver] Parse lp file\n";
                     return ILP_parser::parse_file(input_file);
                 }
             }
@@ -234,9 +237,9 @@ namespace LPMP {
     {
         options.ilp.reorder(options.var_order);
 
-        std::cout << "ILP has " << options.ilp.nr_variables() << " variables and " << options.ilp.nr_constraints() << " constraints\n";
+        std::cout << "[bdd solver] ILP has " << options.ilp.nr_variables() << " variables and " << options.ilp.nr_constraints() << " constraints\n";
         if(options.ilp.preprocess())
-            std::cout << "ILP has " << options.ilp.nr_variables() << " variables and " << options.ilp.nr_constraints() << " constraints after preprocessing\n";
+            std::cout << "[bdd solver] ILP has " << options.ilp.nr_variables() << " variables and " << options.ilp.nr_constraints() << " constraints after preprocessing\n";
         else
         {
             std::cout << "The problem appears to be infeasible." << std::endl;
@@ -306,12 +309,12 @@ namespace LPMP {
                 solver = std::move(bdd_mma_vec<double>(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
             else
                 throw std::runtime_error("only float and double precision allowed");
-            std::cout << "constructed sequential mma solver\n"; 
+            std::cout << "[bdd solver] constructed sequential mma solver\n"; 
         } 
         else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::decomposition_mma)
         {
             solver = std::move(decomposition_bdd_mma(stor, options.ilp.objective().begin(), options.ilp.objective().end(), options.decomposition_mma_options_));
-            std::cout << "constructed decomposition mma solver\n";
+            std::cout << "[bdd solver] constructed decomposition mma solver\n";
         }
         else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::parallel_mma)
         {
@@ -321,7 +324,7 @@ namespace LPMP {
                 solver = std::move(bdd_parallel_mma<double>(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
             else
                 throw std::runtime_error("only float and double precision allowed");
-            std::cout << "constructed parallel mma solver\n"; 
+            std::cout << "[bdd solver] constructed parallel mma solver\n"; 
         }
         else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::mma_cuda)
         {
@@ -331,7 +334,7 @@ namespace LPMP {
                 solver = std::move(bdd_cuda<double>(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
             else
                 throw std::runtime_error("only float and double precision allowed");
-            std::cout << "constructed CUDA based mma solver\n"; 
+            std::cout << "[bdd solver] constructed CUDA based mma solver\n"; 
         }
         else
         {
@@ -342,12 +345,11 @@ namespace LPMP {
         {
             std::cout << options.fixing_options_.var_order << ", " << options.fixing_options_.var_value << "\n";
             primal_heuristic = std::move(bdd_fix(stor, options.fixing_options_));
-            std::cout << "constructed primal heuristic\n";
+            std::cout << "[bdd solver] constructed primal heuristic\n";
         }
 
         auto setup_time = (double) std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_time).count() / 1000;
-        std::cout << "setup time = " << setup_time << " s";
-        std::cout << "\n";
+        std::cout << "[bdd solver] setup time = " << setup_time << " s" << "\n";
         options.time_limit -= setup_time;
     }
 
@@ -380,22 +382,24 @@ namespace LPMP {
         std::visit([&](auto&& s) {
 
                 const auto start_time = std::chrono::steady_clock::now();
-                double lb_prev = s.lower_bound();
+                const double lb_initial = s.lower_bound();
+                double lb_first_iter = std::numeric_limits<double>::max();
+                double lb_prev = lb_initial;
                 double lb_post = lb_prev;
                 std::cout << "[bdd_solver] initial lower bound = " << lb_prev;
                 auto time = std::chrono::steady_clock::now();
-                std::cout << ", time = " << (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000 << " s";
-                std::cout << "\n";
+                std::cout << ", time = " << (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000 << " s\n";
                 for(size_t iter=0; iter<options.max_iter; ++iter)
                 {
                     s.iteration();
                     lb_prev = lb_post;
                     lb_post = s.lower_bound();
+                    if(iter == 0)
+                        lb_first_iter = lb_post;
                     std::cout << "[bdd_solver] iteration " << iter << ", lower bound = " << lb_post;
                     time = std::chrono::steady_clock::now();
                     double time_spent = (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000;
-                     std::cout << ", time = " << time_spent << " s";
-                     std::cout << "\n";
+                     std::cout << ", time = " << time_spent << " s\n";
                      if (time_spent > options.time_limit)
                      {
                         std::cout << "[bdd_solver] Time limit reached." << std::endl;
@@ -404,6 +408,16 @@ namespace LPMP {
                      if (std::abs(lb_prev-lb_post) < std::abs(options.tolerance*lb_prev))
                      {
                          std::cout << "[bdd_solver] Relative progress less than tolerance (" << options.tolerance << ")\n";
+                         break;
+                     }
+                     if(std::abs(lb_prev - lb_post) < options.improvement_slope * std::abs(lb_initial - lb_first_iter))
+                     {
+                         std::cout << "[bdd solver] improvement smaller than " << 100*options.improvement_slope << "\% of initial improvement\n";
+                         break;
+                     }
+                     if(lb_post == std::numeric_limits<double>::infinity())
+                     {
+                         std::cout << "[bdd solver] problem infeasible\n";
                          break;
                      }
                 }
@@ -425,7 +439,7 @@ namespace LPMP {
 
         if(options.solution_statistics)
         {
-            std::cout << "print solution statistics:\n";
+            std::cout << "[bdd solver] print solution statistics:\n";
             const auto var_perm = options.ilp.get_variable_permutation().inverse_permutation();
             assert(var_perm.size() == options.ilp.nr_variables());
             const auto mms = min_marginals();

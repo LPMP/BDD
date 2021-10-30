@@ -4,11 +4,7 @@
 #include "ILP_parser.h"
 #include "bdd_preprocessor.h"
 #include "bdd_storage.h"
-//#include "bdd_mma.h"
-//#include "bdd_mma_srmp.h"
-//#include "bdd_mma_agg.h"
 #include "decomposition_bdd_mma.h"
-//#include "bdd_mma_anisotropic.h"
 #include "bdd_mma_vec.h"
 #include "bdd_cuda.h"
 #include "bdd_parallel_mma.h"
@@ -23,8 +19,8 @@ namespace LPMP {
     // glue together various phases of solving:
     // (i) obtain an ILP_input, reorder variables.
     // (ii) preprocess it.
-    // (iii) give the input to bdd_storage for transformation into the modified BDD format we use.
-    // (iv) give the bdd_storage to a specific bdd solver (i.e. bdd_min_marginal_averaging, decomposition bdd etc.).
+    // (iii) give the input to bdd_storage for transformation into QBDD format.
+    // (iv) give the QBDDs to a specific bdd solver (i.e. mma, parallel_mma, ...).
     // (v) solve the dual.
     // (vi) try to obtain a primal solution.
     
@@ -39,9 +35,13 @@ namespace LPMP {
         ILP_input ilp;
         ILP_input::variable_order var_order = ILP_input::variable_order::input;
 
+        // termination criteria //
         size_t max_iter = 1000;
-        double tolerance = 1e-6;
+        double tolerance = 1e-9;
+        double improvement_slope = 0.0001;
         double time_limit = 3600;
+        //////////////////////////
+
         enum class bdd_solver_impl { sequential_mma, decomposition_mma, mma_cuda, parallel_mma } bdd_solver_impl_;
         enum class bdd_solver_precision { single_prec, double_prec } bdd_solver_precision_ = bdd_solver_precision::single_prec;
         decomposition_mma_options decomposition_mma_options_;
