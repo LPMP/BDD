@@ -15,53 +15,70 @@ namespace LPMP {
         assert(bdd_collection.nr_bdds() == 0);
         // first transform linear inequalities into BDDs
         std::cout << "[bdd_preprocessor] convert " << input.constraints().size() << " linear inequalities.\n";
-#pragma omp parallel
+
+#ifdef _OPENMP
+        //omp_set_dynamic(0); // TODO: remove
+        //omp_set_num_threads(3); // TODO: remove
+        //std::cout << "set # threads to 3\n";
+        const size_t nr_threads = omp_get_num_threads();
+#else
+        const size_t nr_threads = 1;
+        throw std::runtime_error("kaskwaskwas");
+#endif
+        std::cout << "[bdd preprocessor] #threads = " << nr_threads << "\n";
+
+#pragma omp parallel for ordered schedule(static) num_threads(nr_threads)
+        for(size_t tid=0; tid<nr_threads; ++tid)
         {
             std::vector<int> coefficients;
             std::vector<std::size_t> variables;
             BDD::bdd_mgr bdd_mgr;
             bdd_converter converter(bdd_mgr);
+            BDD::bdd_collection cur_bdd_collection;
+//#ifdef _OPENMP
+//            const size_t tid = omp_get_thread_num();
+//#else
+//            const size_t tid = 0;
+//#endif
 
-#ifdef OPENMP
-            const size_t nr_threads = omp_get_num_threads();
-#else
-            const size_t nr_threads = 1;
-#endif
-#pragma omp for ordered schedule(static,1)
-            for(size_t t=0; t<nr_threads; ++t)
+            std::cout << "bdd preprocessor thread " << tid << "\n";
+
+            const size_t first_constr = tid*input.constraints().size()/nr_threads;
+            const size_t last_constr = (tid+1 == nr_threads) ? input.constraints().size() : (input.constraints().size()/nr_threads) * (tid+1);
+            if(tid + 1 == nr_threads)
+                assert(last_constr == input.constraints().size());
+
+            for(size_t c=first_constr; c<last_constr; ++c)
             {
-                BDD::bdd_collection cur_bdd_collection;
-#ifdef OPENMP
-                const size_t tid = omp_get_thread_num();
-#else
-                const size_t tid = 0;
-#endif
-                const size_t first_constr = tid*input.constraints().size()/nr_threads;
-                
-                const size_t last_constr = (tid+1 == nr_threads) ? input.constraints().size() : (input.constraints().size()/nr_threads) * (tid+1);
-                for(size_t c=first_constr; c<last_constr; ++c)
-                {
-                    const auto& constraint = input.constraints()[c];
-                    coefficients.clear();
-                    variables.clear();
-                    for(const auto e : constraint.variables) {
-                        coefficients.push_back(e.coefficient);
-                        variables.push_back(e.var);
-                    }
-                    BDD::node_ref bdd = converter.convert_to_bdd(coefficients, constraint.ineq, constraint.right_hand_side);
-                    const size_t bdd_nr = cur_bdd_collection.add_bdd(bdd);
-                    cur_bdd_collection.reorder(bdd_nr);
-                    assert(cur_bdd_collection.is_reordered(bdd_nr));
-                    cur_bdd_collection.rebase(bdd_nr, variables.begin(), variables.end());
+                const auto& constraint = input.constraints()[c];
+                coefficients.clear();
+                variables.clear();
+                for(const auto e : constraint.variables) {
+                    coefficients.push_back(e.coefficient);
+                    variables.push_back(e.var);
                 }
+                BDD::node_ref bdd = converter.convert_to_bdd(coefficients, constraint.ineq, constraint.right_hand_side);
+                if(bdd.is_topsink())
+                {
+                    if(constraint_groups == true && input.nr_constraint_groups() > 0)
+                        throw std::runtime_error("constraint groups and empty constraints not both supported");
+                    continue;
+                }
+                else if(bdd.is_botsink())
+                    throw std::runtime_error("problem is infeasible");
+                const size_t bdd_nr = cur_bdd_collection.add_bdd(bdd);
+                cur_bdd_collection.reorder(bdd_nr);
+                assert(cur_bdd_collection.is_reordered(bdd_nr));
+                cur_bdd_collection.rebase(bdd_nr, variables.begin(), variables.end());
+            }
 #pragma omp ordered
-                {
-                    bdd_collection.append(cur_bdd_collection);
-                }
+            {
+                bdd_collection.append(cur_bdd_collection);
             }
         }
 
-        assert(bdd_collection.nr_bdds() == input.constraints().size());
+        // need not hold if some constraints are empty
+        //assert(bdd_collection.nr_bdds() == input.constraints().size());
 
         if(constraint_groups == true) // coalesce BDDs 
         {
