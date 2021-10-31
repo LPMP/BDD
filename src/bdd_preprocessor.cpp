@@ -17,7 +17,7 @@ namespace LPMP {
         std::cout << "[bdd_preprocessor] convert " << input.constraints().size() << " linear inequalities.\n";
 
 #ifdef _OPENMP
-        const size_t nr_threads = omp_get_max__threads();
+        const size_t nr_threads = omp_get_max_threads();
 #else
         const size_t nr_threads = 1;
 #endif
