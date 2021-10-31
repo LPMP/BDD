@@ -17,13 +17,9 @@ namespace LPMP {
         std::cout << "[bdd_preprocessor] convert " << input.constraints().size() << " linear inequalities.\n";
 
 #ifdef _OPENMP
-        //omp_set_dynamic(0); // TODO: remove
-        //omp_set_num_threads(3); // TODO: remove
-        //std::cout << "set # threads to 3\n";
         const size_t nr_threads = omp_get_num_threads();
 #else
         const size_t nr_threads = 1;
-        throw std::runtime_error("kaskwaskwas");
 #endif
         std::cout << "[bdd preprocessor] #threads = " << nr_threads << "\n";
 
@@ -35,15 +31,8 @@ namespace LPMP {
             BDD::bdd_mgr bdd_mgr;
             bdd_converter converter(bdd_mgr);
             BDD::bdd_collection cur_bdd_collection;
-//#ifdef _OPENMP
-//            const size_t tid = omp_get_thread_num();
-//#else
-//            const size_t tid = 0;
-//#endif
 
-            std::cout << "bdd preprocessor thread " << tid << "\n";
-
-            const size_t first_constr = tid*input.constraints().size()/nr_threads;
+            const size_t first_constr = input.constraints().size()/nr_threads * tid;
             const size_t last_constr = (tid+1 == nr_threads) ? input.constraints().size() : (input.constraints().size()/nr_threads) * (tid+1);
             if(tid + 1 == nr_threads)
                 assert(last_constr == input.constraints().size());
