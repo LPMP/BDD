@@ -31,6 +31,8 @@ namespace LPMP {
             two_dim_variable_array<std::array<double,2>> min_marginals();
             std::tuple<thrust::device_vector<int>, thrust::device_vector<REAL>, thrust::device_vector<REAL>> min_marginals_cuda();
 
+            std::vector<REAL> compute_primal_objective_vector();
+
             size_t nr_variables() const { return nr_vars_; }
             size_t nr_bdds() const { return nr_bdds_; }
 

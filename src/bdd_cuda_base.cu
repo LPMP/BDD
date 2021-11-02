@@ -749,6 +749,23 @@ namespace LPMP {
     }
 
     template<typename REAL>
+    std::vector<REAL> bdd_cuda_base<REAL>::compute_primal_objective_vector()
+    {
+        thrust::device_vector<REAL> net_cost(hi_cost_.size());
+        thrust::transform(hi_cost_.begin(), hi_cost_.end(), lo_cost_.begin(), net_cost.begin(), thrust::minus<REAL>());
+
+        thrust::device_vector<REAL> primal_obj_vec(nr_vars_);
+        auto new_end = thrust::reduce_by_key(this->primal_variable_index_sorted_.begin(), this->primal_variable_index_sorted_.end() - this->nr_bdds_, 
+                            thrust::make_permutation_iterator(net_cost.begin(), this->primal_variable_sorting_order_.begin()),
+                            thrust::make_discard_iterator(), primal_obj_vec.begin());
+        assert(thrust::distance(primal_obj_vec.begin(), new_end.second) == nr_vars_);
+
+        std::vector<REAL> h_primal_obj_vec(primal_obj_vec.size());
+        thrust::copy(primal_obj_vec.begin(), primal_obj_vec.end(), h_primal_obj_vec.begin());
+        return h_primal_obj_vec;
+    }
+
+    template<typename REAL>
     void bdd_cuda_base<REAL>::flush_costs_from_root()
     {
         thrust::fill(cost_from_root_.begin(), cost_from_root_.end(), CUDART_INF_F_HOST);
