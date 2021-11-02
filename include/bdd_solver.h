@@ -38,7 +38,7 @@ namespace LPMP {
         // termination criteria //
         size_t max_iter = 1000;
         double tolerance = 1e-9;
-        double improvement_slope = 0.0001;
+        double improvement_slope = 1e-6;
         double time_limit = 3600;
         //////////////////////////
 
@@ -51,7 +51,7 @@ namespace LPMP {
 
         bool incremental_primal_rounding = false;
         double incremental_initial_perturbation = std::numeric_limits<double>::infinity();
-        double incremental_growth_rate = 1.1;
+        double incremental_growth_rate = 1.2;
         int incremental_primal_num_itr_lb = 500;
 
         bool diving_primal_rounding = false;
