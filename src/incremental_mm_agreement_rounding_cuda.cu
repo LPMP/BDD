@@ -141,7 +141,7 @@ namespace LPMP {
     template<typename REAL>
     struct mm_types_transform {
         const REAL delta;
-        const int* ranking_inconsistent;
+        const REAL max_incon_mm_diff;
         const REAL decay_factor_inconsistent;
 
         __host__ __device__
@@ -174,13 +174,11 @@ namespace LPMP {
             }
             else
             {
-                const int primal_index = thrust::get<3>(t);
-                const int rank = ranking_inconsistent[primal_index];
-                assert(rank > 0);
+                const REAL cur_abs_mm_diff = abs(mm_0 - mm_1);
                 if(mm_0 < mm_1)
-                    return {0.0, delta / pow(rank, decay_factor_inconsistent)};
+                    return {0.0, delta * pow(cur_abs_mm_diff / max_incon_mm_diff, decay_factor_inconsistent)};
                 else
-                    return {delta / pow(rank, decay_factor_inconsistent), 0.0};
+                    return {delta * pow(cur_abs_mm_diff / max_incon_mm_diff, decay_factor_inconsistent), 0.0};
             }
         }
     };
@@ -208,7 +206,7 @@ namespace LPMP {
     };
 
     template<typename REAL>
-    thrust::device_vector<int> compute_inconsistent_ranking(const thrust::device_vector<mm_type>& mm_types, const thrust::device_vector<REAL>& mm_sum_0, const thrust::device_vector<REAL>& mm_sum_1)
+    REAL compute_max_inconsistent_mm_diff(const thrust::device_vector<mm_type>& mm_types, const thrust::device_vector<REAL>& mm_sum_0, const thrust::device_vector<REAL>& mm_sum_1)
     {
         thrust::device_vector<REAL> mm_abs_diff(mm_sum_0.size());
         thrust::transform(mm_sum_1.begin(), mm_sum_1.end(), mm_sum_0.begin(), mm_abs_diff.begin(), mm_abs_diff_func<REAL>());
@@ -222,15 +220,8 @@ namespace LPMP {
         auto new_last = thrust::remove_if(first, last, is_consistent_func<REAL>({thrust::raw_pointer_cast(mm_types.data())}));
         const int num_inconsistent = thrust::distance(first, new_last);
         mm_abs_diff.resize(num_inconsistent);
-        inconsistent_primal_vars.resize(num_inconsistent);
-
-        thrust::sort_by_key(mm_abs_diff.begin(), mm_abs_diff.end(), inconsistent_primal_vars.begin(), thrust::greater<REAL>());
-
-        thrust::device_vector<int> ranking(mm_types.size(), 0); // not inconsistent variables have rank 0.
-        thrust::scatter(thrust::make_counting_iterator<int>(1), thrust::make_counting_iterator<int>(1) + num_inconsistent, inconsistent_primal_vars.begin(), ranking.begin());
-        return ranking;
+        return *thrust::max_element(mm_abs_diff.begin(), mm_abs_diff.end());
     }
-
 
 struct mm_type_to_sol {
     __host__ __device__
@@ -305,13 +296,13 @@ struct mm_type_to_sol {
                 const auto mm_sums = compute_mm_sums(s.nr_variables(), mms_0, mms_1, primal_vars);
                 const auto& mm_sums_0 = std::get<0>(mm_sums);
                 const auto& mm_sums_1 = std::get<1>(mm_sums);
-                thrust::device_vector<int> inconsistent_ranking =  compute_inconsistent_ranking(mm_types, mm_sums_0, mm_sums_1);
+                const auto max_incon_mm_diff = compute_max_inconsistent_mm_diff(mm_types, mm_sums_0, mm_sums_1);
 
                 auto delta_it_begin = thrust::zip_iterator(thrust::make_tuple(cost_delta_0.begin(), cost_delta_1.begin()));
                 auto first = thrust::zip_iterator(thrust::make_tuple(mm_types.begin(), mm_sums_0.begin(), mm_sums_1.begin(), thrust::make_counting_iterator<int>(0)));
                 auto last = thrust::zip_iterator(thrust::make_tuple(mm_types.end(), mm_sums_0.end(), mm_sums_1.end(), thrust::make_counting_iterator<int>(0) + mm_types.size()));
 
-                thrust::transform(first, last, delta_it_begin, mm_types_transform<typename SOLVER::value_type>{cur_delta, thrust::raw_pointer_cast(inconsistent_ranking.data()), 3.0});
+                thrust::transform(first, last, delta_it_begin, mm_types_transform<typename SOLVER::value_type>{cur_delta, max_incon_mm_diff, 2.0});
 
                 s.update_costs(cost_delta_0, cost_delta_1);
                 float lb_prev;
