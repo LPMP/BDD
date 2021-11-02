@@ -158,24 +158,24 @@ namespace LPMP {
                         cost_lo_updates[i] = 0.0;
                         cost_hi_updates[i] = cur_delta;
                     }
-                    else if(mm_types[i] == mm_type::equal)
-                    {
-                        const double r = dis(gen);
-                        assert(-cur_delta <= r && r <= cur_delta);
-                        if(r < 0.0)
-                        {
-                            cost_lo_updates[i] = std::abs(r)*cur_delta;
-                            cost_hi_updates[i] = 0.0;
-                        }
-                        else
-                        {
-                            cost_lo_updates[i] = 0.0;
-                            cost_hi_updates[i] = std::abs(r)*cur_delta;
-                        }
-                    }
+                    // else if(mm_types[i] == mm_type::equal)
+                    // {
+                    //     const double r = 5.0*dis(gen);
+                    //     assert(-cur_delta <= r && r <= cur_delta);
+                    //     if(r < 0.0)
+                    //     {
+                    //         cost_lo_updates[i] = std::abs(r)*cur_delta;
+                    //         cost_hi_updates[i] = 0.0;
+                    //     }
+                    //     else
+                    //     {
+                    //         cost_lo_updates[i] = 0.0;
+                    //         cost_hi_updates[i] = std::abs(r)*cur_delta;
+                    //     }
+                    // }
                     else
                     {
-                        assert(mm_types[i] == mm_type::inconsistent);
+                        // assert(mm_types[i] == mm_type::inconsistent);
                         const auto mm_sum = [&]() {
                             std::array<double,2> s = {0.0,0.0};
                             for(size_t j=0; j<mms.size(i); ++j)
@@ -185,21 +185,21 @@ namespace LPMP {
                             }
                             return s;
                         }();
-                        const double r = 5.0*dis(gen);
+                        // const double r = 5.0*dis(gen);
                         if(mm_sum[0] < mm_sum[1])
                         {
                             cost_lo_updates[i] = 0.0;
-                            cost_hi_updates[i] = std::abs(r)*cur_delta;
+                            cost_hi_updates[i] = 5.0*cur_delta;
                         }
                         else
                         {
-                            cost_lo_updates[i] = std::abs(r)*cur_delta;
+                            cost_lo_updates[i] = 5.0*cur_delta;
                             cost_hi_updates[i] = 0.0;
                         }
                     }
                 }
                 s.update_costs(cost_lo_updates.begin(), cost_lo_updates.end(), cost_hi_updates.begin(), cost_hi_updates.end());
-                run_solver(s, num_itr_lb, 1e-7, std::numeric_limits<double>::max(), false);
+                run_solver(s, num_itr_lb, 1e-7, 1e-6, std::numeric_limits<double>::max(), false);
 //                for(size_t solver_iter=0; solver_iter<num_itr_lb; ++solver_iter)
 //                    s.iteration();
                 std::cout << "[incremental primal rounding] lower bound = " << s.lower_bound() << "\n";
