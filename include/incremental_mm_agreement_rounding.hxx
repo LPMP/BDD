@@ -8,6 +8,7 @@
 #include <iostream>
 #include <iomanip>
 #include "two_dimensional_variable_array.hxx"
+#include "run_solver_util.h"
 
 namespace LPMP {
 
@@ -198,8 +199,9 @@ namespace LPMP {
                     }
                 }
                 s.update_costs(cost_lo_updates.begin(), cost_lo_updates.end(), cost_hi_updates.begin(), cost_hi_updates.end());
-                for(size_t solver_iter=0; solver_iter<num_itr_lb; ++solver_iter)
-                    s.iteration();
+                run_solver(s, num_itr_lb, 1e-7, std::numeric_limits<double>::max(), false);
+//                for(size_t solver_iter=0; solver_iter<num_itr_lb; ++solver_iter)
+//                    s.iteration();
                 std::cout << "[incremental primal rounding] lower bound = " << s.lower_bound() << "\n";
             }
 

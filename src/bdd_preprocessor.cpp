@@ -120,6 +120,8 @@ namespace LPMP {
         std::cout << "[bdd preprocessor] " << bdds_to_remove.size() << " BDDs had to be transformed\n";
         bdd_collection.remove(bdds_to_remove.begin(), bdds_to_remove.end());
 
+        std::cout << "[bdd preprocessor] final #BDDs = " << bdd_collection.nr_bdds() << "\n";
+
         // second, preprocess BDDs, TODO: do this separately!
         /*
         if(preprocessing_arg.getValue().size() > 0)
