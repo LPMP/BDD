@@ -372,7 +372,6 @@ namespace LPMP {
     struct distribute_delta_func {
         const REAL* delta_lo;
         const REAL* delta_hi;
-        const int* num_bdds_per_var;
         __host__ __device__ void operator()(const thrust::tuple<int, REAL&, REAL&> t) const
         {
             const int primal_index = thrust::get<0>(t);
@@ -381,8 +380,8 @@ namespace LPMP {
 
             REAL& lo_cost = thrust::get<1>(t);
             REAL& hi_cost = thrust::get<2>(t);
-            lo_cost += delta_lo[primal_index] / num_bdds_per_var[primal_index];
-            hi_cost += delta_hi[primal_index] / num_bdds_per_var[primal_index];
+            lo_cost += delta_lo[primal_index];
+            hi_cost += delta_hi[primal_index];
         }
     };
 
@@ -398,9 +397,7 @@ namespace LPMP {
         auto first = thrust::make_zip_iterator(thrust::make_tuple(this->primal_variable_index_.begin(), this->lo_cost_.begin(), this->hi_cost_.begin()));
         auto last = thrust::make_zip_iterator(thrust::make_tuple(this->primal_variable_index_.end(), this->lo_cost_.end(), this->hi_cost_.end()));
 
-        distribute_delta_func<REAL> func({thrust::raw_pointer_cast(delta_lo_.data()),
-                                        thrust::raw_pointer_cast(delta_hi_.data()),
-                                        thrust::raw_pointer_cast(this->num_bdds_per_var_.data())});
+        distribute_delta_func<REAL> func({thrust::raw_pointer_cast(delta_lo_.data()), thrust::raw_pointer_cast(delta_hi_.data())});
 
         thrust::for_each(first, last, func);
         this->flush_forward_states();
