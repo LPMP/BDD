@@ -1020,7 +1020,7 @@ namespace LPMP {
             message_passing_state_ = message_passing_state::none;
             lower_bound_state_ = lower_bound_state::invalid; 
 
-            assert(mms_to_distribute.size() == nr_variables());
+            assert(mms_to_distribute_.size() == nr_variables());
 
 #pragma omp parallel for
             for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
@@ -1164,4 +1164,5 @@ namespace LPMP {
             }
             s << "}\n";
         }
+
 }

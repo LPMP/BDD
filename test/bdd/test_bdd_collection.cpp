@@ -78,14 +78,14 @@ int main(int argc, char** argv)
                                         test(collection.evaluate(2, labeling.begin(), labeling.end()) == false, "simplex constraints false positive.");
                                 }
     const size_t nr_and_nodes = collection.nr_bdd_nodes(2);
-    test(collection.bdd_and(0,1, nr_and_nodes-1) == std::numeric_limits<size_t>::max(), "node limit in bdd and not triggered.");
-    test(collection.nr_bdds() == 3, "bdd added even though should not.");
-    test(collection.bdd_and(0,1, nr_and_nodes) == 3, "node limit in bdd and triggered.");
 
 
-    std::vector<size_t> bdds_to_remove = {0,2};
-    collection.remove(bdds_to_remove.begin(), bdds_to_remove.end());
-    test(collection.nr_bdds() == 2, "too many bdds after remove.");
+    {
+        const size_t nr_bdds_before = collection.nr_bdds();
+        std::vector<size_t> bdds_to_remove = {0,2};
+        collection.remove(bdds_to_remove.begin(), bdds_to_remove.end());
+        test(collection.nr_bdds() == nr_bdds_before - 2, "too many bdds after remove.");
+    }
 
     for(size_t l3 = 0; l3<1; ++l3)
         for(size_t l4 = 0; l4<1; ++l4)
