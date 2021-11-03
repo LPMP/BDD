@@ -7,6 +7,19 @@ namespace LPMP {
     template<typename SOLVER>
         void run_solver(SOLVER& s, const size_t max_iter, const double tolerance, const double improvement_slope, const double time_limit, const bool verbose = true)
         {
+            assert(improvement_slope > 0.0 && improvement_slope < 1.0);
+            assert(time_limit >= 0.0);
+            assert(tolerance >= 0.0);
+
+            if(verbose)
+            {
+                std::cout << "[bdd solver] termination criteria:\n";
+                std::cout << "[bdd solver]     max iter = " << max_iter << "\n";
+                std::cout << "[bdd solver]     time limit = " << time_limit << "s\n";
+                std::cout << "[bdd solver]     tolerance = " << tolerance << ", lb_current-lb_prev < |tolerance*lb_prev|" << "\n";
+                std::cout << "[bdd solver]     improvement_slope = " << improvement_slope << ", lb_current-lb_prev < tolerance*(lb_1-lb_0)" << "\n";
+            }
+
             const auto start_time = std::chrono::steady_clock::now();
             const double lb_initial = s.lower_bound();
             double lb_first_iter = std::numeric_limits<double>::max();

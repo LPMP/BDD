@@ -1017,7 +1017,7 @@ namespace LPMP {
     template<typename BDD_BRANCH_NODE>
         void bdd_sequential_base<BDD_BRANCH_NODE>::distribute_delta()
         {
-            message_passing_state_ = message_passing_state::invalid;
+            message_passing_state_ = message_passing_state::none;
             lower_bound_state_ = lower_bound_state::invalid; 
 
             assert(mms_to_distribute.size() == nr_variables());
@@ -1038,7 +1038,8 @@ namespace LPMP {
                 }
             }
 
-            std::fill(mms_to_distribute_.begin(), mms_to_distribute_.end(), {0.0,0.0});
+            const std::array<typename BDD_BRANCH_NODE::value_type,2> zeros = {0.0, 0.0};
+            std::fill(mms_to_distribute_.begin(), mms_to_distribute_.end(), zeros);
         }
 
     template<typename BDD_BRANCH_NODE>

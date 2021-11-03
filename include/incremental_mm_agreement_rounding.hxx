@@ -82,6 +82,18 @@ namespace LPMP {
             }
     }
 
+    namespace detail {
+        // test whether solver has distribute_delta function
+        template <typename S>
+            auto distribute_delta(S& solver, int) -> decltype(solver.distribute_delta())
+            {
+                solver.distribute_delta();
+            }
+
+        template <typename S>
+            auto distribute_delta(S& solver, double) -> void { } 
+    }
+
     template<typename SOLVER>
         std::vector<char> incremental_mm_agreement_rounding_iter(SOLVER& s, double init_delta = std::numeric_limits<double>::infinity(), const double delta_growth_rate = 1.1, const int num_itr_lb = 100)
         {
@@ -107,6 +119,9 @@ namespace LPMP {
                 const auto time = std::chrono::steady_clock::now();
                 const double time_elapsed = (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000;
                 std::cout << "[incremental primal rounding] round " << round << ", cost delta " << cur_delta << ", time elapsed = " << time_elapsed << "\n";
+
+                // flush stored computations to get best min marginals
+                detail::distribute_delta(s, 0);
 
                 const auto mms = s.min_marginals();
                 const auto mm_types = compute_mm_types(mms);
@@ -199,9 +214,7 @@ namespace LPMP {
                     }
                 }
                 s.update_costs(cost_lo_updates.begin(), cost_lo_updates.end(), cost_hi_updates.begin(), cost_hi_updates.end());
-                run_solver(s, num_itr_lb, 1e-7, std::numeric_limits<double>::max(), false);
-//                for(size_t solver_iter=0; solver_iter<num_itr_lb; ++solver_iter)
-//                    s.iteration();
+                run_solver(s, num_itr_lb, 1e-7, 0.0001, std::numeric_limits<double>::max(), false);
                 std::cout << "[incremental primal rounding] lower bound = " << s.lower_bound() << "\n";
             }
 

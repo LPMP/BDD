@@ -465,16 +465,20 @@ namespace LPMP {
         {
             std::cout << "[incremental primal rounding] start rounding\n";
             const auto sol = std::visit([&](auto&& s) {
-                    if constexpr(
+                    if constexpr( // CPU rounding
                             std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_vec<float>>
                             || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_vec<double>>
                             || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma<float>>
                             || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma<double>>
+                            // TODO: remove for cuda rounding again //
+                            //|| std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<float>>
+                            //|| std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<double>>
+                            //////////////////////////////////////////
                             )
                     return incremental_mm_agreement_rounding_iter(s, options.incremental_initial_perturbation, options.incremental_growth_rate, options.incremental_primal_num_itr_lb);
-                    else if constexpr(
+                    else if constexpr( // GPU rounding
                             std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<float>>
-    //                        || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<double>>
+                            || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<double>>
                             )
                     {
                     return s.incremental_mm_agreement_rounding(options.incremental_initial_perturbation, options.incremental_growth_rate, options.incremental_primal_num_itr_lb);
