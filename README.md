@@ -12,3 +12,7 @@ An integer linear program solver using a Lagrange decomposition into binary deci
 Then continue with creating a build folder and use cmake:
 
 `mkdir build && cd build && cmake ..`
+
+## References
+If you use this work please cite
+* [`J. H. Lange and P. Swoboda. Efficient Message Passing for 0–1 ILPs with Binary Decision Diagrams. In ICML 2021.`](http://proceedings.mlr.press/v139/lange21a.html)
