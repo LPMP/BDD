@@ -71,7 +71,7 @@ namespace LPMP {
             ->transform(CLI::CheckedTransformer(variable_order_map, CLI::ignore_case));
 
         app.add_option("-m, --max_iter", max_iter, "maximal number of iterations, default value = 10000")
-            ->check(CLI::PositiveNumber);
+            ->check(CLI::NonNegativeNumber);
 
         app.add_option("--tolerance", tolerance, "termination criterion: lower bound relative progress tolerance, default value = " + std::to_string(tolerance))
             ->check(CLI::PositiveNumber);

@@ -227,15 +227,16 @@ namespace LPMP {
         thrust::device_vector<int> primal_index_compressed(primal_variable_index_.size()); 
         thrust::device_vector<int> bdd_index_compressed(bdd_index_.size());
         
-        auto first_key = thrust::make_zip_iterator(thrust::make_tuple(bdd_hop_dist_dev.begin(), bdd_index_.begin(), primal_variable_index_.begin()));
-        auto last_key = thrust::make_zip_iterator(thrust::make_tuple(bdd_hop_dist_dev.end(), bdd_index_.end(), primal_variable_index_.end()));
+        auto first_key = thrust::make_zip_iterator(thrust::make_tuple(bdd_hop_dist_dev.begin(), primal_variable_index_.begin(), bdd_index_.begin()));
+        auto last_key = thrust::make_zip_iterator(thrust::make_tuple(bdd_hop_dist_dev.end(), primal_variable_index_.end(), bdd_index_.end()));
 
-        auto first_out_key = thrust::make_zip_iterator(thrust::make_tuple(thrust::make_discard_iterator(), bdd_index_compressed.begin(), primal_index_compressed.begin()));
+        auto first_out_key = thrust::make_zip_iterator(thrust::make_tuple(thrust::make_discard_iterator(), primal_index_compressed.begin(), bdd_index_compressed.begin()));
 
         // Compute number of BDD nodes in each layer:
         bdd_layer_width_ = thrust::device_vector<int>(nr_bdd_nodes_);
         auto new_end = thrust::reduce_by_key(first_key, last_key, thrust::make_constant_iterator<int>(1), first_out_key, bdd_layer_width_.begin());
         const int out_size = thrust::distance(first_out_key, new_end.first);      
+        bdd_layer_width_.resize(out_size);     
 
         // Assign bdd node to layer map:
         bdd_node_to_layer_map_ = thrust::device_vector<int>(out_size);
@@ -254,7 +255,6 @@ namespace LPMP {
         lo_cost_compressed.resize(out_size);
         primal_index_compressed.resize(out_size);
         bdd_index_compressed.resize(out_size);
-        bdd_layer_width_.resize(out_size);
 
         thrust::swap(lo_cost_compressed, lo_cost_);
         thrust::swap(hi_cost_compressed, hi_cost_);
