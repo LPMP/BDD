@@ -64,15 +64,13 @@ namespace LPMP {
             num_dual_variables_ += cur_bdd_variables.size();
             nr_bdd_nodes_ += bdd_col.nr_bdd_nodes(bdd_idx);
         }
+        std::cout<<"Num vars: "<<nr_vars_<<", Num BDDs: "<<nr_bdds_<<", Num Nodes: "<<nr_bdd_nodes_ <<"\n";
         num_bdds_per_var_ = thrust::device_vector<int>(primal_variable_counts.begin(), primal_variable_counts.end());
-        num_vars_per_bdd_ = thrust::device_vector<int>(num_vars_per_bdd.begin(), num_vars_per_bdd.end());
         // Initialize data per BDD node: 
         hi_cost_ = thrust::device_vector<REAL>(nr_bdd_nodes_, 0.0);
         lo_cost_ = thrust::device_vector<REAL>(nr_bdd_nodes_, 0.0);
         cost_from_root_ = thrust::device_vector<REAL>(nr_bdd_nodes_);
         cost_from_terminal_ = thrust::device_vector<REAL>(nr_bdd_nodes_);
-        hi_path_cost_ = thrust::device_vector<REAL>(nr_bdd_nodes_);
-        lo_path_cost_ = thrust::device_vector<REAL>(nr_bdd_nodes_);
     }
 
     template<typename REAL>
@@ -233,15 +231,15 @@ namespace LPMP {
         auto first_out_key = thrust::make_zip_iterator(thrust::make_tuple(thrust::make_discard_iterator(), primal_index_compressed.begin(), bdd_index_compressed.begin()));
 
         // Compute number of BDD nodes in each layer:
-        bdd_layer_width_ = thrust::device_vector<int>(nr_bdd_nodes_);
-        auto new_end = thrust::reduce_by_key(first_key, last_key, thrust::make_constant_iterator<int>(1), first_out_key, bdd_layer_width_.begin());
+        thrust::device_vector<int> bdd_layer_width(nr_bdd_nodes_);
+        auto new_end = thrust::reduce_by_key(first_key, last_key, thrust::make_constant_iterator<int>(1), first_out_key, bdd_layer_width.begin());
         const int out_size = thrust::distance(first_out_key, new_end.first);      
-        bdd_layer_width_.resize(out_size);     
+        bdd_layer_width.resize(out_size);     
 
         // Assign bdd node to layer map:
         bdd_node_to_layer_map_ = thrust::device_vector<int>(out_size);
         thrust::sequence(bdd_node_to_layer_map_.begin(), bdd_node_to_layer_map_.end());
-        bdd_node_to_layer_map_ = repeat_values(bdd_node_to_layer_map_, bdd_layer_width_);
+        bdd_node_to_layer_map_ = repeat_values(bdd_node_to_layer_map_, bdd_layer_width);
 
         // Compress hi_costs_, lo_costs_ (although initially they are infinity, 0 resp.) and also populate how many BDD layers per hop dist.
         thrust::device_vector<int> bdd_hop_dist_compressed(out_size);
@@ -262,9 +260,9 @@ namespace LPMP {
         thrust::swap(bdd_index_compressed, bdd_index_);
 
         // For launching kernels where each thread operates on a BDD layer instead of a BDD node.
-        layer_offsets_ = thrust::device_vector<int>(bdd_layer_width_.size() + 1);
+        layer_offsets_ = thrust::device_vector<int>(bdd_layer_width.size() + 1);
         layer_offsets_[0] = 0;
-        thrust::inclusive_scan(bdd_layer_width_.begin(), bdd_layer_width_.end(), layer_offsets_.begin() + 1);
+        thrust::inclusive_scan(bdd_layer_width.begin(), bdd_layer_width.end(), layer_offsets_.begin() + 1);
 
         thrust::device_vector<int> dev_cum_nr_layers_per_hop_dist(cum_nr_bdd_nodes_per_hop_dist_.size());
         cum_nr_layers_per_hop_dist_ = std::vector<int>(dev_cum_nr_layers_per_hop_dist.size());
@@ -614,12 +612,19 @@ namespace LPMP {
 
 
     template<typename REAL>
-    void bdd_cuda_base<REAL>::backward_run(bool compute_path_costs)
+    std::tuple<thrust::device_vector<REAL>, thrust::device_vector<REAL>> bdd_cuda_base<REAL>::backward_run(bool compute_path_costs)
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
+        thrust::device_vector<REAL> hi_path_cost, lo_path_cost; 
         if ((backward_state_valid_ && path_costs_valid_) ||
             (!compute_path_costs && backward_state_valid_))
-            return;
+            return {lo_path_cost, hi_path_cost};
+
+        if (compute_path_costs)
+        {
+            hi_path_cost = thrust::device_vector<REAL>(nr_bdd_nodes_);
+            lo_path_cost = thrust::device_vector<REAL>(nr_bdd_nodes_);
+        }
 
         for (int s = cum_nr_bdd_nodes_per_hop_dist_.size() - 2; s >= 0; s--)
         {
@@ -639,8 +644,8 @@ namespace LPMP {
                                                         thrust::raw_pointer_cast(hi_cost_.data()),
                                                         thrust::raw_pointer_cast(cost_from_root_.data()),
                                                         thrust::raw_pointer_cast(cost_from_terminal_.data()),
-                                                        thrust::raw_pointer_cast(lo_path_cost_.data()),
-                                                        thrust::raw_pointer_cast(hi_path_cost_.data()));
+                                                        thrust::raw_pointer_cast(lo_path_cost.data()),
+                                                        thrust::raw_pointer_cast(hi_path_cost.data()));
             else
                 backward_step<<<blockCount, threadCount>>>(cur_num_bdd_nodes, start_offset,
                                                         thrust::raw_pointer_cast(lo_bdd_node_index_.data()),
@@ -654,6 +659,7 @@ namespace LPMP {
         backward_state_valid_ = true;
         if (compute_path_costs)
             path_costs_valid_ = true;
+        return {lo_path_cost, hi_path_cost};
     }
 
     struct tuple_min
@@ -671,26 +677,30 @@ namespace LPMP {
     std::tuple<thrust::device_vector<int>, thrust::device_vector<REAL>, thrust::device_vector<REAL>> bdd_cuda_base<REAL>::min_marginals_cuda()
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
-        forward_run();
-        backward_run();
 
-        auto first_val = thrust::make_zip_iterator(thrust::make_tuple(lo_path_cost_.begin(), hi_path_cost_.begin()));
+        forward_run();
 
         thrust::device_vector<REAL> min_marginals_lo(hi_cost_.size());
         thrust::device_vector<REAL> min_marginals_hi(hi_cost_.size());
-        auto first_out_val = thrust::make_zip_iterator(thrust::make_tuple(min_marginals_lo.begin(), min_marginals_hi.begin()));
 
-        thrust::equal_to<int> binary_pred;
+        {
+            thrust::device_vector<REAL> lo_path_cost, hi_path_cost; 
+            std::tie(lo_path_cost, hi_path_cost) = backward_run();
+            auto first_val = thrust::make_zip_iterator(thrust::make_tuple(lo_path_cost.begin(), hi_path_cost.begin()));
+            auto first_out_val = thrust::make_zip_iterator(thrust::make_tuple(min_marginals_lo.begin(), min_marginals_hi.begin()));
 
-        auto new_end = thrust::reduce_by_key(bdd_node_to_layer_map_.begin(), bdd_node_to_layer_map_.end(), first_val, thrust::make_discard_iterator(), first_out_val, binary_pred, tuple_min());
-        const int out_size = thrust::distance(first_out_val, new_end.second);
-        assert(out_size == hi_cost_.size());
+            thrust::equal_to<int> binary_pred;
+            auto new_end = thrust::reduce_by_key(bdd_node_to_layer_map_.begin(), bdd_node_to_layer_map_.end(), first_val, thrust::make_discard_iterator(), first_out_val, binary_pred, tuple_min());
+            const int out_size = thrust::distance(first_out_val, new_end.second);
+            assert(out_size == hi_cost_.size());
+        }
 
         thrust::device_vector<REAL> min_marginals_lo_sorted(hi_cost_.size());
         thrust::device_vector<REAL> min_marginals_hi_sorted(hi_cost_.size());
 
-        auto first_out_val_sorted = thrust::make_zip_iterator(thrust::make_tuple(min_marginals_lo_sorted.begin(), min_marginals_hi_sorted.begin()));
-        thrust::gather(primal_variable_sorting_order_.begin(), primal_variable_sorting_order_.end(), first_out_val, first_out_val_sorted);
+        auto first_val = thrust::make_zip_iterator(thrust::make_tuple(min_marginals_lo.begin(), min_marginals_hi.begin()));
+        auto first_val_sorted = thrust::make_zip_iterator(thrust::make_tuple(min_marginals_lo_sorted.begin(), min_marginals_hi_sorted.begin()));
+        thrust::gather(primal_variable_sorting_order_.begin(), primal_variable_sorting_order_.end(), first_val, first_val_sorted);
 
         return {primal_variable_index_sorted_, min_marginals_lo_sorted, min_marginals_hi_sorted};
     }
