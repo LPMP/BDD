@@ -270,7 +270,7 @@ struct mm_type_to_sol {
 
             double cur_delta = 1.0/delta_growth_rate * init_delta;
 
-            for(size_t round=0; round<10000; ++round)
+            for(size_t round=0; round<500; ++round)
             {
                 cur_delta = min(cur_delta*delta_growth_rate, 1e6);
                 const auto time = std::chrono::steady_clock::now();
