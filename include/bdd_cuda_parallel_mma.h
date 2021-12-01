@@ -14,9 +14,13 @@ namespace LPMP {
             void iteration();
             void distribute_delta();
 
-            // about memory coalescing:
-            // https://forums.developer.nvidia.com/t/accessing-same-global-memory-address-within-warps/66574/2
-            // https://on-demand.gputechconf.com/gtc-express/2011/presentations/NVIDIA_GPU_Computing_Webinars_CUDA_Memory_Optimization.pdf
+            // First sets weights to distribute min-marginal sum across dual variables. The weights should sum up to 1 for each primal variable.
+            // Afterwards solve for hop i+1 (i-1) assuming that we have solved for hop i in forward (backward) iteration.
+            // template<typename ITERATOR>
+            // void solve_with_distribution_coeffs(ITERATOR begin, ITERATOR end); 
+
+            // Computes min-marginal differences for hop i+1 (i-1) assuming that we have solved for hop i in forward (backward) iteration.
+            // thrust::device_vector<REAL> compute_next_layer_min_marginals_difference();
 
         private:
             void forward_iteration(const REAL omega);

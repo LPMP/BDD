@@ -96,7 +96,6 @@ namespace LPMP {
     void bdd_cuda_parallel_mma<REAL>::iteration()
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
-        // forward_iteration_layer_based(0.5);
         forward_iteration(0.5);
         backward_iteration(0.5);
     }
@@ -191,95 +190,6 @@ namespace LPMP {
             cudaDeviceSynchronize();  // Not necessary, only to compute exact timing of this function.
         #endif
     }
-
-    template<typename REAL>
-    __global__ void forward_step_with_solve_layer(const int cur_num_bdd_nodes, const int start_offset, 
-                                                const int* const __restrict__ lo_bdd_node_index, 
-                                                const int* const __restrict__ hi_bdd_node_index, 
-                                                const int* const __restrict__ bdd_node_to_layer_map, 
-                                                const int* const __restrict__ primal_variable_index, 
-                                                const REAL* const __restrict__ delta_lo,
-                                                const REAL* const __restrict__ delta_hi,
-                                                const REAL* const __restrict__ mm_diff,
-                                                const int* const __restrict__ layer_offsets,
-                                                REAL* __restrict__ lo_cost,
-                                                REAL* __restrict__ hi_cost,
-                                                REAL* __restrict__ cost_from_root)
-    {
-        const int start_index = blockIdx.x * blockDim.x + threadIdx.x;
-        const int num_threads = blockDim.x * gridDim.x;
-        for (int layer_idx = start_index + start_offset; layer_idx < cur_num_bdd_nodes + start_offset; layer_idx += num_threads) 
-        {
-            const int cur_primal_idx = primal_variable_index[layer_idx];
-            if (cur_primal_idx == INT_MAX)
-                continue; // terminal node.
-
-            const REAL cur_mm_diff_hi_lo = mm_diff[layer_idx]; 
-            const REAL cur_hi_cost = hi_cost[layer_idx] + min(-cur_mm_diff_hi_lo, 0.0f) + delta_hi[cur_primal_idx];
-            const REAL cur_lo_cost = lo_cost[layer_idx] + min(cur_mm_diff_hi_lo, 0.0f) + delta_lo[cur_primal_idx];
-            lo_cost[layer_idx] = cur_lo_cost;
-            hi_cost[layer_idx] = cur_hi_cost;
-
-            const int start_bdd_node = layer_offsets[layer_idx];
-            const int end_bdd_node = layer_offsets[layer_idx + 1];
-            for (int bdd_node_idx = start_bdd_node; bdd_node_idx < end_bdd_node; bdd_node_idx++)
-            {
-                const int next_lo_node = lo_bdd_node_index[bdd_node_idx];
-                const int next_hi_node = hi_bdd_node_index[bdd_node_idx];
-                const REAL cur_c_from_root = cost_from_root[bdd_node_idx];
-
-                // Update costs from root:
-                cost_from_root[next_lo_node] = min(cost_from_root[next_lo_node], cur_c_from_root + cur_lo_cost);
-                cost_from_root[next_hi_node] = min(cost_from_root[next_hi_node], cur_c_from_root + cur_hi_cost);
-            }
-        }
-    }
-
-    template<typename REAL>
-    void bdd_cuda_parallel_mma<REAL>::forward_iteration_layer_based(const REAL omega)
-    {
-        MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
-        assert(this->backward_state_valid_); //For the first iteration need to have costs from terminal. 
-        
-        // Clear states.
-        this->flush_costs_from_root();
-        flush_mm();
-
-        const int num_steps = this->cum_nr_bdd_nodes_per_hop_dist_.size() - 1;
-        int num_layers_processed = 0;
-        for (int s = 0; s < num_steps; s++)
-        {
-            // 1. Compute min-marginals using costs from root, costs from terminal and hi_costs, lo_costs for current hop
-            min_marginals_from_directional_costs(s, omega);
-
-            const int threadCount = NUM_THREADS;
-            const int cur_num_layers = this->cum_nr_layers_per_hop_dist_[s] - num_layers_processed;
-            const int blockCount = ceil(cur_num_layers / (float) threadCount);
-
-            // 2. Subtract from hi_costs, update costs from root
-            forward_step_with_solve_layer<<<blockCount, threadCount>>>(cur_num_layers, num_layers_processed,
-                                                                    thrust::raw_pointer_cast(this->lo_bdd_node_index_.data()),
-                                                                    thrust::raw_pointer_cast(this->hi_bdd_node_index_.data()),
-                                                                    thrust::raw_pointer_cast(this->bdd_node_to_layer_map_.data()),
-                                                                    thrust::raw_pointer_cast(this->primal_variable_index_.data()),
-                                                                    thrust::raw_pointer_cast(delta_lo_.data()),
-                                                                    thrust::raw_pointer_cast(delta_hi_.data()),
-                                                                    thrust::raw_pointer_cast(mm_diff_.data()),
-                                                                    thrust::raw_pointer_cast(this->layer_offsets_.data()),
-                                                                    thrust::raw_pointer_cast(this->lo_cost_.data()),
-                                                                    thrust::raw_pointer_cast(this->hi_cost_.data()),
-                                                                    thrust::raw_pointer_cast(this->cost_from_root_.data()));
-            num_layers_processed += cur_num_layers;
-        }
-        this->forward_state_valid_ = true;
-        this->flush_backward_states();
-        compute_delta();
-
-        #ifndef NDEBUG
-            cudaDeviceSynchronize();  // Not necessary, only to compute exact timing of this function.
-        #endif
-    }
-
 
     template<typename REAL>
     __global__ void backward_step_with_solve(const int cur_num_bdd_nodes, const int start_offset, 
