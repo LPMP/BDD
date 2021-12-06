@@ -32,6 +32,7 @@ namespace LPMP {
             void flush_delta_out();
 
             thrust::device_vector<REAL> delta_lo_, delta_hi_; // One entry in each per primal variable.
-            thrust::device_vector<REAL> mm_lo_, mm_diff_, hi_cost_out_, lo_cost_out_; // One entry per BDD layer.
+            thrust::device_vector<REAL> mm_lo_local_; // Contains mm_lo for last computed hop. Memory allocated is as per max(cum_nr_layers_per_hop_dist_).
+            thrust::device_vector<REAL> mm_diff_, hi_cost_out_, lo_cost_out_; // One entry per BDD layer.
     };
 }

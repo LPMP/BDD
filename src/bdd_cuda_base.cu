@@ -662,16 +662,6 @@ namespace LPMP {
         return {lo_path_cost, hi_path_cost};
     }
 
-    struct tuple_min
-    {
-        template<typename REAL>
-        __host__ __device__
-        thrust::tuple<REAL, REAL> operator()(const thrust::tuple<REAL, REAL>& t0, const thrust::tuple<REAL, REAL>& t1)
-        {
-            return thrust::make_tuple(min(thrust::get<0>(t0), thrust::get<0>(t1)), min(thrust::get<1>(t0), thrust::get<1>(t1)));
-        }
-    };
-
     // Computes min-marginals by reduction.
     template<typename REAL>
     std::tuple<thrust::device_vector<int>, thrust::device_vector<REAL>, thrust::device_vector<REAL>> bdd_cuda_base<REAL>::min_marginals_cuda()
