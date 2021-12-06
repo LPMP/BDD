@@ -25,7 +25,9 @@ namespace LPMP {
 
             template<typename COST_ITERATOR>
                 void update_costs(COST_ITERATOR cost_lo_begin, COST_ITERATOR cost_lo_end, COST_ITERATOR cost_hi_begin, COST_ITERATOR cost_hi_end);
-            void update_costs(const thrust::device_vector<REAL>& cost_delta_0, const thrust::device_vector<REAL>& cost_delta_1);
+
+            template<typename REAL_arg>
+            void update_costs(const thrust::device_vector<REAL_arg>& cost_delta_0, const thrust::device_vector<REAL_arg>& cost_delta_1);
             void set_cost(const double c, const size_t var);
             
             two_dim_variable_array<std::array<double,2>> min_marginals();

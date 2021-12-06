@@ -416,10 +416,10 @@ namespace LPMP {
         flush_backward_states();
     }
 
-    template<typename REAL>
+    template<typename REAL, typename REAL2>
     struct set_vars_costs_func {
         int* var_counts;
-        const REAL* primal_costs;
+        const REAL2* primal_costs;
         __host__ __device__ void operator()(const thrust::tuple<int, REAL&> t) const
         {
             const int cur_var_index = thrust::get<0>(t);
@@ -443,8 +443,7 @@ namespace LPMP {
         auto populate_costs = [&](auto cost_begin, auto cost_end, auto base_cost_begin, auto base_cost_end) {
             thrust::device_vector<REAL> primal_costs(cost_begin, cost_end);
 
-            set_vars_costs_func<REAL> func({thrust::raw_pointer_cast(num_bdds_per_var_.data()), 
-                    thrust::raw_pointer_cast(primal_costs.data())});
+            set_vars_costs_func<REAL, REAL> func({thrust::raw_pointer_cast(num_bdds_per_var_.data()), thrust::raw_pointer_cast(primal_costs.data())});
             auto first = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.begin(), base_cost_begin));
             auto last = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.end(), base_cost_end));
 
@@ -475,15 +474,16 @@ namespace LPMP {
     template void bdd_cuda_base<double>::update_costs(std::vector<float>::const_iterator, std::vector<float>::const_iterator, std::vector<float>::const_iterator, std::vector<float>::const_iterator);
 
     template<typename REAL>
-    void bdd_cuda_base<REAL>::update_costs(const thrust::device_vector<REAL>& cost_delta_0, const thrust::device_vector<REAL>& cost_delta_1)
+    template<typename REAL_arg>
+    void bdd_cuda_base<REAL>::update_costs(const thrust::device_vector<REAL_arg>& cost_delta_0, const thrust::device_vector<REAL_arg>& cost_delta_1)
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME;
         assert(cost_delta_0.size() == 0 || cost_delta_0.size() == nr_variables());
         assert(cost_delta_1.size() == 0 || cost_delta_1.size() == nr_variables());
 
-        auto populate_costs = [&](const thrust::device_vector<REAL>& cost_delta, auto base_cost_begin, auto base_cost_end) {
-            set_vars_costs_func<REAL> func({thrust::raw_pointer_cast(num_bdds_per_var_.data()), 
-                    thrust::raw_pointer_cast(cost_delta.data())});
+        auto populate_costs = [&](const thrust::device_vector<REAL_arg>& cost_delta, auto base_cost_begin, auto base_cost_end) {
+            set_vars_costs_func<REAL, REAL_arg> func({thrust::raw_pointer_cast(num_bdds_per_var_.data()), thrust::raw_pointer_cast(cost_delta.data())});
+
             auto first = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.begin(), base_cost_begin));
             auto last = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.end(), base_cost_end));
 
@@ -783,6 +783,11 @@ namespace LPMP {
         thrust::scatter(thrust::make_constant_iterator<REAL>(0.0), thrust::make_constant_iterator<REAL>(0.0) + this->root_indices_.size(),
                         this->root_indices_.begin(), this->cost_from_root_.begin());
     }
+
+    template void bdd_cuda_base<float>::update_costs(const thrust::device_vector<double>&, const thrust::device_vector<double>&);
+    template void bdd_cuda_base<float>::update_costs(const thrust::device_vector<float>&, const thrust::device_vector<float>&);
+    template void bdd_cuda_base<double>::update_costs(const thrust::device_vector<double>&, const thrust::device_vector<double>&);
+    template void bdd_cuda_base<double>::update_costs(const thrust::device_vector<float>&, const thrust::device_vector<float>&);
 
     template class bdd_cuda_base<float>;
     template class bdd_cuda_base<double>;
