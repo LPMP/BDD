@@ -59,6 +59,9 @@ target_link_libraries(bdd_solver bdd_mma_vec decomposition_bdd_mma bdd_parallel_
 if(WITH_CUDA)
     target_link_libraries(bdd_solver bdd_cuda_base bdd_cuda_parallel_mma incremental_mm_agreement_rounding_cuda)
     target_compile_options(bdd_solver PRIVATE "$<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CUDA>>:--generate-line-info>")
+    
+    pybind11_add_module(bdd_cuda_parallel_mma_py bdd_cuda_parallel_mma_py.cpp)
+    target_link_libraries(bdd_cuda_parallel_mma_py PRIVATE LPMP-BDD ILP_input bdd_storage bdd_preprocessor bdd_cuda_parallel_mma)
 endif()
 
 target_link_libraries(LPMP-BDD INTERFACE bdd_solver)

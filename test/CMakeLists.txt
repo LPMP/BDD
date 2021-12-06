@@ -77,6 +77,10 @@ if(WITH_CUDA)
     target_link_libraries(test_bdd_cuda_base LPMP-BDD bdd_cuda_base)
     add_test(test_bdd_cuda_base test_bdd_cuda_base)
 
+    add_executable(test_bdd_cuda_base_serialization test_bdd_cuda_base_serialization.cpp)
+    target_link_libraries(test_bdd_cuda_base_serialization LPMP-BDD bdd_cuda_base)
+    add_test(test_bdd_cuda_base_serialization test_bdd_cuda_base_serialization)
+
     add_executable(test_bdd_cuda_parallel_mma test_bdd_cuda_parallel_mma.cpp)
     target_link_libraries(test_bdd_cuda_parallel_mma LPMP-BDD bdd_cuda_parallel_mma)
     add_test(test_bdd_cuda_parallel_mma test_bdd_cuda_parallel_mma)

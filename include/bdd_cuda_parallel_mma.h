@@ -9,6 +9,8 @@ namespace LPMP {
         public:
             // using bdd_cuda_base::bdd_cuda_base; // inherit base constructor
 
+            void init();
+            bdd_cuda_parallel_mma() {}
             bdd_cuda_parallel_mma(const BDD::bdd_collection& bdd_col);
 
             void iteration();
@@ -23,7 +25,6 @@ namespace LPMP {
 
         private:
             void forward_iteration(const REAL omega);
-            void forward_iteration_layer_based(const REAL omega);
 
             void backward_iteration(const REAL omega);
 
