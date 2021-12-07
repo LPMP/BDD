@@ -17,11 +17,8 @@ namespace LPMP {
             void distribute_delta();
 
             // Computes min-marginals for hop 'hop_index' and writes at starting from *mm_diff_ptr_with_start_offset (GPU pointer).
-            void min_marginals_from_directional_costs(const int hop_index, const REAL omega, REAL* const mm_diff_ptr_with_start_offset);
+            void min_marginals_from_directional_costs(const int hop_index, const REAL omega, thrust::device_ptr<REAL> mm_diff_ptr_with_start_offset);
 
-            // about memory coalescing:
-            // https://forums.developer.nvidia.com/t/accessing-same-global-memory-address-within-warps/66574/2
-            // https://on-demand.gputechconf.com/gtc-express/2011/presentations/NVIDIA_GPU_Computing_Webinars_CUDA_Memory_Optimization.pdf
 
         private:
             void forward_iteration(const REAL omega);

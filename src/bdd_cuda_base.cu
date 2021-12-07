@@ -218,6 +218,15 @@ namespace LPMP {
                         bot_sink_indices_.begin(), cost_from_terminal_.begin());
     }
 
+    struct valid_primal_index_func {
+        __host__ __device__ int operator()(const int i) const
+        {
+            if(i < INT_MAX)
+                return 1;
+            return 0;
+        }
+    };
+
     // Removes redundant information in hi_costs, primal_index, bdd_index as it is duplicated across
     // multiple BDD nodes for each layer.
     template<typename REAL>
@@ -264,13 +273,24 @@ namespace LPMP {
         thrust::swap(bdd_index_compressed, bdd_index_);
 
         thrust::device_vector<int> dev_cum_nr_layers_per_hop_dist(cum_nr_bdd_nodes_per_hop_dist_.size());
-        cum_nr_layers_per_hop_dist_ = std::vector<int>(dev_cum_nr_layers_per_hop_dist.size());
+        thrust::device_vector<int> dev_nr_variables_per_hop_dist(cum_nr_bdd_nodes_per_hop_dist_.size());
 
-        thrust::reduce_by_key(bdd_hop_dist_compressed.begin(), bdd_hop_dist_compressed.end(), thrust::make_constant_iterator<int>(1), 
-                            thrust::make_discard_iterator(), dev_cum_nr_layers_per_hop_dist.begin());
+        auto first_val = thrust::make_zip_iterator(thrust::make_tuple(thrust::make_constant_iterator<int>(1), 
+                                                    thrust::make_transform_iterator(
+                                                        primal_index_compressed.begin(), valid_primal_index_func()))); 
+        auto first_out_val = thrust::make_zip_iterator(thrust::make_tuple(dev_cum_nr_layers_per_hop_dist.begin(), dev_nr_variables_per_hop_dist.begin())); 
+
+        thrust::equal_to<int> binary_pred;
+        thrust::reduce_by_key(bdd_hop_dist_compressed.begin(), bdd_hop_dist_compressed.end(), first_val, //thrust::make_constant_iterator<int>(1), 
+                            thrust::make_discard_iterator(), first_out_val, binary_pred, tuple_sum());
 
         thrust::inclusive_scan(dev_cum_nr_layers_per_hop_dist.begin(), dev_cum_nr_layers_per_hop_dist.end(), dev_cum_nr_layers_per_hop_dist.begin());
+
+        cum_nr_layers_per_hop_dist_ = std::vector<int>(dev_cum_nr_layers_per_hop_dist.size());
         thrust::copy(dev_cum_nr_layers_per_hop_dist.begin(), dev_cum_nr_layers_per_hop_dist.end(), cum_nr_layers_per_hop_dist_.begin());
+
+        nr_variables_per_hop_dist_ = std::vector<int>(dev_nr_variables_per_hop_dist.size());
+        thrust::copy(dev_nr_variables_per_hop_dist.begin(), dev_nr_variables_per_hop_dist.end(), nr_variables_per_hop_dist_.begin());
     }
 
     struct set_bdd_node_priority_func {
@@ -742,11 +762,12 @@ namespace LPMP {
     }
 
     template<typename REAL>
-    thrust::device_vector<REAL> bdd_cuda_base<REAL>::get_dual_costs() const
+    void bdd_cuda_base<REAL>::get_dual_costs(const int var_block_idx, thrust::device_ptr<REAL> out_ptr) const
     {
-        thrust::device_vector<REAL> dual_costs(hi_cost_.size());
-        thrust::transform(hi_cost_.begin(), hi_cost_.end(), lo_cost_.begin(), dual_costs.begin(), thrust::minus<REAL>());
-        return dual_costs;
+        const int out_start_offset = var_block_idx > 0 ? this->cum_nr_layers_per_hop_dist_[var_block_idx - 1]: 0;
+        const int out_end_offset = out_start_offset + nr_variables(var_block_idx); // Ignores terminal nodes since they are at the end of each hop.
+
+        thrust::transform(hi_cost_.data() + out_start_offset, hi_cost_.data() + out_end_offset, lo_cost_.begin() + out_start_offset, out_ptr, thrust::minus<REAL>());
     }
 
     template<typename REAL>
@@ -768,22 +789,26 @@ namespace LPMP {
     };
 
     template<typename REAL>
-    std::tuple<thrust::device_vector<int>, thrust::device_vector<int>> bdd_cuda_base<REAL>::var_constraint_indices() const
-    {
-        throw std::runtime_error("Not implemented.");
-    }
-
-    template<typename REAL>
     template<typename ITERATOR> 
-    void bdd_cuda_base<REAL>::set_dual_costs(ITERATOR dual_costs_begin, ITERATOR dual_costs_end)
+    void bdd_cuda_base<REAL>::set_dual_costs(const int var_block_idx, ITERATOR dual_costs_begin, ITERATOR dual_costs_end)
     {
-        // Positive values goes to hi_costs, negative to lo_cost.
-        auto first = thrust::make_zip_iterator(thrust::make_tuple(dual_costs_begin, lo_cost_.begin(), hi_cost_.begin()));
-        auto last = thrust::make_zip_iterator(thrust::make_tuple(dual_costs_end, lo_cost_.end(), hi_cost_.end()));
+        const int num = thrust::distance(dual_costs_begin, dual_costs_end);
+        assert(num == nr_variables(var_block_idx));
+        const int out_start_offset = var_block_idx > 0 ? this->cum_nr_layers_per_hop_dist_[var_block_idx - 1]: 0;
+
+        // Positive values goes to hi_costs, negative to lo_cost. Since terminal nodes are at the end of each hop, thus they remain unaffected.
+        auto first = thrust::make_zip_iterator(thrust::make_tuple(dual_costs_begin, lo_cost_.begin() + out_start_offset, hi_cost_.begin() + out_start_offset));
+        auto last = thrust::make_zip_iterator(thrust::make_tuple(dual_costs_end, lo_cost_.begin() + out_start_offset + num, hi_cost_.begin() + out_start_offset + num));
 
         thrust::for_each(first, last, set_dual_costs_func<REAL>());
         flush_forward_states();
         flush_backward_states();
+    }
+
+    template<typename REAL>
+    std::tuple<thrust::device_vector<int>, thrust::device_vector<int>> bdd_cuda_base<REAL>::var_constraint_indices() const
+    {
+        throw std::runtime_error("Not implemented.");
     }
 
     template<typename REAL>
@@ -837,6 +862,7 @@ namespace LPMP {
             primal_variable_index_sorted_,
             cum_nr_bdd_nodes_per_hop_dist_,
             cum_nr_layers_per_hop_dist_,
+            nr_variables_per_hop_dist_,
             nr_vars_, nr_bdds_, nr_bdd_nodes_, num_dual_variables_
         );
     }
@@ -862,6 +888,7 @@ namespace LPMP {
             primal_variable_index_sorted_,
             cum_nr_bdd_nodes_per_hop_dist_,
             cum_nr_layers_per_hop_dist_,
+            nr_variables_per_hop_dist_,
             nr_vars_, nr_bdds_, nr_bdd_nodes_, num_dual_variables_
         );
         cost_from_root_ = thrust::device_vector<REAL>(nr_bdd_nodes_);

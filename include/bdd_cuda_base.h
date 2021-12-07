@@ -59,9 +59,9 @@ namespace LPMP {
             std::vector<REAL> compute_primal_objective_vector();
 
             size_t nr_variables() const { return nr_vars_; }
-            size_t nr_variables(const int block_idx) const { return cum_nr_layers_per_hop_dist_[block_idx]; }
+            size_t nr_variables(const int block_idx) const { return nr_variables_per_hop_dist_[block_idx]; }
             size_t nr_bdds() const { return nr_bdds_; }
-            size_t nr_variable_blocks() const { return cum_nr_layers_per_hop_dist_.size() - 1; } // excludes terminal nodes from calculation.
+            size_t nr_variable_blocks() const { return nr_variables_per_hop_dist_.size() - 1; } // excludes terminal nodes from calculation.
 
             void forward_run();
             std::tuple<thrust::device_vector<REAL>, thrust::device_vector<REAL>> backward_run(bool compute_path_costs = true);
@@ -70,12 +70,13 @@ namespace LPMP {
             // First all roots nodes, then all nodes at hop distance 1 and so on.
             std::tuple<thrust::device_vector<int>, thrust::device_vector<int>> var_constraint_indices() const;
             
-            // Compute lagrange multiplier by (hi_costs - lo_costs).
-            thrust::device_vector<REAL> get_dual_costs() const;
+            // Compute lagrange multiplier by (hi_costs - lo_costs) for variables in var_block_idx, and sets in GPU array reference by out_ptr.
+            // Does not contain data of terminal nodes similar to set_dual_costs.
+            void get_dual_costs(const int var_block_idx, thrust::device_ptr<REAL> out_ptr) const;
 
-            // Set lagrange multiplier.
+            // Set lagrange multipliers for variables at var_block_idx.
             template<typename ITERATOR>
-            void set_dual_costs(ITERATOR dual_costs_begin, ITERATOR dual_costs_end);
+            void set_dual_costs(const int var_block_idx, ITERATOR dual_costs_begin, ITERATOR dual_costs_end);
 
             // For serialization using cereal:
             template <class Archive>
@@ -95,7 +96,7 @@ namespace LPMP {
 
             // Following arrays are allocated for each bdd node:
             thrust::device_vector<int> lo_bdd_node_index_; // = 0
-            thrust::device_vector<int> hi_bdd_node_index_; // = 1
+            thrust::device_vector<int> hi_bdd_node_index_; // = 1 // Can possibly be packed with lo_bdd_node_index_ by storing only offset.
             thrust::device_vector<REAL> cost_from_root_;
             thrust::device_vector<REAL> cost_from_terminal_;
             thrust::device_vector<int> bdd_node_to_layer_map_;
@@ -108,6 +109,7 @@ namespace LPMP {
 
             std::vector<int> cum_nr_bdd_nodes_per_hop_dist_; // How many BDD nodes (cumulative) are present with a given hop distance away from root node.
             std::vector<int> cum_nr_layers_per_hop_dist_; // Similar to cum_nr_bdd_nodes_per_hop_dist_ but for BDD layer instead of BDD node.
+            std::vector<int> nr_variables_per_hop_dist_;
             size_t nr_vars_, nr_bdds_;
             size_t nr_bdd_nodes_ = 0;
             size_t num_dual_variables_ = 0;

@@ -63,9 +63,9 @@ namespace LPMP {
         }
     }
 
-    // This function does not need lo_path_costs and hi_path_costs to compute min-marginals.
+    // This function does not need lo_path_costs and hi_path_costs to compute min-marginals. Writes min-marginal differences in GPU array referenced by mm_diff_ptr_with_start_offset.
     template<typename REAL>
-    void bdd_cuda_parallel_mma<REAL>::min_marginals_from_directional_costs(const int hop_index, const REAL omega, REAL* const mm_diff_ptr_with_start_offset)
+    void bdd_cuda_parallel_mma<REAL>::min_marginals_from_directional_costs(const int hop_index, const REAL omega, thrust::device_ptr<REAL> mm_diff_ptr_with_start_offset)
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         
@@ -87,13 +87,12 @@ namespace LPMP {
                                                 thrust::raw_pointer_cast(this->cost_from_root_.data()),
                                                 thrust::raw_pointer_cast(this->cost_from_terminal_.data()),
                                                 thrust::raw_pointer_cast(mm_lo_local_.data()),
-                                                mm_diff_ptr_with_start_offset);
+                                                thrust::raw_pointer_cast(mm_diff_ptr_with_start_offset));
 
         thrust::device_ptr<REAL> mm_lo_start(mm_lo_local_.data());
-        thrust::device_ptr<REAL> mm_diff_start = thrust::device_pointer_cast(mm_diff_ptr_with_start_offset);
 
-        auto first = thrust::make_zip_iterator(thrust::make_tuple(mm_diff_start, mm_lo_start));
-        auto last = thrust::make_zip_iterator(thrust::make_tuple(mm_diff_start + cur_num_layers, mm_lo_start + cur_num_layers));
+        auto first = thrust::make_zip_iterator(thrust::make_tuple(mm_diff_ptr_with_start_offset, mm_lo_start));
+        auto last = thrust::make_zip_iterator(thrust::make_tuple(mm_diff_ptr_with_start_offset + cur_num_layers, mm_lo_start + cur_num_layers));
 
         thrust::for_each(first, last, compute_mm_diff_flush_mm_lo<REAL>({omega})); // Convert to min-marginal difference and set mm_lo_local_ to inf.
 
@@ -106,7 +105,7 @@ namespace LPMP {
     void bdd_cuda_parallel_mma<REAL>::min_marginals_from_directional_costs(const int hop_index, const REAL omega)
     {
         const int start_offset_layer = hop_index > 0 ? this->cum_nr_layers_per_hop_dist_[hop_index - 1]: 0;
-        min_marginals_from_directional_costs(hop_index, omega, thrust::raw_pointer_cast(mm_diff_.data() + start_offset_layer));
+        min_marginals_from_directional_costs(hop_index, omega, mm_diff_.data() + start_offset_layer);
     }
 
 
@@ -171,12 +170,12 @@ namespace LPMP {
         flush_mm();
 
         const int num_steps = this->cum_nr_bdd_nodes_per_hop_dist_.size() - 1;
-        int num_nodes_processed = 0;
         for (int s = 0; s < num_steps; s++)
         {
             // 1. Compute min-marginals using costs from root, costs from terminal and hi_costs, lo_costs for current hop
             min_marginals_from_directional_costs(s, omega);
 
+            const int num_nodes_processed = s > 0 ? this->cum_nr_bdd_nodes_per_hop_dist_[s - 1] : 0;
             const int cur_num_bdd_nodes = this->cum_nr_bdd_nodes_per_hop_dist_[s] - num_nodes_processed;
             const int blockCount = ceil(cur_num_bdd_nodes / (float) NUM_THREADS);
 
@@ -194,7 +193,6 @@ namespace LPMP {
                                                                 thrust::raw_pointer_cast(this->lo_cost_out_.data()),
                                                                 thrust::raw_pointer_cast(this->hi_cost_out_.data()),
                                                                 thrust::raw_pointer_cast(this->cost_from_root_.data()));
-            num_nodes_processed += cur_num_bdd_nodes;
         }
         thrust::swap(this->lo_cost_, lo_cost_out_);
         thrust::swap(this->hi_cost_, hi_cost_out_);

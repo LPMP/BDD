@@ -190,3 +190,13 @@ struct tuple_min
         return thrust::make_tuple(min(thrust::get<0>(t0), thrust::get<0>(t1)), min(thrust::get<1>(t0), thrust::get<1>(t1)));
     }
 };
+
+struct tuple_sum
+{
+    template<typename T>
+    __host__ __device__
+    thrust::tuple<T, T> operator()(const thrust::tuple<T, T>& t0, const thrust::tuple<T, T>& t1)
+    {
+        return thrust::make_tuple(thrust::get<0>(t0) + thrust::get<0>(t1), thrust::get<1>(t0) + thrust::get<1>(t1));
+    }
+};
