@@ -49,6 +49,9 @@ namespace LPMP {
         void set_inequality_type(const inequality_type ineq);
         void add_to_constraint(const int coefficient, const size_t var);
         void add_to_constraint(const int coefficient, const std::string& var);
+        // add monomial to constraint
+        template<typename ITERATOR>
+            void add_to_constraint(const int coefficient, ITERATOR var_idx_begin, ITERATOR var_idx_end);
         void set_right_hand_side(const int x);
         size_t nr_constraints() const;
         const auto& constraints() const { return constraints_; }
@@ -105,6 +108,16 @@ namespace LPMP {
             two_dim_variable_array<size_t> variable_adjacency_matrix() const;
             two_dim_variable_array<size_t> bipartite_variable_bdd_adjacency_matrix() const;
     };
+
+    template<typename ITERATOR>
+        void ILP_input::add_to_constraint(const int coefficient, ITERATOR var_idx_begin, ITERATOR var_idx_end)
+        {
+            assert(std::distance(var_idx_begin, var_idx_end) > 0);
+            assert(*std::max_element(var_idx_begin, var_idx_end) < nr_variables());
+            auto& constr = constraints_.back();
+            constr.coefficients.push_back(coefficient);
+            constr.monomials.push_back(var_idx_begin, var_idx_end);
+        }
 
     template<typename ITERATOR>
         bool ILP_input::feasible(ITERATOR begin, ITERATOR end) const

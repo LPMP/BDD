@@ -53,9 +53,10 @@ namespace LPMP {
                                tao::pegtl::star< tao::pegtl::sor< tao::pegtl::alnum, tao::pegtl::string<'_'>, tao::pegtl::string<'-'>, tao::pegtl::string<'/'>, tao::pegtl::string<'('>, tao::pegtl::string<')'>, tao::pegtl::string<'{'>, tao::pegtl::string<'}'>, tao::pegtl::string<','> > > 
                                > {};
 
-        struct variable_coefficient : tao::pegtl::opt<real_number> {};
+        // TODO: remove?
+        struct coefficient : tao::pegtl::opt<real_number> {};
 
-        struct variable : tao::pegtl::seq<variable_coefficient, opt_whitespace, variable_name> {};
+        struct coefficient_variable : tao::pegtl::seq<coefficient, opt_whitespace, variable_name> {};
 
         struct objective_coefficient : real_number {};
         struct objective_variable : variable_name {};
@@ -74,7 +75,8 @@ namespace LPMP {
 
         struct inequality_coefficient : tao::pegtl::seq<tao::pegtl::digit, tao::pegtl::star<tao::pegtl::digit>> {};
         struct inequality_variable : variable_name {};
-        struct inequality_term : tao::pegtl::seq< tao::pegtl::opt<sign, opt_whitespace>, tao::pegtl::opt<inequality_coefficient, opt_whitespace, tao::pegtl::opt<tao::pegtl::string<'*'>>, opt_whitespace>, inequality_variable> {};
+        struct inequality_monomial : tao::pegtl::seq<inequality_variable, tao::pegtl::star<opt_whitespace, tao::pegtl::sor<tao::pegtl::string<'*'>, mand_whitespace>, opt_whitespace, inequality_variable>> {};
+        struct inequality_term : tao::pegtl::seq< tao::pegtl::opt<sign, opt_whitespace>, tao::pegtl::opt<inequality_coefficient, opt_whitespace, tao::pegtl::opt<tao::pegtl::string<'*'>>, opt_whitespace>, inequality_monomial> {};
         struct right_hand_side : tao::pegtl::seq< tao::pegtl::opt<sign>, tao::pegtl::digit, tao::pegtl::star<tao::pegtl::digit> > {};
 
         struct inequality_line : tao::pegtl::seq< new_inequality, 
@@ -118,6 +120,7 @@ namespace LPMP {
         struct tmp_storage {
             double objective_coeff = 1.0;
             int constraint_coeff = 1;
+            std::vector<size_t> constraint_monomial;
             std::string inequality_identifier = "";
             std::vector<std::string> coalesce_identifiers;
         };
@@ -186,7 +189,18 @@ namespace LPMP {
                 static void apply(const INPUT & in, ILP_input& i, tmp_storage& tmp)
                 {
                     const std::string var = in.string();
-                    i.add_to_constraint(tmp.constraint_coeff, var);
+                    if(!i.var_exists(var))
+                        i.add_new_variable(var);
+                    const size_t var_idx = i.get_var_index(var);
+                    tmp.constraint_monomial.push_back(var_idx);
+                }
+        };
+
+        template<> struct action< inequality_monomial > {
+            template<typename INPUT>
+                static void apply(const INPUT & in, ILP_input& i, tmp_storage& tmp)
+                {
+                    i.add_to_constraint(tmp.constraint_coeff, tmp.constraint_monomial.begin(), tmp.constraint_monomial.end());
                     tmp = tmp_storage{};
                 }
         };
