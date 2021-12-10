@@ -242,6 +242,8 @@ namespace LPMP {
             tao::pegtl::file_input input(filename);
             if(!tao::pegtl::parse<grammar, action>(input, ilp, tmp))
                 throw std::runtime_error("could not read input file " + filename);
+            // TODO: possibly normalize multiple times if reorder
+            ilp.normalize();
             return ilp;
         }
 
@@ -254,6 +256,8 @@ namespace LPMP {
 
             if(!tao::pegtl::parse<grammar, action>(input, ilp, tmp))
                 throw std::runtime_error("could not read input:\n" + input_string);
+            // TODO: possibly normalize multiple times if reorder
+            ilp.normalize();
             return ilp;
         }
 

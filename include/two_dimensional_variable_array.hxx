@@ -188,7 +188,7 @@ public:
 
    std::size_t no_elements() const { return data_.size(); }
    std::size_t size() const { assert(offsets_.size() > 0); return offsets_.size()-1; }
-   size_t size(const size_t i) const { assert(i < no_elements()); return offsets_[i+1] - offsets_[i]; }
+   size_t size(const size_t i) const { assert(i < size()); return offsets_[i+1] - offsets_[i]; }
 
    ConstArrayAccessObject back() const 
    {
@@ -259,6 +259,18 @@ public:
 
    auto size_begin() const { assert(offsets_.size() > 0); return size_iterator({&offsets_[0]}); }
    auto size_end() const { assert(offsets_.size() > 0); return size_iterator({&offsets_.back()}); }
+
+   auto begin(const size_t idx) 
+   { 
+       assert(idx < size());
+       return &data_[offsets_[idx]];
+   }
+
+   auto end(const size_t idx)
+   {
+       assert(idx < size());
+       return &data_[offsets_[idx+1]];
+   }
 
    void set(const T& val)
    {

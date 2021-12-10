@@ -15,9 +15,15 @@ Eigen::SparseMatrix<int> node_constraint_incidence_matrix(const LPMP::ILP_input&
 
     for(size_t c=0; c<ilp.nr_constraints(); ++c)
     {
-        for(const auto& l : ilp.constraints()[c].variables)
+        const auto& constr = ilp.constraints()[c];
+        if(!constr.is_linear())
+            throw std::runtime_error("Only linear constraints supported");
+        assert(constr.monomials.size() == constr.coefficients.size());
+        for(size_t monomial_idx=0; monomial_idx<constr.monomials.size(); ++monomial_idx)
         {
-            coefficients.push_back(T(l.var, c, l.coefficient));
+            const size_t var = constr.monomials(monomial_idx, 0);
+            const int coeff = constr.coefficients[monomial_idx];
+            coefficients.push_back(T(var, c, coeff));
         }
     }
 

@@ -218,6 +218,7 @@ namespace LPMP {
             else
                 return ILP_input();
         }();
+        ilp.normalize();
     }
 
     bdd_solver_options::bdd_solver_options(const std::vector<std::string>& args)
@@ -236,6 +237,7 @@ namespace LPMP {
         : options(opt)
     {
         options.ilp.reorder(options.var_order);
+        options.ilp.normalize();
 
         std::cout << "[bdd solver] ILP has " << options.ilp.nr_variables() << " variables and " << options.ilp.nr_constraints() << " constraints\n";
         if(options.ilp.preprocess())

@@ -13,6 +13,7 @@ namespace LPMP {
     {
         MEASURE_FUNCTION_EXECUTION_TIME;
         assert(bdd_collection.nr_bdds() == 0);
+        assert(input.is_normalized());
         // first transform linear inequalities into BDDs
         std::cout << "[bdd_preprocessor] convert " << input.constraints().size() << " linear inequalities.\n";
 
@@ -42,23 +43,34 @@ namespace LPMP {
                 const auto& constraint = input.constraints()[c];
                 coefficients.clear();
                 variables.clear();
-                for(const auto e : constraint.variables) {
-                    coefficients.push_back(e.coefficient);
-                    variables.push_back(e.var);
-                }
-                BDD::node_ref bdd = converter.convert_to_bdd(coefficients, constraint.ineq, constraint.right_hand_side);
-                if(bdd.is_topsink())
+                if(constraint.is_linear())
                 {
-                    if(constraint_groups == true && input.nr_constraint_groups() > 0)
-                        throw std::runtime_error("constraint groups and empty constraints not both supported");
-                    continue;
+                    assert(constraint.monomials.size() == constraint.coefficients.size());
+                    for(size_t monomial_idx=0; monomial_idx<constraint.monomials.size(); ++monomial_idx)
+                    {
+                        const size_t var = constraint.monomials(monomial_idx, 0);
+                        const int coeff = constraint.coefficients[monomial_idx];
+                        variables.push_back(var);
+                        coefficients.push_back(coeff);
+                    }
+                    BDD::node_ref bdd = converter.convert_to_bdd(coefficients, constraint.ineq, constraint.right_hand_side);
+                    if(bdd.is_topsink())
+                    {
+                        if(constraint_groups == true && input.nr_constraint_groups() > 0)
+                            throw std::runtime_error("constraint groups and empty constraints not both supported");
+                        continue;
+                    }
+                    else if(bdd.is_botsink())
+                        throw std::runtime_error("problem is infeasible");
+                    const size_t bdd_nr = cur_bdd_collection.add_bdd(bdd);
+                    cur_bdd_collection.reorder(bdd_nr);
+                    assert(cur_bdd_collection.is_reordered(bdd_nr));
+                    cur_bdd_collection.rebase(bdd_nr, variables.begin(), variables.end());
                 }
-                else if(bdd.is_botsink())
-                    throw std::runtime_error("problem is infeasible");
-                const size_t bdd_nr = cur_bdd_collection.add_bdd(bdd);
-                cur_bdd_collection.reorder(bdd_nr);
-                assert(cur_bdd_collection.is_reordered(bdd_nr));
-                cur_bdd_collection.rebase(bdd_nr, variables.begin(), variables.end());
+                else
+                {
+                    throw std::runtime_error("only linear constraints supported");
+                }
             }
 #pragma omp ordered
             {
@@ -111,6 +123,10 @@ namespace LPMP {
             {
 #pragma omp critical
                 {
+                    auto vars = bdd_collection.variables(bdd_nr);
+                    for(auto x : vars)
+                        std::cout << x << ",";
+                    std::cout << "\n";
                     bdd_collection.make_qbdd(bdd_nr);
                     bdds_to_remove.push_back(bdd_nr);
                 }

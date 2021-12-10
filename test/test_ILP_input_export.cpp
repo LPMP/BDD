@@ -77,7 +77,8 @@ void test_export(const std::string& problem, const double lb)
         std::vector<std::string> solver_input = {
             "--lp_input_string", problem,
             "-s", "mma_vec",
-            "--max_iter", "1000"
+            "--max_iter", "1000",
+            "--tolerance", "1e-10"
         };
 
         bdd_solver solver(solver_input); 
@@ -90,7 +91,8 @@ void test_export(const std::string& problem, const double lb)
         std::vector<std::string> solver_input = {
             "--opb_input_string", problem,
             "-s", "mma_vec",
-            "--max_iter", "1000"
+            "--max_iter", "1000",
+            "--tolerance", "1e-10"
         };
 
         bdd_solver solver(solver_input); 
@@ -99,9 +101,11 @@ void test_export(const std::string& problem, const double lb)
         return solver.lower_bound();
     };
 
-    std::cout << "original problem:\n" << problem;
-    std::cout << "exported lp:\n" << export_lp(problem);;
-    std::cout << "exported opb:\n" << export_opb(problem);;
+    std::cout << "original problem:\n" << problem << "\n";
+    std::cout << "exported lp:\n" << export_lp(problem) << "\n";
+    std::cout << "exported opb:\n" << export_opb(problem) << "\n";
+
+    test(ILP_parser::parse_string(problem).nr_variables() == ILP_parser::parse_string(export_lp(problem)).nr_variables());
 
     const double orig_lb = compute_lp(problem);
     const double exported_lp_lb = compute_lp(export_lp(problem));
