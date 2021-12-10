@@ -14,49 +14,64 @@ namespace BDD {
         return std::distance(&bdd_instructions[0], &instr); 
     }
 
-    size_t bdd_collection::bdd_and(const size_t i, const size_t j, const size_t node_limit)
+    size_t bdd_collection::bdd_and(const size_t i, const size_t j)
+    {
+        return bdd_and(i, j, *this);
+    }
+
+    size_t bdd_collection::bdd_and(const size_t i, const size_t j, bdd_collection& o)
     {
         assert(i < nr_bdds());
         assert(j < nr_bdds());
-        assert(stack.empty());
-        assert(generated_nodes.empty());
-        assert(reduction.empty());
-        assert(node_limit > 2);
+        // TODO: allocate stack etc. locally
+        assert(o.stack.empty());
+        assert(o.generated_nodes.empty());
+        assert(o.reduction.empty());
 
         // generate terminal vertices
-        stack.push_back(bdd_instruction::botsink());
-        stack.push_back(bdd_instruction::topsink());
-        const size_t root_idx = bdd_and_impl(bdd_delimiters[i], bdd_delimiters[j], node_limit);
+        o.stack.push_back(bdd_instruction::botsink());
+        o.stack.push_back(bdd_instruction::topsink());
+        const size_t root_idx = bdd_and_impl(bdd_delimiters[i], bdd_delimiters[j], o);
 
         if(root_idx != std::numeric_limits<size_t>::max())
         {
-            assert(stack.size() > 2);
-            const size_t offset = bdd_delimiters.back();
-            for(ptrdiff_t s = stack.size()-1; s>=0; --s)
+            assert(o.stack.size() > 2);
+            const size_t offset = o.bdd_delimiters.back();
+            for(ptrdiff_t s = o.stack.size()-1; s>=0; --s)
             {
-                const bdd_instruction bdd_stack = stack[s];
-                const size_t lo = offset + stack.size() - bdd_stack.lo - 1;
-                const size_t hi = offset + stack.size() - bdd_stack.hi - 1;
-                bdd_instructions.push_back({lo, hi, stack[s].index});
+                const bdd_instruction bdd_stack = o.stack[s];
+                const size_t lo = offset + o.stack.size() - bdd_stack.lo - 1;
+                const size_t hi = offset + o.stack.size() - bdd_stack.hi - 1;
+                o.bdd_instructions.push_back({lo, hi, o.stack[s].index});
             }
-            bdd_delimiters.push_back(bdd_instructions.size());
-            assert(is_bdd(bdd_delimiters.size()-2));
+            o.bdd_delimiters.push_back(o.bdd_instructions.size());
+            assert(o.is_bdd(o.bdd_delimiters.size()-2));
         }
 
-        generated_nodes.clear();
-        reduction.clear();
-        stack.clear();
+        o.generated_nodes.clear();
+        o.reduction.clear();
+        o.stack.clear();
         if(root_idx == std::numeric_limits<size_t>::max())
             return std::numeric_limits<size_t>::max();
-        return bdd_delimiters.size()-2;
+        return o.bdd_delimiters.size()-2;
+    }
+
+    size_t bdd_collection::bdd_and(const int i, const int j, bdd_collection& o)
+    {
+        assert(i >= 0 && j >= 0);
+        return bdd_and(size_t(i), size_t(j), o);
+    }
+    size_t bdd_collection::bdd_and(const int i, const int j)
+    {
+        return bdd_and(size_t(i), size_t(j), *this); 
     }
 
     // given two bdd_instructions indices, compute new melded node, if it has not yet been created. Return index on stack.
-    size_t bdd_collection::bdd_and_impl(const size_t f_i, const size_t g_i, const size_t node_limit)
+    size_t bdd_collection::bdd_and_impl(const size_t f_i, const size_t g_i, bdd_collection& o)
     {
         // first, check whether node has been generated already
-        if(generated_nodes.count({f_i,g_i}) > 0)
-            return generated_nodes.find({f_i,g_i})->second;
+        if(o.generated_nodes.count({f_i,g_i}) > 0)
+            return o.generated_nodes.find({f_i,g_i})->second;
 
         const bdd_instruction& f = bdd_instructions[f_i];
         const bdd_instruction& g = bdd_instructions[g_i];
@@ -79,14 +94,14 @@ namespace BDD {
         const size_t lo = bdd_and_impl(
                 v == f.index ? f.lo : f_i,
                 v == g.index ? g.lo : g_i,
-                node_limit
+                o
                 );
         if(lo == std::numeric_limits<size_t>::max())
             return std::numeric_limits<size_t>::max();
         const size_t hi = bdd_and_impl(
                 v == f.index ? f.hi : f_i,
                 v == g.index ? g.hi : g_i,
-                node_limit
+                o
                 );
         if(hi == std::numeric_limits<size_t>::max())
             return std::numeric_limits<size_t>::max();
@@ -94,120 +109,123 @@ namespace BDD {
         if(lo == hi)
             return lo;
 
-        if(reduction.count({lo,hi,v}) > 0)
-            return reduction.find({lo,hi,v})->second;
+        if(o.reduction.count({lo,hi,v}) > 0)
+            return o.reduction.find({lo,hi,v})->second;
 
-        stack.push_back({lo, hi, v});
-        if(stack.size() > node_limit)
-            return std::numeric_limits<size_t>::max();
-        const size_t meld_idx = stack.size()-1;
-        generated_nodes.insert(std::make_pair(std::array<size_t,2>{f_i,g_i}, meld_idx));
-        reduction.insert(std::make_pair(bdd_instruction{lo,hi,v}, meld_idx));
+        o.stack.push_back({lo, hi, v});
+        const size_t meld_idx = o.stack.size()-1;
+        o.generated_nodes.insert(std::make_pair(std::array<size_t,2>{f_i,g_i}, meld_idx));
+        o.reduction.insert(std::make_pair(bdd_instruction{lo,hi,v}, meld_idx));
 
         return meld_idx;
     }
 
     template<size_t N>
-        size_t bdd_collection::bdd_and(const std::array<size_t,N>& bdds, const size_t node_limit)
+        size_t bdd_collection::bdd_and(const std::array<size_t,N>& bdds)
+        {
+            return bdd_and(bdds, *this);
+        }
+
+    template<size_t N>
+        size_t bdd_collection::bdd_and(const std::array<size_t,N>& bdds, bdd_collection& o)
         {
             for(const size_t bdd_nr : bdds)
             {
                 assert(bdd_nr < nr_bdds());
             }
-            assert(stack.empty());
-            assert(generated_nodes.empty());
-            assert(reduction.empty());
-            assert(node_limit > 2);
+            assert(o.stack.empty());
+            assert(o.generated_nodes.empty());
+            assert(o.reduction.empty());
 
             std::array<size_t,N> bdd_indices;
             for(size_t i=0; i<N; ++i)
                 bdd_indices[i] = bdd_delimiters[bdds[i]];
 
             // generate terminal vertices
-            stack.push_back(bdd_instruction::botsink());
-            stack.push_back(bdd_instruction::topsink());
+            o.stack.push_back(bdd_instruction::botsink());
+            o.stack.push_back(bdd_instruction::topsink());
             std::unordered_map<std::array<size_t,N>,size_t,array_hasher<N>> generated_nodes;
-            const size_t root_idx = bdd_and_impl(bdd_indices, generated_nodes, node_limit);
+            const size_t root_idx = bdd_and_impl(bdd_indices, generated_nodes, o);
 
             if(root_idx != std::numeric_limits<size_t>::max())
             {
-                assert(stack.size() > 2);
-                const size_t offset = bdd_delimiters.back();
-                for(ptrdiff_t s = stack.size()-1; s>=0; --s)
+                assert(o.stack.size() > 2);
+                const size_t offset = o.bdd_delimiters.back();
+                for(ptrdiff_t s = o.stack.size()-1; s>=0; --s)
                 {
-                    const bdd_instruction bdd_stack = stack[s];
-                    const size_t lo = offset + stack.size() - bdd_stack.lo - 1;
-                    const size_t hi = offset + stack.size() - bdd_stack.hi - 1;
-                    bdd_instructions.push_back({lo, hi, stack[s].index});
+                    const bdd_instruction bdd_stack = o.stack[s];
+                    const size_t lo = offset + o.stack.size() - bdd_stack.lo - 1;
+                    const size_t hi = offset + o.stack.size() - bdd_stack.hi - 1;
+                    o.bdd_instructions.push_back({lo, hi, o.stack[s].index});
                 }
-                bdd_delimiters.push_back(bdd_instructions.size());
-                assert(is_bdd(bdd_delimiters.size()-2));
+                o.bdd_delimiters.push_back(o.bdd_instructions.size());
+                assert(o.is_bdd(o.bdd_delimiters.size()-2));
             }
 
             //generated_nodes.clear();
-            reduction.clear();
-            stack.clear();
+            o.reduction.clear();
+            o.stack.clear();
             if(root_idx == std::numeric_limits<size_t>::max())
                 return std::numeric_limits<size_t>::max();
-            return bdd_delimiters.size()-2;
+            return o.bdd_delimiters.size()-2;
         }
 
     // explicit instantiation of bdd_and
-    template size_t bdd_collection::bdd_and<3>(const std::array<size_t,3>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<4>(const std::array<size_t,4>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<5>(const std::array<size_t,5>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<6>(const std::array<size_t,6>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<7>(const std::array<size_t,7>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<8>(const std::array<size_t,8>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<9>(const std::array<size_t,9>& bdds, const size_t node_limit);
+    template size_t bdd_collection::bdd_and<3>(const std::array<size_t,3>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<4>(const std::array<size_t,4>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<5>(const std::array<size_t,5>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<6>(const std::array<size_t,6>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<7>(const std::array<size_t,7>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<8>(const std::array<size_t,8>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<9>(const std::array<size_t,9>& bdds, bdd_collection& o);
 
-    template size_t bdd_collection::bdd_and<10>(const std::array<size_t,10>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<11>(const std::array<size_t,11>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<12>(const std::array<size_t,12>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<13>(const std::array<size_t,13>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<14>(const std::array<size_t,14>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<15>(const std::array<size_t,15>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<16>(const std::array<size_t,16>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<17>(const std::array<size_t,17>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<18>(const std::array<size_t,18>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<19>(const std::array<size_t,19>& bdds, const size_t node_limit);
+    template size_t bdd_collection::bdd_and<10>(const std::array<size_t,10>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<11>(const std::array<size_t,11>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<12>(const std::array<size_t,12>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<13>(const std::array<size_t,13>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<14>(const std::array<size_t,14>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<15>(const std::array<size_t,15>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<16>(const std::array<size_t,16>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<17>(const std::array<size_t,17>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<18>(const std::array<size_t,18>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<19>(const std::array<size_t,19>& bdds, bdd_collection& o);
 
-    template size_t bdd_collection::bdd_and<20>(const std::array<size_t,20>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<21>(const std::array<size_t,21>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<22>(const std::array<size_t,22>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<23>(const std::array<size_t,23>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<24>(const std::array<size_t,24>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<25>(const std::array<size_t,25>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<26>(const std::array<size_t,26>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<27>(const std::array<size_t,27>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<28>(const std::array<size_t,28>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<29>(const std::array<size_t,29>& bdds, const size_t node_limit);
+    template size_t bdd_collection::bdd_and<20>(const std::array<size_t,20>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<21>(const std::array<size_t,21>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<22>(const std::array<size_t,22>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<23>(const std::array<size_t,23>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<24>(const std::array<size_t,24>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<25>(const std::array<size_t,25>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<26>(const std::array<size_t,26>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<27>(const std::array<size_t,27>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<28>(const std::array<size_t,28>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<29>(const std::array<size_t,29>& bdds, bdd_collection& o);
 
-    template size_t bdd_collection::bdd_and<30>(const std::array<size_t,30>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<31>(const std::array<size_t,31>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<32>(const std::array<size_t,32>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<33>(const std::array<size_t,33>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<34>(const std::array<size_t,34>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<35>(const std::array<size_t,35>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<36>(const std::array<size_t,36>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<37>(const std::array<size_t,37>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<38>(const std::array<size_t,38>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<39>(const std::array<size_t,39>& bdds, const size_t node_limit);
+    template size_t bdd_collection::bdd_and<30>(const std::array<size_t,30>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<31>(const std::array<size_t,31>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<32>(const std::array<size_t,32>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<33>(const std::array<size_t,33>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<34>(const std::array<size_t,34>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<35>(const std::array<size_t,35>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<36>(const std::array<size_t,36>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<37>(const std::array<size_t,37>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<38>(const std::array<size_t,38>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<39>(const std::array<size_t,39>& bdds, bdd_collection& o);
 
-    template size_t bdd_collection::bdd_and<40>(const std::array<size_t,40>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<41>(const std::array<size_t,41>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<42>(const std::array<size_t,42>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<43>(const std::array<size_t,43>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<44>(const std::array<size_t,44>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<45>(const std::array<size_t,45>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<46>(const std::array<size_t,46>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<47>(const std::array<size_t,47>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<48>(const std::array<size_t,48>& bdds, const size_t node_limit);
-    template size_t bdd_collection::bdd_and<49>(const std::array<size_t,49>& bdds, const size_t node_limit);
+    template size_t bdd_collection::bdd_and<40>(const std::array<size_t,40>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<41>(const std::array<size_t,41>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<42>(const std::array<size_t,42>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<43>(const std::array<size_t,43>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<44>(const std::array<size_t,44>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<45>(const std::array<size_t,45>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<46>(const std::array<size_t,46>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<47>(const std::array<size_t,47>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<48>(const std::array<size_t,48>& bdds, bdd_collection& o);
+    template size_t bdd_collection::bdd_and<49>(const std::array<size_t,49>& bdds, bdd_collection& o);
 
     // given two bdd_instructions indices, compute new melded node, if it has not yet been created. Return index on stack.
     template<size_t N>
-    size_t bdd_collection::bdd_and_impl(const std::array<size_t,N>& bdds, std::unordered_map<std::array<size_t,N>,size_t,array_hasher<N>>& generated_nodes, const size_t node_limit)
+    size_t bdd_collection::bdd_and_impl(const std::array<size_t,N>& bdds, std::unordered_map<std::array<size_t,N>,size_t,array_hasher<N>>& generated_nodes, bdd_collection& o)
     {
         // first, check whether node has been generated already
         if(generated_nodes.count(bdds) > 0)
@@ -249,7 +267,7 @@ namespace BDD {
             const bdd_instruction& f = bdd_instrs[i];
             lo_nodes[i] = f.index == v ? f.lo : bdds[i];
         }
-        const size_t lo = bdd_and_impl(lo_nodes, generated_nodes, node_limit);
+        const size_t lo = bdd_and_impl(lo_nodes, generated_nodes, o);
         if(lo == std::numeric_limits<size_t>::max())
             return std::numeric_limits<size_t>::max();
 
@@ -259,22 +277,20 @@ namespace BDD {
             const bdd_instruction& f = bdd_instrs[i];
             hi_nodes[i] = f.index == v ? f.hi : bdds[i];
         }
-        const size_t hi = bdd_and_impl(hi_nodes, generated_nodes, node_limit);
+        const size_t hi = bdd_and_impl(hi_nodes, generated_nodes, o);
         if(hi == std::numeric_limits<size_t>::max())
             return std::numeric_limits<size_t>::max();
 
         if(lo == hi)
             return lo;
 
-        if(reduction.count({lo,hi,v}) > 0)
-            return reduction.find({lo,hi,v})->second;
+        if(o.reduction.count({lo,hi,v}) > 0)
+            return o.reduction.find({lo,hi,v})->second;
 
-        stack.push_back({lo, hi, v});
-        if(stack.size() > node_limit)
-            return std::numeric_limits<size_t>::max();
-        const size_t meld_idx = stack.size()-1;
+        o.stack.push_back({lo, hi, v});
+        const size_t meld_idx = o.stack.size()-1;
         generated_nodes.insert(std::make_pair(bdds, meld_idx));
-        reduction.insert(std::make_pair(bdd_instruction{lo,hi,v}, meld_idx));
+        o.reduction.insert(std::make_pair(bdd_instruction{lo,hi,v}, meld_idx));
 
         return meld_idx;
     }
@@ -966,7 +982,7 @@ namespace BDD {
         return idx;
     }
 
-    size_t bdd_collection::make_qbdd(const size_t bdd_nr)
+    size_t bdd_collection::make_qbdd(const size_t bdd_nr, bdd_collection& o)
     {
         assert(bdd_nr < nr_bdds());
         std::vector<size_t> vars = variables(bdd_nr);
@@ -1073,36 +1089,41 @@ namespace BDD {
 
         // add to end of nodes
         for(auto& bdd : new_bdds)
-            bdd_instructions.push_back(bdd);
+            o.bdd_instructions.push_back(bdd);
 
         // add terminal nodes
-        bdd_instructions.push_back(bdd_instruction::topsink());
-        bdd_instructions.push_back(bdd_instruction::botsink());
-        bdd_delimiters.push_back(bdd_instructions.size());
+        o.bdd_instructions.push_back(bdd_instruction::topsink());
+        o.bdd_instructions.push_back(bdd_instruction::botsink());
+        o.bdd_delimiters.push_back(o.bdd_instructions.size());
 
         // update offsets
-        for(size_t i=bdd_delimiters[bdd_delimiters.size()-2]; i<bdd_delimiters.back()-2; ++i)
+        for(size_t i=o.bdd_delimiters[o.bdd_delimiters.size()-2]; i<o.bdd_delimiters.back()-2; ++i)
         {
-            auto& bdd = bdd_instructions[i];
+            auto& bdd = o.bdd_instructions[i];
 
             if(bdd.lo == bdd_instruction::temp_botsink_index)
-                bdd.lo = bdd_delimiters.back()-1;
+                bdd.lo = o.bdd_delimiters.back()-1;
             else if(bdd.lo == bdd_instruction::temp_topsink_index)
-                bdd.lo = bdd_delimiters.back()-2;
+                bdd.lo = o.bdd_delimiters.back()-2;
             else
-                bdd.lo += bdd_delimiters[bdd_delimiters.size()-2];
+                bdd.lo += o.bdd_delimiters[o.bdd_delimiters.size()-2];
 
             if(bdd.hi == bdd_instruction::temp_botsink_index)
-                bdd.hi = bdd_delimiters.back()-1;
+                bdd.hi = o.bdd_delimiters.back()-1;
             else if(bdd.hi == bdd_instruction::temp_topsink_index)
-                bdd.hi = bdd_delimiters.back()-2;
+                bdd.hi = o.bdd_delimiters.back()-2;
             else
-                bdd.hi += bdd_delimiters[bdd_delimiters.size()-2];
+                bdd.hi += o.bdd_delimiters[o.bdd_delimiters.size()-2];
         }
 
-        reorder(bdd_delimiters.size()-2);
+        o.reorder(o.bdd_delimiters.size()-2);
 
-        return bdd_delimiters.size() - 2;
+        return o.bdd_delimiters.size() - 2;
+    }
+
+    size_t bdd_collection::make_qbdd(const size_t bdd_nr)
+    {
+        return make_qbdd(bdd_nr, *this);
     }
 
     void bdd_collection::append(const bdd_collection& o)

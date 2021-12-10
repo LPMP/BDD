@@ -194,21 +194,40 @@ mu_8_1 - mu_78_01 - mu_78_11 = 0
 End)";
 
 
-void test_problem(const char* instance, const double expected_lb)
+void test_problem(const char* instance, const double expected_lb, const double tol = 1e-12)
 {
     ILP_input ilp = ILP_parser::parse_string(instance);
     bdd_preprocessor bdd_pre(ilp);
     bdd_collection bdd_col = bdd_pre.get_bdd_collection();
-    bdd_cuda_parallel_mma<float> solver(bdd_col);
+    bdd_cuda_parallel_mma<double> solver(bdd_col);
 
     for(size_t i=0; i<solver.nr_variables(); ++i)
         solver.set_cost(ilp.objective()[i], i);
 
-    for(size_t iter=0; iter<100; ++iter)
+    std::vector<double> cost_vector_before = solver.compute_primal_objective_vector();
+    for(size_t i=0; i<solver.nr_variables(); ++i)
+    {
+        const auto diff = std::abs(ilp.objective()[i] - cost_vector_before[i]);
+        std::stringstream buffer;
+        buffer<<i<<" "<<ilp.objective()[i]<<" "<<cost_vector_before[i]<<" "<<diff<<"\n";
+        test(diff <= tol, buffer.str());
+    }
+
+    for(size_t iter=0; iter<200; ++iter)
         solver.iteration();
     
     std::cout<<"Final lower bound: "<<solver.lower_bound()<<", Expected: "<<expected_lb<<"\n";
-    test(std::abs(solver.lower_bound() - expected_lb) <= 1e-6);
+    solver.distribute_delta();
+    test(std::abs(solver.lower_bound() - expected_lb) <= tol);
+
+    std::vector<double> cost_vector_after = solver.compute_primal_objective_vector();
+    for(size_t i=0; i<solver.nr_variables(); ++i)
+    {
+        const auto diff = std::abs(ilp.objective()[i] - cost_vector_after[i]);
+        std::stringstream buffer;
+        buffer<<i<<" "<<ilp.objective()[i]<<" "<<cost_vector_before[i]<<" "<<diff<<"\n";
+        test(diff <= tol, buffer.str());
+    }
 }
 
 int main(int argc, char** argv)

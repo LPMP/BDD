@@ -70,7 +70,7 @@ namespace LPMP {
 
         struct new_inequality_identifier : tao::pegtl::seq<term_identifier, opt_whitespace, tao::pegtl::string<':'>> {};
 
-        struct new_inequality : tao::pegtl::seq<opt_whitespace, tao::pegtl::not_at<tao::pegtl::sor<tao::pegtl::string<'E','n','d'>,tao::pegtl::string<'B','o','u','n','d','s'>,tao::pegtl::string<'C','o','a','l','e','s','c','e'>>>, tao::pegtl::opt<new_inequality_identifier>, opt_whitespace> {};
+        struct new_inequality : tao::pegtl::seq<opt_whitespace, tao::pegtl::not_at<tao::pegtl::sor<tao::pegtl::string<'E','n','d'>,tao::pegtl::string<'B','o','u','n','d','s'>,tao::pegtl::string<'B','i','n','a','r','i','e','s'>,tao::pegtl::string<'C','o','a','l','e','s','c','e'>>>, tao::pegtl::opt<new_inequality_identifier>, opt_whitespace> {};
 
         struct inequality_coefficient : tao::pegtl::seq<tao::pegtl::digit, tao::pegtl::star<tao::pegtl::digit>> {};
         struct inequality_variable : variable_name {};

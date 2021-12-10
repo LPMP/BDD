@@ -26,6 +26,7 @@ target_include_directories(LPMP-BDD INTERFACE external/CLI11/include)
 target_include_directories(LPMP-BDD INTERFACE external/pybind11)
 target_include_directories(LPMP-BDD INTERFACE external/thrust/)
 target_include_directories(LPMP-BDD INTERFACE external/thrust/dependencies/cub)
+target_include_directories(LPMP-BDD INTERFACE external/cereal/include/)
 
 find_package(OpenMP)
 if(OpenMP_CXX_FOUND)

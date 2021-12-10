@@ -13,6 +13,7 @@
 #include <stdexcept>
 #include <CLI/CLI.hpp>
 #include "time_measure_util.h"
+#include "run_solver_util.h"
 
 namespace LPMP {
 
@@ -70,7 +71,7 @@ namespace LPMP {
             ->transform(CLI::CheckedTransformer(variable_order_map, CLI::ignore_case));
 
         app.add_option("-m, --max_iter", max_iter, "maximal number of iterations, default value = 10000")
-            ->check(CLI::PositiveNumber);
+            ->check(CLI::NonNegativeNumber);
 
         app.add_option("--tolerance", tolerance, "termination criterion: lower bound relative progress tolerance, default value = " + std::to_string(tolerance))
             ->check(CLI::PositiveNumber);
@@ -383,47 +384,7 @@ namespace LPMP {
         }
         std::visit([&](auto&& s) {
 
-                const auto start_time = std::chrono::steady_clock::now();
-                const double lb_initial = s.lower_bound();
-                double lb_first_iter = std::numeric_limits<double>::max();
-                double lb_prev = lb_initial;
-                double lb_post = lb_prev;
-                std::cout << "[bdd_solver] initial lower bound = " << lb_prev;
-                auto time = std::chrono::steady_clock::now();
-                std::cout << ", time = " << (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000 << " s\n";
-                for(size_t iter=0; iter<options.max_iter; ++iter)
-                {
-                    s.iteration();
-                    lb_prev = lb_post;
-                    lb_post = s.lower_bound();
-                    if(iter == 0)
-                        lb_first_iter = lb_post;
-                    std::cout << "[bdd_solver] iteration " << iter << ", lower bound = " << lb_post;
-                    time = std::chrono::steady_clock::now();
-                    double time_spent = (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000;
-                     std::cout << ", time = " << time_spent << " s\n";
-                     if (time_spent > options.time_limit)
-                     {
-                        std::cout << "[bdd_solver] Time limit reached." << std::endl;
-                        break;
-                     }
-                     if (std::abs(lb_prev-lb_post) < std::abs(options.tolerance*lb_prev))
-                     {
-                         std::cout << "[bdd_solver] Relative progress less than tolerance (" << options.tolerance << ")\n";
-                         break;
-                     }
-                     if(std::abs(lb_prev - lb_post) < options.improvement_slope * std::abs(lb_initial - lb_first_iter))
-                     {
-                         std::cout << "[bdd solver] improvement smaller than " << 100*options.improvement_slope << "\% of initial improvement\n";
-                         break;
-                     }
-                     if(lb_post == std::numeric_limits<double>::infinity())
-                     {
-                         std::cout << "[bdd solver] problem infeasible\n";
-                         break;
-                     }
-                }
-                std::cout << "[bdd_solver] final lower bound = " << s.lower_bound() << "\n"; 
+                run_solver(s, options.max_iter, options.tolerance, options.improvement_slope, options.time_limit);
                 }, *solver);
 
         // TODO: improve, do periodic tightening
@@ -506,16 +467,20 @@ namespace LPMP {
         {
             std::cout << "[incremental primal rounding] start rounding\n";
             const auto sol = std::visit([&](auto&& s) {
-                    if constexpr(
+                    if constexpr( // CPU rounding
                             std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_vec<float>>
                             || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_vec<double>>
                             || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma<float>>
                             || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma<double>>
+                            // TODO: remove for cuda rounding again //
+                            //|| std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<float>>
+                            //|| std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<double>>
+                            //////////////////////////////////////////
                             )
                     return incremental_mm_agreement_rounding_iter(s, options.incremental_initial_perturbation, options.incremental_growth_rate, options.incremental_primal_num_itr_lb);
-                    else if constexpr(
+                    else if constexpr( // GPU rounding
                             std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<float>>
-    //                        || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<double>>
+                            || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<double>>
                             )
                     {
                     return s.incremental_mm_agreement_rounding(options.incremental_initial_perturbation, options.incremental_growth_rate, options.incremental_primal_num_itr_lb);

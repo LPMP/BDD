@@ -52,3 +52,7 @@ For computing BDDs for representing constraints and for sequentially visiting va
 * `-o input`: Use the variable ordering as given in the input file.
 * `-o bfs`: Use a breadth-first search through the variable-constraint adjacency matrix to determine a variable ordering starting from the most eccentric node.
 * `-o cuthill`: Use the Cuthill McKee algorithm on the variable-constraint adjacency matrix to determina a variable ordering.
+
+## References
+If you use this work please cite
+* [`J. H. Lange and P. Swoboda. Efficient Message Passing for 0–1 ILPs with Binary Decision Diagrams. In ICML 2021.`](http://proceedings.mlr.press/v139/lange21a.html)

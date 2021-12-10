@@ -58,6 +58,12 @@ namespace LPMP {
     }
 
     template<typename REAL>
+    void bdd_parallel_mma<REAL>::distribute_delta()
+    {
+        pimpl->base.distribute_delta();
+    }
+
+    template<typename REAL>
     double bdd_parallel_mma<REAL>::lower_bound()
     {
         return pimpl->base.lower_bound();

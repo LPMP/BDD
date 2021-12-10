@@ -109,5 +109,6 @@ PYBIND11_MODULE(ILP_instance_py, m) {
                 });
 
         m.def("read_ILP", [](const std::string& filename) -> LPMP::ILP_input { return LPMP::ILP_parser::parse_file(filename); }); 
+        m.def("parse_ILP", [](const char* instance) -> LPMP::ILP_input { return LPMP::ILP_parser::parse_string(instance); }); 
         m.def("read_OPB", [](const std::string& filename) -> LPMP::ILP_input { return LPMP::OPB_parser::parse_file(filename); }); 
 }

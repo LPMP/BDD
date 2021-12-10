@@ -17,8 +17,10 @@ namespace LPMP {
         // first transform linear inequalities into BDDs
         std::cout << "[bdd_preprocessor] convert " << input.constraints().size() << " linear inequalities.\n";
 
+        std::vector<size_t> ineq_to_bdd_nr(input.constraints().size(), std::numeric_limits<size_t>::max());
+
 #ifdef _OPENMP
-        const size_t nr_threads = omp_get_num_threads();
+        const size_t nr_threads = omp_get_max_threads();
 #else
         const size_t nr_threads = 1;
 #endif
@@ -85,12 +87,19 @@ namespace LPMP {
         {
             std::cout << "[bdd_preprocessor] form " << input.nr_constraint_groups() << " constraint groups.\n";
             std::vector<size_t> bdd_nrs;
-            for(size_t c=0; c<input.nr_constraint_groups(); ++c)
+#pragma omp parallel
             {
-                auto [c_begin, c_end] = input.constraint_group(c);
-                const size_t coalesced_bdd_nr = bdd_collection.bdd_and(c_begin, c_end);
-                bdd_collection.reorder(coalesced_bdd_nr);
-                assert(bdd_collection.is_reordered(coalesced_bdd_nr));
+                BDD::bdd_collection cur_bdd_collection;
+#pragma omp for
+                for(size_t c=0; c<input.nr_constraint_groups(); ++c)
+                {
+                    auto [c_begin, c_end] = input.constraint_group(c);
+                    const size_t coalesced_bdd_nr = bdd_collection.bdd_and(c_begin, c_end, cur_bdd_collection);
+                    cur_bdd_collection.reorder(coalesced_bdd_nr);
+                    assert(cur_bdd_collection.is_reordered(coalesced_bdd_nr));
+                }
+#pragma omp critical
+                bdd_collection.append(cur_bdd_collection);
             }
 
             // remove BDDs that were coalesced
@@ -105,10 +114,6 @@ namespace LPMP {
             unused_bdd_nrs.resize(std::distance(unused_bdd_nrs.begin(), new_unused_bdd_nrs_end));
             std::cout << "[bdd_preprocessor] remove " << unused_bdd_nrs.size() << " original BDDs.\n";
 
-            //std::fstream fs;
-            //fs.open ("kwas.dot", std::fstream::in | std::fstream::out | std::ofstream::trunc);
-            //bdd_collection.export_graphviz(coalesced_bdd_nr, fs);
-            //add_bdd(bdd_collection[coalesced_bdd_nr]);
             bdd_collection.remove(unused_bdd_nrs.begin(), unused_bdd_nrs.end());
         }
 
@@ -116,25 +121,33 @@ namespace LPMP {
         std::cout << "[bdd preprocessor] Transform BDDs into QBDDs\n";
         std::vector<size_t> bdds_to_remove;
         const size_t orig_nr_bdds = bdd_collection.nr_bdds();
-#pragma omp parallel for schedule(static)
-        for(size_t bdd_nr = 0; bdd_nr<orig_nr_bdds; ++bdd_nr)
+#pragma omp parallel
         {
-            if(!bdd_collection.is_qbdd(bdd_nr))
+            BDD::bdd_collection cur_bdd_collection;
+            std::vector<size_t> cur_bdds_to_remove;
+#pragma omp for schedule(static,256)
+            for(size_t bdd_nr = 0; bdd_nr<orig_nr_bdds; ++bdd_nr)
             {
-#pragma omp critical
+                if(!bdd_collection.is_qbdd(bdd_nr))
                 {
-                    auto vars = bdd_collection.variables(bdd_nr);
-                    for(auto x : vars)
-                        std::cout << x << ",";
-                    std::cout << "\n";
                     bdd_collection.make_qbdd(bdd_nr);
                     bdds_to_remove.push_back(bdd_nr);
                 }
             }
+#pragma omp critical
+            {
+                for(const size_t nr : cur_bdds_to_remove)
+                    bdds_to_remove.push_back(nr);
+                bdd_collection.append(cur_bdd_collection);
+            }
         }
-        std::sort(bdds_to_remove.begin(), bdds_to_remove.end());
-        std::cout << "[bdd preprocessor] " << bdds_to_remove.size() << " BDDs had to be transformed\n";
-        bdd_collection.remove(bdds_to_remove.begin(), bdds_to_remove.end());
+        {
+            std::sort(bdds_to_remove.begin(), bdds_to_remove.end());
+            std::cout << "[bdd preprocessor] " << bdds_to_remove.size() << " BDDs had to be transformed\n";
+            bdd_collection.remove(bdds_to_remove.begin(), bdds_to_remove.end()); 
+        }
+
+        std::cout << "[bdd preprocessor] final #BDDs = " << bdd_collection.nr_bdds() << "\n";
 
         // second, preprocess BDDs, TODO: do this separately!
         /*
@@ -413,6 +426,7 @@ namespace LPMP {
 
     void bdd_preprocessor::coalesce()
     {
+        /*
         std::cout << "rebasing bdds\n";
         rebase_bdds(); 
 
@@ -603,6 +617,8 @@ namespace LPMP {
 
     void bdd_preprocessor::coalesce_bdd_collection()
     {
+        return;
+            /*
         construct_bdd_collection();
 
         //std::unordered_set<std::array<size_t,2>> intersected_bdds;
@@ -779,11 +795,13 @@ return_candidates:
 
 
 
+            /*
             std::chrono::steady_clock::time_point coalesce_end = std::chrono::steady_clock::now();
             std::cout << "coalesce time = " << std::chrono::duration_cast<std::chrono::milliseconds>(coalesce_end - coalesce_begin).count() << "[ms]" << std::endl;
             if(bdds_to_remove.size() == 0)
                 break;
         }
+    */
     }
 
     /*

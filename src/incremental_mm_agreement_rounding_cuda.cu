@@ -9,6 +9,7 @@
 #include "time_measure_util.h"
 
 #include "bdd_cuda_parallel_mma.h"
+#include "run_solver_util.h"
 
 namespace LPMP {
 
@@ -27,9 +28,9 @@ namespace LPMP {
         {
             REAL mm_0 = thrust::get<0>(t);
             REAL mm_1 = thrust::get<1>(t);
-            if(mm_0 + 1e-6 < mm_1)
+            if(mm_0 + 1e-6 <= mm_1)
                 return -1;
-            else if(mm_1 + 1e-6 < mm_0)
+            else if(mm_1 + 1e-6 <= mm_0)
                 return 1;
             else 
                 return 0;
@@ -50,9 +51,9 @@ namespace LPMP {
             if(var >= nr_vars)
                 return;
 
-            if (mm_min >= 0 && mm_max > 0)
+            if (mm_min > 0)
                 mm_types[var] = mm_type::one;
-            else if (mm_min < 0 && mm_max <= 0)
+            else if (mm_max < 0)
                 mm_types[var] = mm_type::zero;
             else if(mm_max == 0 && mm_min == 0)
                 mm_types[var] = mm_type::equal;
@@ -141,8 +142,9 @@ namespace LPMP {
     template<typename REAL>
     struct mm_types_transform {
         const REAL delta;
-        const int* ranking_inconsistent;
+        const REAL max_incon_mm_diff;
         const REAL decay_factor_inconsistent;
+        const bool only_perturb_inconsistent;
 
         __host__ __device__
         thrust::tuple<REAL, REAL> operator()(const thrust::tuple<mm_type,REAL,REAL,int> t) const
@@ -153,35 +155,49 @@ namespace LPMP {
 
             if(mmt == mm_type::one)
             {
-                return {delta, 0.0};
+                if (!only_perturb_inconsistent)
+                    return {delta, 0.0};
+                else
+                    return {0.0, 0.0};
             }
             else if(mmt == mm_type::zero)
             {
-                return {0.0, delta};
-            }
-            else if(mmt == mm_type::equal)
-            {
-                thrust::default_random_engine rng;
-                thrust::uniform_real_distribution<float> dist(delta/5.0, delta);
-                const int id = blockIdx.x * blockDim.x + threadIdx.x;
-                rng.discard(id); // TODO: have other source for randomness here!
-                const float r = dist(rng);
-
-                if(mm_0 < mm_1)
-                    return {0.0, 3.0*r};
+                if (!only_perturb_inconsistent)
+                    return {0.0, delta};
                 else
-                    return {3.0*r, 0.0};
+                    return {0.0, 0.0};
             }
             else
             {
-                const int primal_index = thrust::get<3>(t);
-                const int rank = ranking_inconsistent[primal_index];
-                assert(rank > 0);
-                if(mm_0 < mm_1)
-                    return {0.0, delta / pow(rank, decay_factor_inconsistent)};
+                thrust::default_random_engine rng;
+                thrust::uniform_real_distribution<float> dist(-delta, delta);
+                const int id = blockIdx.x * blockDim.x + threadIdx.x;
+                rng.discard(id); // TODO: have other source for randomness here!
+                const float r = dist(rng);
+                if(mmt == mm_type::equal)
+                {
+                    if(r < 0.0)
+                        return {abs(r)*delta, 0.0};
+                    else
+                        return {0.0, abs(r)*delta};
+                }
+
                 else
-                    return {delta / pow(rank, decay_factor_inconsistent), 0.0};
+                {
+                    if(mm_0 < mm_1)
+                        return {0.0, abs(r)*delta};
+                    else
+                        return {abs(r)*delta, 0.0};
+                }
             }
+            // else
+            // {
+            //     const REAL cur_abs_mm_diff = abs(mm_0 - mm_1);
+            //     if(mm_0 < mm_1)
+            //         return {0.0, delta * pow(cur_abs_mm_diff / max_incon_mm_diff, decay_factor_inconsistent)};
+            //     else
+            //         return {delta * pow(cur_abs_mm_diff / max_incon_mm_diff, decay_factor_inconsistent), 0.0};
+            // }
         }
     };
 
@@ -208,7 +224,7 @@ namespace LPMP {
     };
 
     template<typename REAL>
-    thrust::device_vector<int> compute_inconsistent_ranking(const thrust::device_vector<mm_type>& mm_types, const thrust::device_vector<REAL>& mm_sum_0, const thrust::device_vector<REAL>& mm_sum_1)
+    REAL compute_max_inconsistent_mm_diff(const thrust::device_vector<mm_type>& mm_types, const thrust::device_vector<REAL>& mm_sum_0, const thrust::device_vector<REAL>& mm_sum_1)
     {
         thrust::device_vector<REAL> mm_abs_diff(mm_sum_0.size());
         thrust::transform(mm_sum_1.begin(), mm_sum_1.end(), mm_sum_0.begin(), mm_abs_diff.begin(), mm_abs_diff_func<REAL>());
@@ -222,15 +238,8 @@ namespace LPMP {
         auto new_last = thrust::remove_if(first, last, is_consistent_func<REAL>({thrust::raw_pointer_cast(mm_types.data())}));
         const int num_inconsistent = thrust::distance(first, new_last);
         mm_abs_diff.resize(num_inconsistent);
-        inconsistent_primal_vars.resize(num_inconsistent);
-
-        thrust::sort_by_key(mm_abs_diff.begin(), mm_abs_diff.end(), inconsistent_primal_vars.begin(), thrust::greater<REAL>());
-
-        thrust::device_vector<int> ranking(mm_types.size(), 0); // not inconsistent variables have rank 0.
-        thrust::scatter(thrust::make_counting_iterator<int>(1), thrust::make_counting_iterator<int>(1) + num_inconsistent, inconsistent_primal_vars.begin(), ranking.begin());
-        return ranking;
+        return *thrust::max_element(mm_abs_diff.begin(), mm_abs_diff.end());
     }
-
 
 struct mm_type_to_sol {
     __host__ __device__
@@ -261,7 +270,7 @@ struct mm_type_to_sol {
 
             double cur_delta = 1.0/delta_growth_rate * init_delta;
 
-            for(size_t round=0; round<10000; ++round)
+            for(size_t round=0; round<500; ++round)
             {
                 cur_delta = min(cur_delta*delta_growth_rate, 1e6);
                 const auto time = std::chrono::steady_clock::now();
@@ -271,13 +280,18 @@ struct mm_type_to_sol {
                 s.distribute_delta();
                 const auto mms = s.min_marginals_cuda();
                 const thrust::device_vector<int>& primal_vars = std::get<0>(mms);
-                const thrust::device_vector<float>& mms_0 = std::get<1>(mms);
-                const thrust::device_vector<float>& mms_1 = std::get<2>(mms);
+                const auto& mms_0 = std::get<1>(mms);
+                const auto& mms_1 = std::get<2>(mms);
                 const auto mm_types = compute_mm_types(s.nr_variables(), mms_0, mms_1, primal_vars);
                 const size_t nr_one_mms = thrust::count(mm_types.begin(), mm_types.end(), mm_type::one);
                 const size_t nr_zero_mms = thrust::count(mm_types.begin(), mm_types.end(), mm_type::zero);
                 const size_t nr_equal_mms = thrust::count(mm_types.begin(), mm_types.end(), mm_type::equal);
                 const size_t nr_inconsistent_mms = thrust::count(mm_types.begin(), mm_types.end(), mm_type::inconsistent);
+                if (nr_inconsistent_mms == 1)
+                {
+                    const size_t incon_index = thrust::distance(mm_types.begin(), thrust::find(mm_types.begin(), mm_types.end(), mm_type::inconsistent));
+                    std::cout<<"Inconsistent index: "<<incon_index<<"\n";
+                }
 
                 std::cout << "[incremental primal rounding cuda] " <<
                     "#one min-marg diffs = " << nr_one_mms << " " << u8"\u2258" << " " << double(100*nr_one_mms)/double(s.nr_variables()) << "%, " <<
@@ -299,32 +313,23 @@ struct mm_type_to_sol {
                     return sol;
                 }
 
-                thrust::device_vector<float> cost_delta_0(s.nr_variables());
-                thrust::device_vector<float> cost_delta_1(s.nr_variables());
+                thrust::device_vector<double> cost_delta_0(s.nr_variables());
+                thrust::device_vector<double> cost_delta_1(s.nr_variables());
 
                 const auto mm_sums = compute_mm_sums(s.nr_variables(), mms_0, mms_1, primal_vars);
                 const auto& mm_sums_0 = std::get<0>(mm_sums);
                 const auto& mm_sums_1 = std::get<1>(mm_sums);
-                thrust::device_vector<int> inconsistent_ranking =  compute_inconsistent_ranking(mm_types, mm_sums_0, mm_sums_1);
+                const auto max_incon_mm_diff = compute_max_inconsistent_mm_diff(mm_types, mm_sums_0, mm_sums_1);
 
                 auto delta_it_begin = thrust::zip_iterator(thrust::make_tuple(cost_delta_0.begin(), cost_delta_1.begin()));
                 auto first = thrust::zip_iterator(thrust::make_tuple(mm_types.begin(), mm_sums_0.begin(), mm_sums_1.begin(), thrust::make_counting_iterator<int>(0)));
                 auto last = thrust::zip_iterator(thrust::make_tuple(mm_types.end(), mm_sums_0.end(), mm_sums_1.end(), thrust::make_counting_iterator<int>(0) + mm_types.size()));
 
-                thrust::transform(first, last, delta_it_begin, mm_types_transform<typename SOLVER::value_type>{cur_delta, thrust::raw_pointer_cast(inconsistent_ranking.data()), 3.0});
+                thrust::transform(first, last, delta_it_begin, mm_types_transform<typename SOLVER::value_type>{cur_delta, max_incon_mm_diff, 2.0, false}); //nr_inconsistent_mms == 1});
 
                 s.update_costs(cost_delta_0, cost_delta_1);
-                float lb_prev;
-                size_t solver_iter;
-                for(solver_iter=0; solver_iter < num_itr_lb; ++solver_iter)
-                {
-                    s.iteration();
-                    float lb_post = s.lower_bound();
-                    if (solver_iter > 0 && std::abs(lb_prev-lb_post) < std::abs(1e-6 * lb_prev))
-                        break;
-                    lb_prev = lb_post;
-                }
-                std::cout << "[incremental primal rounding cuda] lower bound = " << lb_prev << ", iterations: "<<solver_iter<<"\n";
+                run_solver(s, num_itr_lb, 1e-7, 0.0001, std::numeric_limits<double>::max(), false);
+                std::cout << "[incremental primal rounding cuda] lower bound = " << s.lower_bound() << "\n";
             }
 
             std::cout << "[incremental primal rounding cuda] No solution found\n";

@@ -121,10 +121,15 @@ namespace BDD {
         friend class bdd_collection_entry;
         public:
             // synthesize bdd unless it has too many nodes. If so, return std::numeric_limits<size_t>::max()
-            size_t bdd_and(const size_t i, const size_t j, const size_t node_limit = std::numeric_limits<size_t>::max());
-            size_t bdd_and(const int i, const int j, const size_t node_limit = std::numeric_limits<size_t>::max()) { return bdd_and(size_t(i), size_t(j), node_limit); }
+            size_t bdd_and(const size_t i, const size_t j, bdd_collection& o);
+            size_t bdd_and(const size_t i, const size_t j);
+            size_t bdd_and(const int i, const int j, bdd_collection& o);
+            size_t bdd_and(const int i, const int j);
+
             template<typename BDD_ITERATOR>
-                size_t bdd_and(BDD_ITERATOR bdd_begin, BDD_ITERATOR bdd_end, const size_t node_limit = std::numeric_limits<size_t>::max());
+                size_t bdd_and(BDD_ITERATOR bdd_begin, BDD_ITERATOR bdd_end, bdd_collection& o);
+            template<typename BDD_ITERATOR>
+                size_t bdd_and(BDD_ITERATOR bdd_begin, BDD_ITERATOR bdd_end);
 
             // compute disjunction 
             size_t bdd_or(const size_t i, const size_t j);
@@ -190,6 +195,7 @@ namespace BDD {
             // for exporting to solvers: need modified BDD with arcs connecting consecutive variables
             bool contiguous_vars(const size_t bdd_nr) const;
             size_t make_qbdd(const size_t bdd_nr);
+            size_t make_qbdd(const size_t bdd_nr, bdd_collection& o);
 
             bool is_bdd(const size_t i) const;
             bool is_qbdd(const size_t bdd_nr) const;
@@ -211,11 +217,14 @@ namespace BDD {
             void append(const bdd_collection& o);
 
         private:
-            size_t bdd_and_impl(const size_t i, const size_t j, const size_t node_limit);
+            size_t bdd_and_impl(const size_t i, const size_t j, bdd_collection& o);
             template<size_t N>
-                size_t bdd_and(const std::array<size_t,N>& bdds, const size_t node_limit);
+                size_t bdd_and(const std::array<size_t,N>& bdds);
             template<size_t N>
-            size_t bdd_and_impl(const std::array<size_t,N>& bdds, std::unordered_map<std::array<size_t,N>,size_t,array_hasher<N>>& generated_nodes, const size_t node_limit);
+                size_t bdd_and(const std::array<size_t,N>& bdds, bdd_collection& o);
+            template<size_t N>
+            size_t bdd_and_impl(const std::array<size_t,N>& bdds, std::unordered_map<std::array<size_t,N>,size_t,array_hasher<N>>& generated_nodes, bdd_collection& o);
+
             size_t splitting_variable(const bdd_instruction& k, const bdd_instruction& l) const;
             size_t add_bdd_impl(node_ref bdd);
 
@@ -372,7 +381,13 @@ namespace BDD {
         }
 
     template<typename BDD_ITERATOR>
-        size_t bdd_collection::bdd_and(BDD_ITERATOR bdd_begin, BDD_ITERATOR bdd_end, const size_t node_limit)
+        size_t bdd_collection::bdd_and(BDD_ITERATOR bdd_begin, BDD_ITERATOR bdd_end)
+        {
+            return bdd_and(bdd_begin, bdd_end, *this); 
+        }
+
+    template<typename BDD_ITERATOR>
+        size_t bdd_collection::bdd_and(BDD_ITERATOR bdd_begin, BDD_ITERATOR bdd_end, bdd_collection& o)
         {
             const size_t nr_bdds = std::distance(bdd_begin, bdd_end);
 
@@ -397,64 +412,64 @@ namespace BDD {
 
                 while(bdd_nrs.size() >= bdd_and_th)
                 {
-                    size_t new_bdd_nr = bdd_and(bdd_nrs.end()-bdd_and_th, bdd_nrs.end(), node_limit);
+                    size_t new_bdd_nr = bdd_and(bdd_nrs.end()-bdd_and_th, bdd_nrs.end());
                     bdd_nrs.resize(bdd_nrs.size()-bdd_and_th);
                     bdd_nrs.push_back(new_bdd_nr);
                 }
 
-                return bdd_and(bdd_nrs.begin(), bdd_nrs.end(), node_limit);
+                return bdd_and(bdd_nrs.begin(), bdd_nrs.end());
             }
 
             switch(nr_bdds) {
                 case 1: return *bdd_begin;
-                case 2: { const size_t i = *bdd_begin; ++bdd_begin; const size_t j = *bdd_begin; return bdd_and(i, j, node_limit); }
-                case 3: { auto b = construct_array<3>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 4: { auto b = construct_array<4>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 5: { auto b = construct_array<5>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 6: { auto b = construct_array<6>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 7: { auto b = construct_array<7>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 8: { auto b = construct_array<8>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 9: { auto b = construct_array<9>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 10: { auto b = construct_array<10>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 11: { auto b = construct_array<11>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 12: { auto b = construct_array<12>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 13: { auto b = construct_array<13>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 14: { auto b = construct_array<14>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 15: { auto b = construct_array<15>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 16: { auto b = construct_array<16>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 17: { auto b = construct_array<17>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 18: { auto b = construct_array<18>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 19: { auto b = construct_array<19>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 20: { auto b = construct_array<20>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 21: { auto b = construct_array<21>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 22: { auto b = construct_array<22>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 23: { auto b = construct_array<23>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 24: { auto b = construct_array<24>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 25: { auto b = construct_array<25>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 26: { auto b = construct_array<26>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 27: { auto b = construct_array<27>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 28: { auto b = construct_array<28>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 29: { auto b = construct_array<29>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 30: { auto b = construct_array<30>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 31: { auto b = construct_array<31>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 32: { auto b = construct_array<32>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 33: { auto b = construct_array<33>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 34: { auto b = construct_array<34>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 35: { auto b = construct_array<35>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 36: { auto b = construct_array<36>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 37: { auto b = construct_array<37>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 38: { auto b = construct_array<38>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 39: { auto b = construct_array<39>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 40: { auto b = construct_array<40>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 41: { auto b = construct_array<41>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 42: { auto b = construct_array<42>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 43: { auto b = construct_array<43>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 44: { auto b = construct_array<44>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 45: { auto b = construct_array<45>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 46: { auto b = construct_array<46>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 47: { auto b = construct_array<47>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 48: { auto b = construct_array<48>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
-                case 49: { auto b = construct_array<49>(bdd_begin, bdd_end); return bdd_and(b, node_limit); }
+                case 2: { const size_t i = *bdd_begin; ++bdd_begin; const size_t j = *bdd_begin; return bdd_and(i, j, o); }
+                case 3: { auto b = construct_array<3>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 4: { auto b = construct_array<4>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 5: { auto b = construct_array<5>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 6: { auto b = construct_array<6>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 7: { auto b = construct_array<7>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 8: { auto b = construct_array<8>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 9: { auto b = construct_array<9>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 10: { auto b = construct_array<10>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 11: { auto b = construct_array<11>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 12: { auto b = construct_array<12>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 13: { auto b = construct_array<13>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 14: { auto b = construct_array<14>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 15: { auto b = construct_array<15>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 16: { auto b = construct_array<16>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 17: { auto b = construct_array<17>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 18: { auto b = construct_array<18>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 19: { auto b = construct_array<19>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 20: { auto b = construct_array<20>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 21: { auto b = construct_array<21>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 22: { auto b = construct_array<22>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 23: { auto b = construct_array<23>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 24: { auto b = construct_array<24>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 25: { auto b = construct_array<25>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 26: { auto b = construct_array<26>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 27: { auto b = construct_array<27>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 28: { auto b = construct_array<28>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 29: { auto b = construct_array<29>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 30: { auto b = construct_array<30>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 31: { auto b = construct_array<31>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 32: { auto b = construct_array<32>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 33: { auto b = construct_array<33>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 34: { auto b = construct_array<34>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 35: { auto b = construct_array<35>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 36: { auto b = construct_array<36>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 37: { auto b = construct_array<37>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 38: { auto b = construct_array<38>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 39: { auto b = construct_array<39>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 40: { auto b = construct_array<40>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 41: { auto b = construct_array<41>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 42: { auto b = construct_array<42>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 43: { auto b = construct_array<43>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 44: { auto b = construct_array<44>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 45: { auto b = construct_array<45>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 46: { auto b = construct_array<46>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 47: { auto b = construct_array<47>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 48: { auto b = construct_array<48>(bdd_begin, bdd_end); return bdd_and(b, o); }
+                case 49: { auto b = construct_array<49>(bdd_begin, bdd_end); return bdd_and(b, o); }
                 default: throw std::runtime_error("generic and not implemented.");
             }
         }

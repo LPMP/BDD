@@ -23,3 +23,6 @@
 [submodule "external/thrust"]
 	path = external/thrust
 	url = https://github.com/NVIDIA/thrust.git
+[submodule "external/cereal"]
+	path = external/cereal
+	url = https://github.com/USCiLab/cereal.git

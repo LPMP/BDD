@@ -62,6 +62,7 @@ namespace LPMP {
             void parallel_mma();
             void forward_mm(const size_t bdd_nr, const typename BDD_BRANCH_NODE::value_type omega, std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& mms_to_collect, std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& mms_to_distribute);
             value_type backward_mm(const size_t bdd_nr, const typename BDD_BRANCH_NODE::value_type omega, std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& mms_to_collect, std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& mms_to_distribute);
+            void distribute_delta();
 
             // Both operations below are inverses of each other
             // Given elements in order bdd_nr/bdd_index, transpose to variable/bdd_index with same variable.
@@ -1014,6 +1015,34 @@ namespace LPMP {
         }
 
     template<typename BDD_BRANCH_NODE>
+        void bdd_sequential_base<BDD_BRANCH_NODE>::distribute_delta()
+        {
+            message_passing_state_ = message_passing_state::none;
+            lower_bound_state_ = lower_bound_state::invalid; 
+
+            assert(mms_to_distribute_.size() == nr_variables());
+
+#pragma omp parallel for
+            for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
+            { 
+                for(size_t bdd_idx=0; bdd_idx<nr_variables(bdd_nr); ++bdd_idx)
+                {
+                    const auto [first_bdd_node, last_bdd_node] = bdd_index_range(bdd_nr, bdd_idx);
+                    const size_t var = variable(bdd_nr, bdd_idx);
+
+                    for(size_t i=first_bdd_node; i<last_bdd_node; ++i)
+                    {
+                        bdd_branch_nodes_[i].low_cost += mms_to_distribute_[var][0];
+                        bdd_branch_nodes_[i].high_cost += mms_to_distribute_[var][1];
+                    }
+                }
+            }
+
+            const std::array<typename BDD_BRANCH_NODE::value_type,2> zeros = {0.0, 0.0};
+            std::fill(mms_to_distribute_.begin(), mms_to_distribute_.end(), zeros);
+        }
+
+    template<typename BDD_BRANCH_NODE>
         template<typename T>
         two_dim_variable_array<T> bdd_sequential_base<BDD_BRANCH_NODE>::transpose_to_var_order(const two_dim_variable_array<T>& m) const
         {
@@ -1135,4 +1164,5 @@ namespace LPMP {
             }
             s << "}\n";
         }
+
 }

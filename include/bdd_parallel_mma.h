@@ -21,6 +21,7 @@ namespace LPMP {
 
             double lower_bound();
             void iteration();
+            void distribute_delta();
             void backward_run(); 
             two_dim_variable_array<std::array<double,2>> min_marginals();
             void fix_variable(const size_t var, const bool value);
