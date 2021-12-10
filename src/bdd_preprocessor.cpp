@@ -83,6 +83,8 @@ namespace LPMP {
         // need not hold if some constraints are empty
         //assert(bdd_collection.nr_bdds() == input.constraints().size());
 
+        assert(bdd_collection.nr_bdds() == input.constraints().size());
+
         if(constraint_groups == true) // coalesce BDDs 
         {
             std::cout << "[bdd_preprocessor] form " << input.nr_constraint_groups() << " constraint groups.\n";
@@ -130,8 +132,8 @@ namespace LPMP {
             {
                 if(!bdd_collection.is_qbdd(bdd_nr))
                 {
-                    bdd_collection.make_qbdd(bdd_nr);
-                    bdds_to_remove.push_back(bdd_nr);
+                    bdd_collection.make_qbdd(bdd_nr, cur_bdd_collection);
+                    cur_bdds_to_remove.push_back(bdd_nr);
                 }
             }
 #pragma omp critical
