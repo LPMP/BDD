@@ -12,7 +12,7 @@
 
 namespace LPMP {
     
-
+    // convert linear inequalities to BDDs
     class bdd_converter {
         public:
             bdd_converter(BDD::bdd_mgr& bdd_mgr) : bdd_mgr_(bdd_mgr) 
@@ -23,7 +23,9 @@ namespace LPMP {
             template<typename LEFT_HAND_SIDE_ITERATOR>
                 BDD::node_ref convert_to_bdd(LEFT_HAND_SIDE_ITERATOR begin, LEFT_HAND_SIDE_ITERATOR end, const ILP_input::inequality_type ineq_type, const int right_hand_side);
 
-            BDD::node_ref convert_to_bdd(const std::vector<int> coefficients, const ILP_input::inequality_type ineq_type, const int right_hand_side);
+            BDD::node_ref convert_to_bdd(const std::vector<int>& coefficients, const ILP_input::inequality_type ineq_type, const int right_hand_side);
+
+            BDD::node_ref convert_nonlinear_to_bdd(const std::vector<size_t>& monomial_degrees, const std::vector<int>& coefficients, const ILP_input::inequality_type ineq_type, const int right_hand_side);
             
             const lineq_bdd& get_lineq_bdd() const { return bdd_; }
             lineq_bdd& get_lineq_bdd() { return bdd_; }

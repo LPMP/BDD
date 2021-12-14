@@ -232,6 +232,33 @@ void test_covering(bdd_converter& converter)
     test(bdd_1.nr_solutions() == 8-1);
 }
 
+void test_nonlinear(bdd_converter& converter)
+{
+    for(size_t nr_monomials=2; nr_monomials<5; ++nr_monomials)
+    {
+        for(size_t degree=2; degree<4; ++degree)
+        {
+            std::vector<size_t> monomial_degrees(nr_monomials,degree);
+            std::vector<int> coefficients(nr_monomials,1);
+            BDD::node_ref bdd = converter.convert_nonlinear_to_bdd(monomial_degrees, coefficients, ILP_input::inequality_type::equal, 1);
+            test(bdd.variables().size() == nr_monomials * degree);
+
+            std::vector<char> labeling(nr_monomials * degree, 0);
+            test(bdd.evaluate(labeling.begin(), labeling.end()) == false);
+            for(size_t i=0; i<nr_monomials; ++i)
+            {
+                std::fill(labeling.begin(), labeling.end(), 0);
+                for(size_t d=0; d<degree; ++d)
+                {
+                    test(bdd.evaluate(labeling.begin(), labeling.end()) == false);
+                    labeling[i*degree + d] = 1;
+                }
+                test(bdd.evaluate(labeling.begin(), labeling.end()) == true);
+            }
+        }
+    }
+}
+
 int main(int argc, char** argv)
 {
     BDD::bdd_mgr bdd_mgr;
@@ -244,4 +271,5 @@ int main(int argc, char** argv)
     test_subset_sum(converter);
     test_covering(converter);
     test_cardinality(converter);
+    test_nonlinear(converter);
 }
