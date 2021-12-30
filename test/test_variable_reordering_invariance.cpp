@@ -22,19 +22,19 @@ End)";
 int main(int argc, char** argv)
 {
     std::vector<std::string> args_input_order = {
-        "--lp_input_string", short_mrf_chain,
+        "--input_string", short_mrf_chain,
         "-s", "mma_vec",
         "-o", "input"
     };
-    bdd_solver solver_input_order(args_input_order);
+    bdd_solver solver_input_order((bdd_solver_options(args_input_order)));
     solver_input_order.solve();
 
     std::vector<std::string> args_bfs_order = {
-        "--lp_input_string", short_mrf_chain,
+        "--input_string", short_mrf_chain,
         "-s", "mma_vec",
         "-o", "bfs"
     };
-    bdd_solver solver_bfs_order(args_bfs_order);
+    bdd_solver solver_bfs_order((bdd_solver_options(args_bfs_order)));
     solver_bfs_order.solve();
 
     test(std::abs(solver_input_order.lower_bound() - solver_bfs_order.lower_bound()) <= 1e-6);

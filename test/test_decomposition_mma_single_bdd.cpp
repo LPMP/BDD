@@ -25,25 +25,25 @@ void test_ILP(const std::string ilp, const double expected_lb, const permutation
     const std::string ilp_string = ss.str();
 
     {
-    bdd_solver solver({
-            "--input_string", ilp_string,
-            "-s", "mma_vec",
-            "--max_iter", "20"
-            });
+        bdd_solver solver((bdd_solver_options(std::vector<std::string>{
+                    "--input_string", ilp_string,
+                    "-s", "mma_vec",
+                    "--max_iter", "20"
+                })));
 
         solver.solve();
         test(std::abs(solver.lower_bound() - expected_lb) <= 1e-8);
     }
 
     {
-        bdd_solver solver({
+        bdd_solver solver(bdd_solver_options({
                 "--input_string", ilp_string,
                 "-s", "decomposition_mma",
                 "--nr_threads", "2",
                 "--force_thread_nr",
                 "--max_iter", "20",
                 "--parallel_message_passing_weight", "0.5"
-                });
+                }));
 
         solver.solve();
         test(std::abs(solver.lower_bound() - expected_lb) <= 1e-8);

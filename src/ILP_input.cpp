@@ -5,6 +5,7 @@
 #include "minimum_degree_ordering.hxx"
 #include "time_measure_util.h"
 #include <iostream>
+#include <unordered_set>
 
 namespace LPMP { 
     bool ILP_input::constraint::monomials_cmp(const two_dim_variable_array<size_t>& monomials, const size_t idx1, const size_t idx2)
@@ -74,6 +75,22 @@ namespace LPMP {
         return true;
     }
 
+    bool ILP_input::constraint::distinct_variables() const
+    {
+        std::unordered_set<size_t> vars;
+        for(size_t monomial_idx=0; monomial_idx<monomials.size(); ++monomial_idx)
+        {
+            for(size_t i=0; i<monomials.size(monomial_idx); ++i)
+            {
+                const size_t var = monomials(monomial_idx, i);
+                if(vars.count(var) > 0)
+                    return false;
+                vars.insert(var);
+            }
+        }
+        return true;
+    }
+
     void ILP_input::normalize()
     {
 #pragma omp parallel for
@@ -106,6 +123,19 @@ namespace LPMP {
         return vars;
     }
 
+    size_t ILP_input::add_new_variable(const std::string& var)
+    {
+        assert(!var_exists(var));
+        const size_t var_index = var_name_to_index_.size();
+        var_name_to_index_.insert({var, var_index});
+        assert(var_index_to_name_.size() == var_index);
+        var_index_to_name_.push_back(var);
+        if(objective_.size() <= var_index) // variables with 0 objective coefficient need not appear in objective line!
+            objective_.resize(var_index+1,0.0);
+        var_permutation_.push_back(var_permutation_.size()-1);
+        return var_index;
+    }
+
     bool ILP_input::var_exists(const std::string& var) const
     {
         return var_name_to_index_.count(var) > 0;
@@ -123,19 +153,6 @@ namespace LPMP {
         return var_index_to_name_[index];
     }
 
-    size_t ILP_input::add_new_variable(const std::string& var)
-    {
-        assert(!var_exists(var));
-        const size_t var_index = var_name_to_index_.size();
-        var_name_to_index_.insert({var, var_index});
-        assert(var_index_to_name_.size() == var_index);
-        var_index_to_name_.push_back(var);
-        if(objective_.size() <= var_index) // variables with 0 objective coefficient need not appear in objective line!
-            objective_.resize(var_index+1,0.0);
-        var_permutation_.push_back(var_permutation_.size()-1);
-        return var_index;
-    }
-
     size_t ILP_input::get_or_create_variable_index(const std::string& var)
     {
         if(var_exists(var))
@@ -146,7 +163,8 @@ namespace LPMP {
 
     size_t ILP_input::nr_variables() const
     {
-        return var_name_to_index_.size();
+        assert(var_index_to_name_.size() == objective_.size());
+        return var_index_to_name_.size();
     }
 
     void ILP_input::add_to_objective(const double coefficient, const std::string& var)
@@ -207,6 +225,25 @@ namespace LPMP {
     {
         assert(constraints_.size() > 0);
         constraints_.back().ineq = ineq;
+    }
+
+    void ILP_input::add_constraint(const std::vector<int>& coefficients, const std::vector<size_t>& vars, const ILP_input::inequality_type ineq, const int right_hand_side)
+    {
+        assert(coefficients.size() == vars.size());
+        for(const size_t var : vars)
+            if(var >= nr_variables())
+                for(size_t i=nr_variables(); i<=var; ++i)
+                    add_new_variable("x_" + std::to_string(i));
+
+
+        constraint constr;
+        constr.coefficients = coefficients;
+        constr.monomials = two_dim_variable_array<size_t>(std::vector<size_t>(vars.size(), 1));
+        for(size_t i=0; i<vars.size(); ++i)
+            constr.monomials(i,0) = vars[i];
+        constr.ineq = ineq;
+        constr.right_hand_side = right_hand_side;
+        constraints_.push_back(constr);
     }
 
     void ILP_input::add_to_constraint(const int coefficient, const size_t var)

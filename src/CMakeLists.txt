@@ -80,3 +80,5 @@ target_link_libraries(ILP_instance_py PRIVATE LPMP-BDD ILP_input ILP_parser OPB_
 
 pybind11_add_module(bdd_mp_py bdd_mp_py.cpp)
 target_link_libraries(bdd_mp_py PRIVATE LPMP-BDD ILP_input bdd_storage bdd_preprocessor)
+
+add_subdirectory(specialized_solvers)

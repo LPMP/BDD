@@ -102,3 +102,4 @@ add_executable(test_bdd_infeasible_problem test_bdd_infeasible_problem.cpp)
 target_link_libraries(test_bdd_infeasible_problem LPMP-BDD)
 add_test(test_bdd_infeasible_problem test_bdd_infeasible_problem)
 
+add_subdirectory(specialized_solvers)

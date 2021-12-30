@@ -1,3 +1,7 @@
+#include <vector>
+#include <array>
+#include <functional>
+
 #pragma once
 
 namespace LPMP {

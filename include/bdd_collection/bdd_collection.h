@@ -72,6 +72,7 @@ namespace BDD {
                 void rebase(ITERATOR var_map_begin, ITERATOR var_map_end);
             template<typename VAR_MAP>
                 void rebase(const VAR_MAP& var_map);
+            std::vector<size_t> rebase_to_contiguous();
 
             bdd_collection_node root_node() const;
             bdd_collection_node first_node_postorder() const;
@@ -165,6 +166,8 @@ namespace BDD {
                 void rebase(const size_t bdd_nr, ITERATOR var_map_begin, ITERATOR var_map_end);
             template<typename VAR_MAP>
                 void rebase(const size_t bdd_nr, const VAR_MAP& var_map);
+            // returns old variables
+            std::vector<size_t> rebase_to_contiguous(const size_t bdd_nr);
 
             // reorder nodes such that variable indices are consecutive
             void reorder(const size_t bdd_nr);

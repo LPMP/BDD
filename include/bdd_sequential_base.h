@@ -238,7 +238,7 @@ namespace LPMP {
                     bdd_branch_nodes_.push_back(bdd);
                 }
 
-                assert(cur_bdd_variables.back().variable == bdd_col.min_max_variables(bdd_nr)[1]);
+                // assert(cur_bdd_variables.back().variable == bdd_col.min_max_variables(bdd_nr)[1]); // need not hold true, we accept differently ordered BDDs.
                 cur_bdd_variables.push_back({bdd_branch_nodes_.size(), std::numeric_limits<size_t>::max()}); // For extra delimiter at the end
                 bdd_variables_.push_back(cur_bdd_variables.begin(), cur_bdd_variables.end());
                 assert(bdd_variables_.size(bdd_nr) == bdd_col.variables(bdd_nr).size()+1);

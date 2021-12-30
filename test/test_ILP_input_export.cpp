@@ -75,13 +75,13 @@ void test_export(const std::string& problem, const double lb)
 {
     auto compute_lp = [&](const std::string& problem) {
         std::vector<std::string> solver_input = {
-            "--lp_input_string", problem,
+            "--input_string", problem,
             "-s", "mma_vec",
             "--max_iter", "1000",
             "--tolerance", "1e-10"
         };
 
-        bdd_solver solver(solver_input); 
+        bdd_solver solver((bdd_solver_options(solver_input))); 
         solver.solve();
 
         return solver.lower_bound();
@@ -89,13 +89,13 @@ void test_export(const std::string& problem, const double lb)
 
     auto compute_opb = [&](const std::string& problem) {
         std::vector<std::string> solver_input = {
-            "--opb_input_string", problem,
+            "--input_string", problem,
             "-s", "mma_vec",
             "--max_iter", "1000",
             "--tolerance", "1e-10"
         };
 
-        bdd_solver solver(solver_input); 
+        bdd_solver solver((bdd_solver_options(solver_input))); 
         solver.solve();
 
         return solver.lower_bound();

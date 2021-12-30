@@ -14,9 +14,9 @@ void test_problem(const std::string input_string, const double expected_lb, std:
 	args.push_back("-t");
 	args.push_back("1e-16");
 	args.push_back("-p");
-    args.push_back("--lp_input_string");
+    args.push_back("--input_string");
     args.push_back(input_string);
-    bdd_solver solver(args);
+    bdd_solver solver((bdd_solver_options(args)));
     const double initial_lb = solver.lower_bound();
     solver.solve();
     const double lb = solver.lower_bound();

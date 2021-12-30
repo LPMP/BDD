@@ -27,6 +27,8 @@ namespace LPMP {
             void normalize();
             bool is_normalized() const;
             bool is_linear() const;
+            // if constraint is non-linear check if all variables appear at most once
+            bool distinct_variables() const;
             static bool monomials_cmp(const two_dim_variable_array<size_t>& monomials, const size_t idx1, const size_t idx2);
         };
 
@@ -47,6 +49,8 @@ namespace LPMP {
         size_t begin_new_inequality();
         void set_inequality_identifier(const std::string& identifier);
         void set_inequality_type(const inequality_type ineq);
+        void add_constraint(const std::vector<int>& coefficients, const std::vector<size_t>& vars, const inequality_type ineq, const int right_hand_side);
+        void add_constraint(const constraint& c) { constraints_.push_back(c); }
         void add_to_constraint(const int coefficient, const size_t var);
         void add_to_constraint(const int coefficient, const std::string& var);
         // add monomial to constraint
@@ -112,9 +116,11 @@ namespace LPMP {
     template<typename ITERATOR>
         void ILP_input::add_to_constraint(const int coefficient, ITERATOR var_idx_begin, ITERATOR var_idx_end)
         {
+            assert(constraints_.size() > 0);
             assert(std::distance(var_idx_begin, var_idx_end) > 0);
             assert(*std::max_element(var_idx_begin, var_idx_end) < nr_variables());
             auto& constr = constraints_.back();
+            assert(constr.coefficients.size() == constr.monomials.size());
             constr.coefficients.push_back(coefficient);
             constr.monomials.push_back(var_idx_begin, var_idx_end);
         }

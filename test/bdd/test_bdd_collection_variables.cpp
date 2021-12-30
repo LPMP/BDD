@@ -22,6 +22,14 @@ int main(int argc, char** argv)
         const size_t not_all_false_nr = bdd_col.not_all_false_constraint(i);
         test(bdd_col.variables(not_all_false_nr) == var_indices);
         test(bdd_col.min_max_variables(not_all_false_nr) == std::array<size_t,2>{0,var_indices.back()});
+
+        std::reverse(var_indices.begin(), var_indices.end());
+
+        bdd_col.rebase(simplex_nr, var_indices.begin(), var_indices.end());
+        test(bdd_col.variables(simplex_nr) == var_indices);
+
+        bdd_col.rebase(not_all_false_nr, var_indices.begin(), var_indices.end());
+        test(bdd_col.variables(not_all_false_nr) == var_indices);
     }
 }
 

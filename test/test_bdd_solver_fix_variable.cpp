@@ -21,11 +21,11 @@ End)";
 void variable_fixation_test(const std::string& solver_name)
 {
     std::vector<std::string> args {
-        "--lp_input_string", short_mrf_chain,
+        "--input_string", short_mrf_chain,
         "-s", solver_name
     };
 
-    bdd_solver solver(args);
+    bdd_solver solver((bdd_solver_options(args)));
     solver.solve();
     // optimal solution is (1,1);
     test(std::abs(solver.lower_bound() - (1.0 + 0.0 + 0.0)) <= 1e-6);

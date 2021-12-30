@@ -1,0 +1,11 @@
+add_library(graph_matching_input graph_matching_input.cpp)
+target_link_libraries(graph_matching_input ILP_input LPMP-BDD)
+
+add_library(multi_graph_matching_input multi_graph_matching_input.cpp)
+target_link_libraries(multi_graph_matching_input graph_matching_input ILP_input LPMP-BDD)
+
+add_executable(graph_matching_solver graph_matching_solver.cpp)
+target_link_libraries(graph_matching_solver graph_matching_input LPMP-BDD)
+
+add_executable(multi_graph_matching_solver multi_graph_matching_solver.cpp)
+target_link_libraries(multi_graph_matching_solver multi_graph_matching_input LPMP-BDD)

@@ -14,6 +14,18 @@ namespace BDD {
         return std::distance(&bdd_instructions[0], &instr); 
     }
 
+    std::vector<size_t> bdd_collection::rebase_to_contiguous(const size_t bdd_nr)
+    {
+        const auto vars = variables(bdd_nr);
+        std::unordered_map<size_t,size_t> var_map;
+        var_map.reserve(vars.size());
+        for(size_t i=0; i<vars.size(); ++i)
+            var_map.insert({vars[i], i});
+        rebase(bdd_nr, var_map);
+        assert([&]() { std::vector<size_t> iota(vars.size()); std::iota(iota.begin(), iota.end(), 0); return variables(bdd_nr) == iota; }());
+        return vars;
+    }
+
     size_t bdd_collection::bdd_and(const size_t i, const size_t j)
     {
         return bdd_and(i, j, *this);
@@ -79,15 +91,19 @@ namespace BDD {
         // check if instructions are terminals
         // TODO: more efficient
         if(f.is_terminal() && g.is_terminal())
+        {
             if(f.is_topsink() && g.is_topsink())
                 return 1; //topsink position on stack
             else
                 return 0; //botsink position on stack
+        }
         else if(f.is_terminal() && !g.is_terminal())
+        {
             if(f.is_botsink())
                 return 0; //botsink position on stack
             else if(!f.is_terminal() && g.is_terminal() && g.is_botsink()) // TODO: is superfluous!
                     return 0; //botsink position on stack
+        }
 
         // compute lo and hi and see if they are present already. It not, add new branch instruction
         const size_t v = std::min(f.index, g.index);
@@ -704,9 +720,20 @@ namespace BDD {
     std::vector<size_t> bdd_collection::variables(const size_t bdd_nr) const
     {
         assert(bdd_nr < nr_bdds());
+
+        bool are_vars_ordered = true;
         std::vector<size_t> vars;
         for(size_t i=bdd_delimiters[bdd_nr]; i<bdd_delimiters[bdd_nr+1]-2; ++i)
         {
+            const auto& bdd = bdd_instructions[i];
+            assert(!bdd.is_terminal());
+            const auto& lo = bdd_instructions[bdd.lo];
+            if(!lo.is_terminal() && bdd.index > lo.index)
+                are_vars_ordered = false;
+            const auto& hi = bdd_instructions[bdd.hi];
+            if(!hi.is_terminal() && hi.index > bdd.index)
+                are_vars_ordered = false;
+
             if(vars.size() > 0 && bdd_instructions[i].index == vars.back())
                 continue;
             vars.push_back(bdd_instructions[i].index);
@@ -714,8 +741,83 @@ namespace BDD {
 
         assert(vars.size() > 0);
         std::sort(vars.begin(), vars.end());
-        vars.erase( std::unique(vars.begin(), vars.end() ), vars.end());
-        return vars;
+        vars.erase(std::unique(vars.begin(), vars.end()), vars.end());
+
+        if(are_vars_ordered)
+            return vars;
+
+        std::vector<std::array<size_t,2>> arcs;
+        arcs.reserve(2*nr_bdd_nodes(bdd_nr));
+        for(size_t i=bdd_delimiters[bdd_nr]; i<bdd_delimiters[bdd_nr+1]-2; ++i)
+        {
+            const auto& bdd = bdd_instructions[i];
+            assert(!bdd.is_terminal());
+            const auto& lo = bdd_instructions[bdd.lo];
+            if(!lo.is_terminal())
+                arcs.push_back({bdd.index, lo.index});
+            const auto& hi = bdd_instructions[bdd.hi];
+            if(!hi.is_terminal())
+                arcs.push_back({bdd.index, hi.index});
+        }
+
+        std::sort(arcs.begin(), arcs.end(), [](const auto a, const auto b) {
+                if(a[0] == b[0])
+                return a[1] < b[1];
+                else
+                return a[0] < b[0];
+                });
+        arcs.erase(std::unique(arcs.begin(), arcs.end()), arcs.end());
+
+        std::unordered_map<size_t,size_t> adjacency_list_delimiters;
+        adjacency_list_delimiters.reserve(vars.size());
+        size_t last_var = std::numeric_limits<size_t>::max();
+        for(size_t i=0; i<arcs.size(); ++i)
+        {
+            if(arcs[i][0] != last_var)
+            {
+                last_var = arcs[i][0];
+                assert(adjacency_list_delimiters.count(arcs[i][0]) == 0);
+                adjacency_list_delimiters.insert({arcs[i][0], i});
+            }
+        }
+        assert(adjacency_list_delimiters.size() < vars.size()); // at least the last node is not recorded here (no outgoing nodes).
+
+        // topological sort to get variable ordering
+        std::queue<size_t> q;
+        std::vector<size_t> vars_ordered;
+        vars_ordered.reserve(vars.size());
+        q.push(bdd_instructions[bdd_delimiters[bdd_nr]].index);
+        // TODO: can be converted into vector
+        std::unordered_map<size_t,size_t> incoming_counter;
+        incoming_counter.reserve(vars.size());
+        for(const auto a : arcs)
+            incoming_counter[a[1]]++;
+        assert(incoming_counter.size() == vars.size()-1);
+
+        while(!q.empty())
+        {
+            const size_t var = q.front();
+            q.pop();
+            vars_ordered.push_back(var);
+            auto adjacency_list_offset = adjacency_list_delimiters.find(var);
+            if(adjacency_list_offset != adjacency_list_delimiters.end())
+            {
+                for(size_t i=adjacency_list_offset->second; i<arcs.size(); ++i)
+                {
+                    assert(i < arcs.size());
+                    if(arcs[i][0] != var)
+                        break;
+                    const size_t next_var = arcs[i][1];
+                    assert(incoming_counter.count(next_var) > 0);
+                    assert(incoming_counter.find(next_var)->second > 0);
+                    if(incoming_counter[next_var]-- == 1)
+                        q.push(next_var);
+                }
+            }
+        }
+        
+        assert(vars_ordered.size() == vars.size());
+        return vars_ordered;
     }
 
     std::array<size_t,2> bdd_collection::min_max_variables(const size_t bdd_nr) const
@@ -794,6 +896,11 @@ namespace BDD {
         node_permutation.insert({bdd_delimiters[bdd_nr+1]-2, bdd_delimiters[bdd_nr+1]-2});
         node_permutation.insert({bdd_delimiters[bdd_nr+1]-1, bdd_delimiters[bdd_nr+1]-1});
 
+        std::unordered_map<size_t,size_t> var_order;
+        const auto vars = variables(bdd_nr);
+        for(size_t i=0; i<vars.size(); ++i)
+            var_order.insert({vars[i], i});
+
         // compute offsets
         for(size_t i=bdd_delimiters[bdd_nr]; i<bdd_delimiters[bdd_nr+1]-2; ++i)
             variable_counter[bdd_instructions[i].index]++;
@@ -802,9 +909,15 @@ namespace BDD {
         var_offsets.reserve(variable_counter.size());
         for(const auto [var, nr_nodes] : variable_counter)
             var_offsets.push_back({var, nr_nodes});
-        std::sort(var_offsets.begin(), var_offsets.end(), [](const auto& a, const auto b) { return a.var < b.var; });
+
+        std::sort(var_offsets.begin(), var_offsets.end(), 
+                [&](const auto& a, const auto b) {
+                assert(var_order.count(a.var) > 0);
+                assert(var_order.count(b.var) > 0);
+                return var_order[a.var] < var_order[b.var];
+                });
         {
-            size_t prev_nr_vars = var_offsets[0].offset;;
+            size_t prev_nr_vars = var_offsets[0].offset;
             var_offsets[0].offset = 0;
             for(size_t c=1; c<var_offsets.size(); ++c)
             {
@@ -822,6 +935,7 @@ namespace BDD {
         {
             const size_t var = bdd_instructions[i].index;
             const size_t new_pos = variable_counter[var];
+            assert(variable_counter.count(var) > 0);
             variable_counter.find(var)->second++;
             node_permutation.insert({i,new_pos + bdd_delimiters[bdd_nr]});
             new_instructions[new_pos] = bdd_instructions[i];
@@ -845,13 +959,22 @@ namespace BDD {
 
     bool bdd_collection::is_reordered(const size_t bdd_nr) const
     {
-        size_t prev_var = bdd_instructions[bdd_delimiters[bdd_nr]].index;
-        for(size_t i=bdd_delimiters[bdd_nr]+1; i<bdd_delimiters[bdd_nr+1]-2; ++i)
+        const auto vars = variables(bdd_nr);
+        std::unordered_map<size_t,size_t> next_var_map;
+        for(size_t i=0; i+1<vars.size(); ++i)
+            next_var_map.insert({vars[i], vars[i+1]});
+        next_var_map.insert({vars.back(), std::numeric_limits<size_t>::max()});
+
+        for(size_t i=bdd_delimiters[bdd_nr]; i+1<bdd_delimiters[bdd_nr+1]-2; ++i)
         {
             const size_t var = bdd_instructions[i].index;
-            if(var < prev_var)
+            const size_t next_var = bdd_instructions[i+1].index;
+            if(var == next_var)
+                continue;
+            else if(next_var_map[var] == next_var)
+                continue;
+            else
                 return false;
-            prev_var = var; 
         }
         return true;
     }
@@ -984,13 +1107,10 @@ namespace BDD {
 
     size_t bdd_collection::make_qbdd(const size_t bdd_nr, bdd_collection& o)
     {
+        // rebase on contiguous
+        const auto vars = rebase_to_contiguous(bdd_nr);
+
         assert(bdd_nr < nr_bdds());
-        std::vector<size_t> vars = variables(bdd_nr);
-        std::unordered_map<size_t,size_t> next_var_map;
-        next_var_map.reserve(vars.size());
-        for(size_t i=0; i+1<vars.size(); ++i)
-            next_var_map.insert({vars[i], vars[i+1]});
-        next_var_map.insert({vars.back(), std::numeric_limits<size_t>::max()});
 
         struct var_node_struct {
             size_t var;
@@ -1048,16 +1168,17 @@ namespace BDD {
             auto add_intermediate_nodes_impl = [&](const size_t var, const size_t bdd_index, auto& add_intermediate_nodes_ref) -> void
             {
                 assert(bdd_index != bdd_instruction::temp_botsink_index);
-                assert((var == std::numeric_limits<size_t>::max() && bdd_index == bdd_instruction::temp_topsink_index) || next_var_map.count(var) > 0);
+                assert((var == std::numeric_limits<size_t>::max() && bdd_index == bdd_instruction::temp_topsink_index) || var < vars.size());
                 if(bdd_index_map.count({var, bdd_index}) > 0)
                     return;
                 new_bdds.push_back({});
                 const size_t new_bdd_idx = new_bdds.size()-1;
                 new_bdds[new_bdd_idx].index = var;
-                assert(next_var_map.count(var) > 0);
-                add_intermediate_nodes_ref(next_var_map[var], bdd_index, add_intermediate_nodes_ref);
+                const size_t next_var = var+1 == vars.size() ? std::numeric_limits<size_t>::max() : var+1;
+                assert(var < vars.size());
+                add_intermediate_nodes_ref(next_var, bdd_index, add_intermediate_nodes_ref);
                 bdd_index_map.insert({{var, bdd_index}, new_bdd_idx});
-                auto bdd_index_it = bdd_index_map.find({next_var_map[var], bdd_index});
+                auto bdd_index_it = bdd_index_map.find({next_var, bdd_index});
                 assert(bdd_index_it != bdd_index_map.end());
                 new_bdds[new_bdd_idx].lo = bdd_index_it->second;
                 new_bdds[new_bdd_idx].hi = bdd_index_it->second; 
@@ -1070,8 +1191,8 @@ namespace BDD {
         for(size_t i=0; i<nr_bdd_nodes; ++i)
         {
             const size_t var = new_bdds[i].index;
-            assert(next_var_map.count(var) > 0);
-            const size_t next_var = next_var_map[var];
+            assert(var < vars.size());
+            const size_t next_var = var+1 == vars.size() ? std::numeric_limits<size_t>::max() : var+1;
             if(new_bdds[i].lo != bdd_instruction::temp_botsink_index)
             {
                 add_intermediate_nodes(next_var, new_bdds[i].lo);
@@ -1116,9 +1237,13 @@ namespace BDD {
                 bdd.hi += o.bdd_delimiters[o.bdd_delimiters.size()-2];
         }
 
-        o.reorder(o.bdd_delimiters.size()-2);
+        const size_t new_bdd_nr = o.bdd_delimiters.size()-2;
+        o.reorder(new_bdd_nr);
 
-        return o.bdd_delimiters.size() - 2;
+        // rebase back to original variables
+        o.rebase(new_bdd_nr, vars.begin(), vars.end());
+        rebase(bdd_nr, vars.begin(), vars.end());
+        return new_bdd_nr;
     }
 
     size_t bdd_collection::make_qbdd(const size_t bdd_nr)
@@ -1177,6 +1302,11 @@ namespace BDD {
         assert(&bdd_col == &o.bdd_col);
         const size_t new_bdd_nr = bdd_col.bdd_and(bdd_nr, o.bdd_nr);
         return bdd_collection_entry(new_bdd_nr, bdd_col);
+    }
+
+    std::vector<size_t> bdd_collection_entry::rebase_to_contiguous()
+    {
+        return bdd_col.rebase_to_contiguous(bdd_nr);
     }
 
     bdd_collection_node bdd_collection_entry::root_node() const

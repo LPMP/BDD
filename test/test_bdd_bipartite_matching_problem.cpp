@@ -8,9 +8,9 @@ using namespace LPMP;
 
 void test_problem(const std::string input_string, const double expected_lb, std::vector<std::string> args)
 {
-    args.push_back("--lp_input_string");
+    args.push_back("--input_string");
     args.push_back(input_string);
-    bdd_solver solver(args);
+    bdd_solver solver((bdd_solver_options(args)));
     const double initial_lb = solver.lower_bound();
     solver.solve();
     const double lb = solver.lower_bound();

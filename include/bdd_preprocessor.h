@@ -13,13 +13,15 @@ namespace LPMP {
     
     class bdd_preprocessor {
         public:
-            bdd_preprocessor(const ILP_input& ilp, const bool constraint_groups = true);
+            bdd_preprocessor(const ILP_input& ilp, const bool constraint_groups = true, const bool normalize = true);
 
             template<typename VARIABLE_ITERATOR>
                 void add_bdd(BDD::node_ref bdd, VARIABLE_ITERATOR var_begin, VARIABLE_ITERATOR var_end);
 
             void add_bdd(BDD::node_ref bdd);
             void add_bdd(BDD::bdd_collection_entry bdd);
+
+            size_t nr_bdds() const { return bdd_collection.nr_bdds(); }
 
             BDD::bdd_collection& get_bdd_collection() { return bdd_collection; }
 

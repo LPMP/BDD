@@ -1,0 +1,4 @@
+add_executable(test_multi_graph_matching_input test_multi_graph_matching_input.cpp)
+target_link_libraries(test_multi_graph_matching_input LPMP-BDD multi_graph_matching_input)
+add_test(test_multi_graph_matching_input test_multi_graph_matching_input)
+

@@ -9,11 +9,10 @@
 
 namespace LPMP {
 
-    bdd_preprocessor::bdd_preprocessor(const ILP_input& input, const bool constraint_groups)
+    bdd_preprocessor::bdd_preprocessor(const ILP_input& input, const bool constraint_groups, const bool normalize)
     {
         MEASURE_FUNCTION_EXECUTION_TIME;
         assert(bdd_collection.nr_bdds() == 0);
-        assert(input.is_normalized());
         // first transform linear inequalities into BDDs
         std::cout << "[bdd_preprocessor] convert " << input.constraints().size() << " linear inequalities.\n";
 
@@ -42,8 +41,9 @@ namespace LPMP {
 
             for(size_t c=first_constr; c<last_constr; ++c)
             {
-                const auto& constraint = input.constraints()[c];
-                coefficients.clear();
+                auto constraint = input.constraints()[c];
+                if(normalize && !constraint.is_normalized())
+                    constraint.normalize();
                 variables.clear();
                 if(constraint.is_linear())
                 {
@@ -53,9 +53,8 @@ namespace LPMP {
                         const size_t var = constraint.monomials(monomial_idx, 0);
                         const int coeff = constraint.coefficients[monomial_idx];
                         variables.push_back(var);
-                        coefficients.push_back(coeff);
                     }
-                    BDD::node_ref bdd = converter.convert_to_bdd(coefficients, constraint.ineq, constraint.right_hand_side);
+                    BDD::node_ref bdd = converter.convert_to_bdd(constraint.coefficients, constraint.ineq, constraint.right_hand_side);
                     if(bdd.is_topsink())
                     {
                         if(constraint_groups == true && input.nr_constraint_groups() > 0)
@@ -67,6 +66,30 @@ namespace LPMP {
                     const size_t bdd_nr = cur_bdd_collection.add_bdd(bdd);
                     cur_bdd_collection.reorder(bdd_nr);
                     assert(cur_bdd_collection.is_reordered(bdd_nr));
+                    cur_bdd_collection.rebase(bdd_nr, variables.begin(), variables.end());
+                }
+                else if(constraint.distinct_variables())
+                {
+                    std::vector<size_t> monomial_degrees;
+                    monomial_degrees.reserve(constraint.coefficients.size());
+                    for(size_t monomial_idx=0; monomial_idx<constraint.monomials.size(); ++monomial_idx)
+                        monomial_degrees.push_back(constraint.monomials.size(monomial_idx));
+                    BDD::node_ref bdd = converter.convert_nonlinear_to_bdd(monomial_degrees, constraint.coefficients, constraint.ineq, constraint.right_hand_side);
+
+                    assert(!bdd.is_terminal());
+                    const size_t bdd_nr = cur_bdd_collection.add_bdd(bdd);
+                    cur_bdd_collection.reorder(bdd_nr);
+                    assert(cur_bdd_collection.is_reordered(bdd_nr));
+
+                    for(size_t monomial_idx=0; monomial_idx<constraint.monomials.size(); ++monomial_idx)
+                    {
+                        for(size_t i=0; i<constraint.monomials.size(monomial_idx); ++i)
+                        {
+                            const size_t var = constraint.monomials(monomial_idx, i);
+                            variables.push_back(var);
+                        }
+                    }
+
                     cur_bdd_collection.rebase(bdd_nr, variables.begin(), variables.end());
                 }
                 else

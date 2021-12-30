@@ -62,25 +62,25 @@ int main(int argc, char** argv)
 
     {
         std::vector<std::string> solver_input = {
-            "--lp_input_string", test_instance,
+            "--input_string", test_instance,
             "-s", "mma_vec",
             "--max_iter", "1000"
         };
 
-        bdd_solver solver(solver_input); 
+        bdd_solver solver((bdd_solver_options(solver_input))); 
         solver.solve();
         test(std::abs(solver.lower_bound() - 1.5) <= 1e-4);
     }
 
     {
         std::vector<std::string> solver_input = {
-            "--lp_input_string", test_instance,
+            "--input_string", test_instance,
             "-s", "mma_vec",
             "--max_iter", "1000",
             "--tighten"
         };
 
-        bdd_solver solver(solver_input); 
+        bdd_solver solver((bdd_solver_options(solver_input))); 
         solver.solve();
         test(std::abs(solver.lower_bound() - 2.0) <= 1e-4);
     }
@@ -88,24 +88,24 @@ int main(int argc, char** argv)
 
     {
         std::vector<std::string> solver_input = {
-            "--lp_input_string", test_instance_coalesced,
+            "--input_string", test_instance_coalesced,
             "-s", "mma_vec",
             "--max_iter", "1000"
         };
 
-        bdd_solver solver(solver_input); 
+        bdd_solver solver((bdd_solver_options(solver_input))); 
         solver.solve();
         test(std::abs(solver.lower_bound() - 2.0) <= 1e-4);
     }
 
     {
         std::vector<std::string> solver_input = {
-            "--lp_input_string", test_instance_tightened,
+            "--input_string", test_instance_tightened,
             "-s", "mma_vec",
             "--max_iter", "1000"
         };
 
-        bdd_solver solver(solver_input); 
+        bdd_solver solver((bdd_solver_options(solver_input))); 
         solver.solve();
         test(solver.lower_bound() > 1.5); // does not solve exactly
     }
