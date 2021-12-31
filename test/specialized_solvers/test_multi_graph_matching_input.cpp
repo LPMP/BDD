@@ -38,5 +38,5 @@ int main(int argc, char** argv)
     opts.bdd_solver_impl_ = bdd_solver_options::bdd_solver_impl::parallel_mma;
     bdd_solver s(opts);
     s.solve();
-    test(std::abs(s.lower_bound() - 42.0) <= 1e-4);
+    test(std::abs(s.lower_bound() - (-42.0)) <= 1e-4);
 }

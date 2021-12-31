@@ -132,6 +132,5 @@ namespace LPMP {
                     gmInput.quadratic_assignments.push_back({{left_1, left_2}, {right_1, right_2}, cost});
                 }
         };
-
     }
 }

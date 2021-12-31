@@ -5,7 +5,9 @@
 #include <tsl/robin_set.h>
 #include <cmath>
 #include "time_measure_util.h"
+#ifdef _OPENMP
 #include <omp.h>
+#endif
 
 namespace LPMP {
 
