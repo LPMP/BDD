@@ -1,5 +1,7 @@
 project(LPMP-BDD LANGUAGES CXX)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 option(WITH_CUDA "Compile with CUDA support" OFF)
 
 if(WITH_CUDA)

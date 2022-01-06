@@ -4,6 +4,7 @@
 #include <tao/pegtl.hpp>
 #include "pegtl_parse_rules.h"
 #include <unordered_set>
+//#include "tsl/robin_map.h"
 #include "time_measure_util.h"
 
 namespace LPMP {
@@ -101,18 +102,30 @@ namespace LPMP {
     ILP_input construct_multi_graph_matching_ILP(const multi_graph_matching_instance& mgm_instance)
     {
         assert(is_full_mgm_instance(mgm_instance));
+    
+        const auto& max_gm = std::get<0>(*std::max_element(mgm_instance.begin(), mgm_instance.end(), 
+                [](const auto& a, const auto& b) {
+                const size_t a_graph_nr_0 = std::get<0>(a)[0];
+                const size_t a_graph_nr_1 = std::get<0>(a)[1];
+                const size_t b_graph_nr_0 = std::get<0>(b)[0];
+                const size_t b_graph_nr_1 = std::get<0>(b)[1];
+                return std::max(a_graph_nr_0, a_graph_nr_1) < std::max(b_graph_nr_0, b_graph_nr_1);
+                }));
+        const size_t nr_graphs = std::max(max_gm[0], max_gm[1]) + 1;
+        std::cout << "[construct multi-graph matching ILP]: #graphs = " << nr_graphs << "\n";
+
         std::unordered_map<std::array<size_t,2>, size_t> gm_var_offset;
         std::unordered_map<std::array<size_t,2>, std::unordered_map<std::array<size_t,2>,size_t>> linear_assignment_maps;
+        //std::unordered_map<std::array<size_t,2>, tsl::robin_map<std::array<size_t,2>,size_t>> linear_assignment_maps;
         ILP_input ilp;
 
         // add original graph matching constraints with offsets, record
         size_t var_offset = 0;
-        size_t nr_graphs = 0;
         for(const auto& [i,gm_instance] : mgm_instance)
         {
             assert(i[0] < i[1]);
+            std::cout << "processing " << i[0] << "->" << i[1] << "\n";
 
-            nr_graphs = std::max({nr_graphs, i[0]+1, i[1]+1});
             gm_var_offset.insert({{i[0],i[1]}, var_offset});
 
             auto [gm_ilp, linear_var_map, quadratic_var_map] = construct_graph_matching_ILP(gm_instance);
@@ -122,8 +135,8 @@ namespace LPMP {
                 const size_t new_var = ilp.add_new_variable("mgm_" + std::to_string(i[0]) + "_" + std::to_string(i[1]) + "_" + gm_ilp.get_var_name(var));
                 assert(new_var == var + var_offset);
                 ilp.add_to_objective(obj_coeff, var + var_offset);
-                std::cout << ilp.nr_variables() << "\n";
             }
+            std::cout << "added objective\n";
             for(size_t c=0; c<gm_ilp.nr_constraints(); ++c)
             {
                 auto constr = gm_ilp.constraints()[c];
@@ -132,14 +145,19 @@ namespace LPMP {
                         constr.monomials(c_idx, m_idx) += var_offset;
                 ilp.add_constraint(constr);
             }
+            std::cout << "added constraints\n";
 
             // record linear assignment variables with offsets
-            for(auto& [i,var] : linear_var_map)
+            for(auto& [i_tmp, var] : linear_var_map)
                 var += var_offset;
+            //for(auto it=linear_var_map.begin(); it!=linear_var_map.end(); ++it)
+            //    it.value() += var_offset;
             linear_assignment_maps.insert({i,linear_var_map});
+            std::cout << "recorded linear vars\n";
 
             var_offset += gm_ilp.nr_variables();
         }
+        std::cout << "[construct multi-graph matching ILP]: #graph matching constraints = " << ilp.constraints().size() << "\n";
 
         // add  cycle consistency constraints
         for(size_t i=0; i<nr_graphs; ++i)
@@ -235,6 +253,9 @@ namespace LPMP {
         tao::pegtl::file_input input(filename);
         if(!tao::pegtl::parse<Torresani_et_al_multi_graph_matching_parser::grammar, Torresani_et_al_multi_graph_matching_parser::action>(input, mgm_instance, cur_gm))
             throw std::runtime_error("[multi-graph matching parser] Could not read file" + filename);
+
+        for(const auto& [i, gm_instance] : mgm_instance)
+            std::cout << "[multi-graph matching parser] graph matching problem " << i[0] << " -> " << i[1] << " has " << gm_instance.linear_assignments.size() << " linear and " << gm_instance.quadratic_assignments.size() << " quadratic assignments\n";
 
         return construct_multi_graph_matching_ILP(mgm_instance);
     }

@@ -5,6 +5,7 @@
 #include <string>
 #include <limits>
 #include <unordered_map>
+//#include "tsl/robin_map.h"
 #include "hash_helper.hxx"
 #include "ILP_input.h"
 
@@ -23,6 +24,10 @@ namespace LPMP {
         std::unordered_map<std::array<size_t,2>, size_t>,
         std::unordered_map<std::array<size_t,4>, size_t>>
             construct_graph_matching_ILP(const graph_matching_instance& gm_instance);
+    //std::tuple<ILP_input,
+    //    tsl::robin_map<std::array<size_t,2>, size_t>,
+    //    tsl::robin_map<std::array<size_t,4>, size_t>>
+    //        construct_graph_matching_ILP(const graph_matching_instance& gm_instance);
 
     ILP_input parse_graph_matching_file(const std::string& filename);
     ILP_input parse_graph_matching_string(const std::string& filename);

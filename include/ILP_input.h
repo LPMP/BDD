@@ -49,8 +49,8 @@ namespace LPMP {
         size_t begin_new_inequality();
         void set_inequality_identifier(const std::string& identifier);
         void set_inequality_type(const inequality_type ineq);
-        void add_constraint(const std::vector<int>& coefficients, const std::vector<size_t>& vars, const inequality_type ineq, const int right_hand_side);
-        void add_constraint(const constraint& c) { constraints_.push_back(c); }
+        size_t add_constraint(const std::vector<int>& coefficients, const std::vector<size_t>& vars, const inequality_type ineq, const int right_hand_side);
+        size_t add_constraint(const constraint& c) { constraints_.push_back(c); return constraints_.size()-1; }
         void add_to_constraint(const int coefficient, const size_t var);
         void add_to_constraint(const int coefficient, const std::string& var);
         // add monomial to constraint
@@ -88,7 +88,7 @@ namespace LPMP {
         permutation get_variable_permutation() const { return var_permutation_; }
 
         template<typename ITERATOR>
-            void add_constraint_group(ITERATOR begin, ITERATOR end);
+            size_t add_constraint_group(ITERATOR begin, ITERATOR end);
 
         size_t nr_constraint_groups() const;
         std::tuple<const size_t*, const size_t*> constraint_group(const size_t i) const;
@@ -180,10 +180,12 @@ namespace LPMP {
         }
 
         template<typename ITERATOR>
-            void ILP_input::add_constraint_group(ITERATOR begin, ITERATOR end)
+            size_t ILP_input::add_constraint_group(ITERATOR begin, ITERATOR end)
             {
                 if constexpr(std::is_integral_v<std::remove_reference_t<decltype(*begin)>>)
                 {
+                    for(auto it=begin; it!=end; ++it)
+                        assert(*it < constraints().size());
                     coalesce_sets_.push_back(begin, end); 
                 }
                 else if constexpr(std::is_convertible_v<std::remove_reference_t<decltype(*begin)>, std::string>)
@@ -194,12 +196,15 @@ namespace LPMP {
                         auto ineq_nr_it = inequality_identifier_to_index_.find(*it);
                         if(ineq_nr_it == inequality_identifier_to_index_.end())
                             throw std::runtime_error("inequality identifier " + *it + " not present");
+                        assert(ineq_nr_it->second < constraints().size());
                         lineq_nrs.push_back(ineq_nr_it->second);
                     }
                     coalesce_sets_.push_back(lineq_nrs.begin(), lineq_nrs.end()); 
                 } else {
                     static_assert("add_constraint_group must be called with iterators referencing integral types or std::string");
                 }
+
+                return coalesce_sets_.size()-1;
             }
 
     template<typename STREAM>

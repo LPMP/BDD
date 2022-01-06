@@ -20,6 +20,16 @@ namespace LPMP {
 
         std::vector<size_t> ineq_to_bdd_nr(input.constraints().size(), std::numeric_limits<size_t>::max());
 
+        if(constraint_groups == true)
+        {
+            for(size_t c=0; c<input.nr_constraint_groups(); ++c)
+            {
+                auto [c_begin, c_end] = input.constraint_group(c);
+                for(auto it=c_begin; it!=c_end; ++it)
+                    assert(*it < input.nr_constraints());
+            }
+        }
+
 #ifdef _OPENMP
         const size_t nr_threads = omp_get_max_threads();
 #else

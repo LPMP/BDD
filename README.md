@@ -30,7 +30,7 @@ where ${solver} is one of
 
 In order to compute a primal solution from the dual one obtained through a min-marginal averaging scheme, we provide two heuristics:
 
-* `--incremental_primal_rounding`: Perturb costs iteratively to drive variables towards integrality. Parameters for this scheme are
+* `--incremental_primal`: Perturb costs iteratively to drive variables towards integrality. Parameters for this scheme are
 ** `--incremental_initial_perturbation ${p}`: The initial perturbation magnitude.
 ** `--incremental_perturbation_growth_rate ${x}`: The growth rate for increasing the perturbation after each round.
 * `--diving_primal`: Traverse depth-first the solution space search tree for finding a feasible solution. Variables are propagated using the BDDs of the decomposition. The variable order for the search tree is determined by the min-marginals computed by the min-marginal averaging scheme. Parameters are

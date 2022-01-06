@@ -121,4 +121,4 @@ int main(int argc, char** arv)
     test_export(matching_3x3, -6.0);
     test_export(covering_problem_3x3, 1.5);
     test_export(covering_problem_2_3x3, 1.5);
-} 
+}

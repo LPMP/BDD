@@ -5,6 +5,7 @@
 #include "minimum_degree_ordering.hxx"
 #include "time_measure_util.h"
 #include <iostream>
+#include <limits>
 #include <unordered_set>
 
 namespace LPMP { 
@@ -227,14 +228,21 @@ namespace LPMP {
         constraints_.back().ineq = ineq;
     }
 
-    void ILP_input::add_constraint(const std::vector<int>& coefficients, const std::vector<size_t>& vars, const ILP_input::inequality_type ineq, const int right_hand_side)
+    size_t ILP_input::add_constraint(const std::vector<int>& coefficients, const std::vector<size_t>& vars, const ILP_input::inequality_type ineq, const int right_hand_side)
     {
         assert(coefficients.size() == vars.size());
         for(const size_t var : vars)
+        {
             if(var >= nr_variables())
+            {
                 for(size_t i=nr_variables(); i<=var; ++i)
-                    add_new_variable("x_" + std::to_string(i));
-
+                {
+                    const std::string var_name = "x_" + std::to_string(i);
+                    assert(!var_exists(var_name));
+                    add_new_variable(var_name);
+                }
+            }
+        }
 
         constraint constr;
         constr.coefficients = coefficients;
@@ -244,6 +252,8 @@ namespace LPMP {
         constr.ineq = ineq;
         constr.right_hand_side = right_hand_side;
         constraints_.push_back(constr);
+
+        return constraints_.size()-1;
     }
 
     void ILP_input::add_to_constraint(const int coefficient, const size_t var)
@@ -273,6 +283,7 @@ namespace LPMP {
 
     bool ILP_input::preprocess()
     {
+        std::vector<size_t> constraint_map;
         for (auto it = constraints_.begin(); it != constraints_.end(); it++)
         {
             bool remove = false;
@@ -335,9 +346,26 @@ namespace LPMP {
             // remove redundant constraint
             if (remove)
             {
+                if(constraint_map.size() == 0)
+                {
+                    constraint_map.resize(constraints().size());
+                    std::iota(constraint_map.begin(), constraint_map.end(), 0);
+                }
+
+                constraint_map[constraints_.size()-1] = std::distance(constraints_.begin(), it);
+                constraint_map[ std::distance(constraints_.begin(), it) ] = std::numeric_limits<size_t>::max();
+
                 *it = constraints_.back();
                 constraints_.pop_back();
                 it--;    
+            }
+
+            // remap constraint group indices
+            if(constraint_map.size() > 0)
+            {
+                for(size_t cg=0; cg<coalesce_sets_.size(); ++cg)
+                    for(size_t idx=0; idx<coalesce_sets_.size(cg); ++idx)
+                        coalesce_sets_(cg,idx) = constraint_map[coalesce_sets_(cg,idx)];
             }
         }
 
