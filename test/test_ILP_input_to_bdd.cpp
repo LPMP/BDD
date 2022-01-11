@@ -1,6 +1,7 @@
 #include "test.h"
 #include "convert_pb_to_bdd.h"
 #include "lineq_bdd.h"
+#include "hard_ineqs.h"
 #include <vector>
 
 using namespace LPMP;
@@ -203,6 +204,60 @@ void test_miplib(bdd_converter & converter)
     std::cout << "nr coefficients = " << weights.size() << "\n";
     auto bdd = converter.convert_to_bdd(weights.begin(), weights.end(), ILP_input::inequality_type::smaller_equal, 0);
     std::cout << "# bdd nodes = " << bdd.nodes_postorder().size() << "\n";
+
+    {
+        std::cout << "app2_2 ct_0 nr coefficients = " << app2_2_weights_ct_0.size() << "\n";
+        auto [bdd,multiplicities] = converter.coefficient_decomposition_convert_to_bdd(app2_2_weights_ct_0, app2_2_ineq_type_ct_0, app2_2_rhs_ct_0);
+        std::cout << "app2_2 ct_0 # bdd nodes = " << bdd.nodes_postorder().size() << "\n";
+    }
+
+    {
+        std::cout << "app2_2 ct_1 nr coefficients = " << app2_2_weights_ct_1.size() << "\n";
+        auto [bdd,multiplicities] = converter.coefficient_decomposition_convert_to_bdd(app2_2_weights_ct_1, app2_2_ineq_type_ct_1, app2_2_rhs_ct_1);
+        std::cout << "app2_2 ct_0 # bdd nodes = " << bdd.nodes_postorder().size() << "\n";
+    }
+
+}
+
+void test_coefficient_decomposition_conversion(bdd_converter& converter)
+{
+    // trivial examples
+    for(size_t n=1; n<=15; ++n)
+    {
+        std::vector<int> weights(n, 1);
+        auto [bdd, decomposed_coefficient_map] = converter.coefficient_decomposition_convert_to_bdd(weights, ILP_input::inequality_type::equal, 1);
+        test(bdd == converter.bdd_mgr().simplex(n));
+        test(decomposed_coefficient_map.size() == n);
+        for(size_t i=0; i<n; ++i)
+            test(decomposed_coefficient_map.size(i) == 1);
+    }
+
+    // check if gcd works
+    for(size_t n=1; n<=15; ++n)
+    {
+        std::vector<int> weights(n, -3);
+        auto [bdd, decomposed_coefficient_map] = converter.coefficient_decomposition_convert_to_bdd(weights, ILP_input::inequality_type::equal, -3);
+        test(bdd == converter.bdd_mgr().simplex(n));
+        test(decomposed_coefficient_map.size() == n);
+        for(size_t i=0; i<n; ++i)
+            test(decomposed_coefficient_map.size(i) == 1);
+    }
+
+    // check decomposed coefficients correctly given back.
+    {
+        std::vector<int> weights = {16+1, 8+2, 4};
+        auto [bdd, decomposed_coefficient_map] = converter.coefficient_decomposition_convert_to_bdd(weights, ILP_input::inequality_type::smaller_equal, 17);
+        test(decomposed_coefficient_map.size() == 3);
+        test(decomposed_coefficient_map.size(0) == 2);
+        test(decomposed_coefficient_map.size(1) == 2);
+        test(decomposed_coefficient_map.size(2) == 1);
+
+        test(decomposed_coefficient_map(0,0) == 0);
+        test(decomposed_coefficient_map(0,1) == 4);
+        test(decomposed_coefficient_map(1,0) == 1);
+        test(decomposed_coefficient_map(1,1) == 3);
+        test(decomposed_coefficient_map(2,0) == 2);
+    }
 }
 
 void test_subset_sum(bdd_converter & converter)
@@ -268,6 +323,7 @@ int main(int argc, char** argv)
     test_mrf(converter);
     test_simplex(converter);
     test_miplib(converter);
+    test_coefficient_decomposition_conversion(converter);
     test_subset_sum(converter);
     test_covering(converter);
     test_cardinality(converter);

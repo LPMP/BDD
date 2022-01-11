@@ -4,6 +4,7 @@
 #include "bdd_node_cache.h"
 #include "bdd_var.h"
 #include "bdd_memo_cache.h"
+#include <type_traits>
 #include <vector>
 #include <unordered_map>
 #include <tuple>
@@ -70,6 +71,7 @@ namespace BDD {
             // utility functions for computing common functions
             template<typename BDD_ITERATOR>
                 node_ref all_false(BDD_ITERATOR begin, BDD_ITERATOR end);
+            node_ref simplex(const size_t n);
             template<typename BDD_ITERATOR>
                 node_ref simplex(BDD_ITERATOR begin, BDD_ITERATOR end);
             template<typename BDD_ITERATOR>

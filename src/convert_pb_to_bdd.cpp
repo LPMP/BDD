@@ -1,4 +1,5 @@
 #include "convert_pb_to_bdd.h"
+#include "two_dimensional_variable_array.hxx"
 #include <iostream> // TODO: remove
 
 namespace LPMP {
@@ -69,4 +70,72 @@ namespace LPMP {
         return node_map.find(bdd_linear)->second;
     }
 
+    std::tuple<BDD::node_ref, two_dim_variable_array<size_t>> bdd_converter::coefficient_decomposition_convert_to_bdd(const std::vector<int>& coefficients, const ILP_input::inequality_type ineq_type, const int right_hand_side)
+    {
+        assert(coefficients.size() > 0);
+        // first divide by largest common denominator
+        int gcd = std::abs(right_hand_side);
+        if(gcd == 0)
+            gcd = std::abs(coefficients[0]);
+        for(const int& c : coefficients)
+        {
+            assert(c != 0);
+            gcd = std::gcd(gcd, std::abs(c));
+        }
+
+        if(gcd != 1)
+        {
+            std::vector<int> new_coeffs(coefficients);
+            for(auto& c : new_coeffs)
+                c /= gcd;
+            return coefficient_decomposition_convert_to_bdd(new_coeffs, ineq_type, right_hand_side/gcd);
+        }
+
+        std::vector<int> decomposed_coefficients;
+        std::vector<size_t> decomposition_multiplicities;
+        struct perm_item { size_t pos; size_t orig_coeff_idx; };
+        std::vector<perm_item> permutation(decomposed_coefficients.size());
+
+        for(const int& coeff : coefficients)
+        {
+            assert(coeff != 0);
+            std::vector<int> c;
+            for(size_t i=1; i<=std::abs(coeff); i*=2)
+            {
+                if((i & std::abs(coeff)) != 0)
+                    c.push_back(i);
+            }
+            assert(c.size() > 0);
+            if(coeff < 0)
+                for(int& x : c)
+                    x *= -1;
+            decomposed_coefficients.insert(decomposed_coefficients.end(), c.begin(), c.end());
+            decomposition_multiplicities.push_back(c.size());
+            for(size_t i=0; i<c.size(); ++i)
+                permutation.push_back({permutation.size(), decomposition_multiplicities.size()-1});
+        }
+        assert(permutation.size() == decomposed_coefficients.size());
+
+        std::sort(permutation.begin(), permutation.end(), [&](const perm_item i, const perm_item j) {
+                return decomposed_coefficients[i.pos] < decomposed_coefficients[j.pos];
+                });
+        std::vector<int> sorted_decomposed_coefficients(decomposed_coefficients.size());
+        for(size_t i=0; i<permutation.size(); ++i)
+            sorted_decomposed_coefficients[i] = decomposed_coefficients[permutation[i].pos];
+        assert(std::is_sorted(sorted_decomposed_coefficients.begin(), sorted_decomposed_coefficients.end()));
+
+        two_dim_variable_array<size_t> variable_to_coefficient_map(decomposition_multiplicities);
+        std::fill(decomposition_multiplicities.begin(), decomposition_multiplicities.end(), 0);
+        for(size_t i=0; i<permutation.size(); ++i)
+        {
+            const size_t orig_coeff_idx = permutation[i].orig_coeff_idx;
+            variable_to_coefficient_map(orig_coeff_idx, decomposition_multiplicities[orig_coeff_idx]++) = i;
+        }
+        for(size_t i=0; i<variable_to_coefficient_map.size(); ++i)
+            assert(variable_to_coefficient_map.size(i) == decomposition_multiplicities[i]);
+
+        BDD::node_ref bdd = convert_to_bdd(sorted_decomposed_coefficients, ineq_type, right_hand_side);
+
+        return {bdd, variable_to_coefficient_map};
+    }
 }

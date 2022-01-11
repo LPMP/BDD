@@ -349,5 +349,14 @@ namespace BDD {
         return bdd_map.find(bdd_col.offset(*bdd_begin))->second;
     }
 
+    node_ref bdd_mgr::simplex(const size_t n)
+    {
+        std::vector<BDD::node_ref> var_bdds;
+        var_bdds.reserve(n);
+        for(size_t i=0; i<n; ++i)
+            var_bdds.push_back(projection(i));
+        return simplex(var_bdds.begin(), var_bdds.end());
+    }
+
 
 }

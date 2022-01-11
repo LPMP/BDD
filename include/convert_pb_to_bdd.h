@@ -5,6 +5,7 @@
 #include "hash_helper.hxx"
 #include <tsl/robin_map.h>
 #include "lineq_bdd.h"
+#include "two_dimensional_variable_array.hxx"
 #include <stack>
 #include <numeric>
 #include <tuple>
@@ -26,6 +27,11 @@ namespace LPMP {
             BDD::node_ref convert_to_bdd(const std::vector<int>& coefficients, const ILP_input::inequality_type ineq_type, const int right_hand_side);
 
             BDD::node_ref convert_nonlinear_to_bdd(const std::vector<size_t>& monomial_degrees, const std::vector<int>& coefficients, const ILP_input::inequality_type ineq_type, const int right_hand_side);
+
+            // use the method from "A new look at BDDs for pseudo-Boolean constraints" from Abio et al for linear inequality conversion.
+            // The BDD encodes the inequality for the decomposed coefficients.
+            // The vector of integers gives the number of copies of each variable.
+            std::tuple<BDD::node_ref, two_dim_variable_array<size_t>> coefficient_decomposition_convert_to_bdd(const std::vector<int>& coefficients, const ILP_input::inequality_type ineq_type, const int right_hand_side);
             
             const lineq_bdd& get_lineq_bdd() const { return bdd_; }
             lineq_bdd& get_lineq_bdd() { return bdd_; }
