@@ -4,7 +4,6 @@
 #include <tao/pegtl.hpp>
 #include "pegtl_parse_rules.h"
 #include <unordered_set>
-//#include "tsl/robin_map.h"
 #include "time_measure_util.h"
 
 namespace LPMP {
@@ -116,7 +115,6 @@ namespace LPMP {
 
         std::unordered_map<std::array<size_t,2>, size_t> gm_var_offset;
         std::unordered_map<std::array<size_t,2>, std::unordered_map<std::array<size_t,2>,size_t>> linear_assignment_maps;
-        //std::unordered_map<std::array<size_t,2>, tsl::robin_map<std::array<size_t,2>,size_t>> linear_assignment_maps;
         ILP_input ilp;
 
         // add original graph matching constraints with offsets, record
@@ -177,9 +175,12 @@ namespace LPMP {
                         {
                             const size_t x_i = ij_transposed ? a_ij[1] : a_ij[0];
                             const size_t x_j = ij_transposed ? a_ij[0] : a_ij[1];
-                            if(ij_rows.size() <= x_i)
-                                ij_rows.resize(x_i+1);
-                            ij_rows[x_i].push_back({ij_ILP_var, x_j});
+                            if(x_i != graph_matching_instance::no_assignment && x_j != graph_matching_instance::no_assignment)
+                            {
+                                if(ij_rows.size() <= x_i)
+                                    ij_rows.resize(x_i+1);
+                                ij_rows[x_i].push_back({ij_ILP_var, x_j});
+                            }
                         }
 
                         const bool jk_transposed = j>k;
@@ -189,9 +190,12 @@ namespace LPMP {
                         {
                             const size_t x_j = jk_transposed ? a_jk[1] : a_jk[0];
                             const size_t x_k = jk_transposed ? a_jk[0] : a_jk[1];
+                            if(x_j != graph_matching_instance::no_assignment && x_k != graph_matching_instance::no_assignment)
+                            {
                             if(jk_cols.size() <= x_k)
                                 jk_cols.resize(x_k+1);
                             jk_cols[x_k].push_back({jk_ILP_var, x_j});
+                            }
                         }
 
                         const auto& ik_linear_vars = linear_assignment_maps.find({i,k})->second;
@@ -201,38 +205,41 @@ namespace LPMP {
                         {
                             const size_t x_i = a_ik[0];
                             const size_t x_k = a_ik[1];
-                            bool monomials_found = false;
-                            size_t ij_counter = 0;
-                            size_t jk_counter = 0;
-                            for(; x_i < ij_rows.size() && x_k < jk_cols.size() && ij_counter<ij_rows[x_i].size() && jk_counter<jk_cols[x_k].size();)
+                            if(x_i != graph_matching_instance::no_assignment && x_k != graph_matching_instance::no_assignment)
                             {
-                                if(ij_rows[x_i][ij_counter].x_j == jk_cols[x_k][jk_counter].x_j)
+                                bool monomials_found = false;
+                                size_t ij_counter = 0;
+                                size_t jk_counter = 0;
+                                for(; x_i < ij_rows.size() && x_k < jk_cols.size() && ij_counter<ij_rows[x_i].size() && jk_counter<jk_cols[x_k].size();)
                                 {
-                                    std::array<size_t,2> monomial = {ij_rows[x_i][ij_counter].ILP_var, jk_cols[x_k][jk_counter].ILP_var};
-                                    if(monomials_found == false)
+                                    if(ij_rows[x_i][ij_counter].x_j == jk_cols[x_k][jk_counter].x_j)
                                     {
-                                        monomials_found = true;
-                                        ilp.begin_new_inequality();
+                                        std::array<size_t,2> monomial = {ij_rows[x_i][ij_counter].ILP_var, jk_cols[x_k][jk_counter].ILP_var};
+                                        if(monomials_found == false)
+                                        {
+                                            monomials_found = true;
+                                            ilp.begin_new_inequality();
+                                        }
+                                        ilp.add_to_constraint(1, monomial.begin(), monomial.end());
+                                        ++ij_counter;
+                                        ++jk_counter;
                                     }
-                                    ilp.add_to_constraint(1, monomial.begin(), monomial.end());
-                                    ++ij_counter;
-                                    ++jk_counter;
+                                    else if(ij_rows[x_i][ij_counter].x_j < jk_cols[x_k][jk_counter].x_j)
+                                    {
+                                        ++ij_counter;
+                                    }
+                                    else
+                                    {
+                                        assert(ij_rows[x_i][ij_counter].x_j > jk_cols[x_k][jk_counter].x_j);
+                                        ++jk_counter;
+                                    }
                                 }
-                                else if(ij_rows[x_i][ij_counter].x_j < jk_cols[x_k][jk_counter].x_j)
+                                if(monomials_found)
                                 {
-                                    ++ij_counter;
+                                    ilp.add_to_constraint(-1, ILP_var);
+                                    ilp.set_inequality_type(ILP_input::inequality_type::smaller_equal);
+                                    ilp.set_right_hand_side(0);
                                 }
-                                else
-                                {
-                                    assert(ij_rows[x_i][ij_counter].x_j > jk_cols[x_k][jk_counter].x_j);
-                                    ++jk_counter;
-                                }
-                            }
-                            if(monomials_found)
-                            {
-                                ilp.add_to_constraint(-1, ILP_var);
-                                ilp.set_inequality_type(ILP_input::inequality_type::smaller_equal);
-                                ilp.set_right_hand_side(0);
                             }
                         }
                     }

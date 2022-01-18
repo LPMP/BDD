@@ -38,13 +38,13 @@ namespace parsing {
 
     struct mand_whitespace : tao::pegtl::plus< tao::pegtl::blank > {}; 
     struct opt_whitespace : tao::pegtl::star< tao::pegtl::blank > {}; 
-struct opt_invisible : tao::pegtl::star< tao::pegtl::sor< tao::pegtl::blank, tao::pegtl::eol > > {};
-struct mand_invisible : tao::pegtl::plus< tao::pegtl::sor< tao::pegtl::blank, tao::pegtl::eol > > {};
-struct positive_integer : tao::pegtl::plus< tao::pegtl::digit > {};
+    struct opt_invisible : tao::pegtl::star< tao::pegtl::sor< tao::pegtl::blank, tao::pegtl::eol > > {};
+    struct mand_invisible : tao::pegtl::plus< tao::pegtl::sor< tao::pegtl::blank, tao::pegtl::eol > > {};
+    struct positive_integer : tao::pegtl::plus< tao::pegtl::digit > {};
 
-struct real_number : double_::grammar {};
+    struct real_number : double_::grammar {};
 
-struct vector : tao::pegtl::seq< tao::pegtl::string<'['>, opt_whitespace, real_number, tao::pegtl::star< tao::pegtl::seq< mand_whitespace, real_number > >, opt_whitespace, tao::pegtl::string<']'> > {};
+    struct vector : tao::pegtl::seq< tao::pegtl::string<'['>, opt_whitespace, real_number, tao::pegtl::star< tao::pegtl::seq< mand_whitespace, real_number > >, opt_whitespace, tao::pegtl::string<']'> > {};
 
 } // namespace parsing
 

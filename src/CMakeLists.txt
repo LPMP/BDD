@@ -76,7 +76,7 @@ add_executable(convert_opb_to_lp convert_opb_to_lp.cpp)
 target_link_libraries(convert_opb_to_lp OPB_parser LPMP-BDD) 
 
 pybind11_add_module(ILP_instance_py ILP_instance_py.cpp)
-target_link_libraries(ILP_instance_py PRIVATE LPMP-BDD ILP_input ILP_parser OPB_parser)
+target_link_libraries(ILP_instance_py PRIVATE LPMP-BDD)
 
 pybind11_add_module(bdd_mp_py bdd_mp_py.cpp)
 target_link_libraries(bdd_mp_py PRIVATE LPMP-BDD ILP_input bdd_storage bdd_preprocessor)

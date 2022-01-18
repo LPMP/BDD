@@ -175,6 +175,7 @@ namespace BDD {
 
             std::vector<size_t> variables(const size_t bdd_nr) const;
             std::array<size_t,2> min_max_variables(const size_t bdd_nr) const;
+            size_t root_variable(const size_t bdd_nr) const;
             // remove bdds with indices occurring in iterator
             template<typename ITERATOR>
                 void remove(ITERATOR bdd_it_begin, ITERATOR bdd_it_end);
@@ -215,6 +216,7 @@ namespace BDD {
             // utility functions
             size_t simplex_constraint(const size_t n);
             size_t not_all_false_constraint(const size_t n);
+            size_t all_equal_constraint(const size_t n);
 
             // merge BDDs from another bdd_collection
             void append(const bdd_collection& o);
@@ -277,6 +279,13 @@ namespace BDD {
     template<typename ITERATOR>
         void bdd_collection::rebase(const size_t bdd_nr, ITERATOR var_map_begin, ITERATOR var_map_end)
         {
+            auto unique_values = [](auto begin, auto end) -> bool {
+                std::vector<typename std::iterator_traits<decltype(begin)>::value_type> v(begin, end);
+                std::sort(v.begin(), v.end());
+                return std::unique(v.begin(), v.end()) == v.end();
+            };
+            assert(unique_values(var_map_begin, var_map_end));
+
             assert(bdd_nr < nr_bdds());
             for(size_t i=bdd_delimiters[bdd_nr]; i<bdd_delimiters[bdd_nr+1]; ++i)
             {
@@ -787,6 +796,57 @@ namespace BDD {
         bdd_instructions.push_back(bdd_instruction::topsink());
 
         bdd_delimiters.push_back(bdd_instructions.size());
+        return nr_bdds()-1;
+    }
+
+    inline size_t bdd_collection::all_equal_constraint(const size_t n)
+    {
+        // if n == 1 then this is just topsink
+        assert(n > 1);
+
+        const size_t nr_bdd_nodes = 2*n - 1;
+        const size_t terminal_0_index = bdd_instructions.size() + nr_bdd_nodes;
+        const size_t terminal_1_index = bdd_instructions.size() + nr_bdd_nodes + 1;
+        const size_t offset = bdd_instructions.size();
+
+        bdd_instruction first_instr;
+        first_instr.index = 0;
+        first_instr.lo = offset + 1;
+        first_instr.hi = offset + 2;
+        bdd_instructions.push_back(first_instr);
+
+        for(size_t i=1; i+1<n; ++i)
+        {
+            bdd_instruction lo_instr;
+            lo_instr.index = i;
+            lo_instr.lo = offset + i*2 + 1;
+            lo_instr.hi = terminal_0_index;
+            bdd_instructions.push_back(lo_instr);
+
+            bdd_instruction hi_instr;
+            hi_instr.index = i;
+            hi_instr.lo = terminal_0_index;
+            hi_instr.hi = offset + i*2 + 2;
+            bdd_instructions.push_back(hi_instr);
+        }
+
+        bdd_instruction last_lo_instr;
+        last_lo_instr.index = n-1;
+        last_lo_instr.lo = terminal_1_index;
+        last_lo_instr.hi = terminal_0_index;
+        bdd_instructions.push_back(last_lo_instr);
+
+        bdd_instruction last_hi_instr;
+        last_hi_instr.index = n-1;
+        last_hi_instr.lo = terminal_0_index;
+        last_hi_instr.hi = terminal_1_index;
+        bdd_instructions.push_back(last_hi_instr);
+        
+        bdd_instructions.push_back(bdd_instruction::botsink());
+        bdd_instructions.push_back(bdd_instruction::topsink());
+
+        bdd_delimiters.push_back(bdd_instructions.size());
+        assert(is_bdd(nr_bdds()-1));
         return nr_bdds()-1;
     }
 }

@@ -73,11 +73,11 @@ namespace LPMP {
 
         struct new_inequality : tao::pegtl::seq<opt_whitespace, tao::pegtl::not_at<tao::pegtl::sor<tao::pegtl::string<'E','n','d'>,tao::pegtl::string<'B','o','u','n','d','s'>,tao::pegtl::string<'B','i','n','a','r','i','e','s'>,tao::pegtl::string<'C','o','a','l','e','s','c','e'>>>, tao::pegtl::opt<new_inequality_identifier>, opt_whitespace> {};
 
-        struct inequality_coefficient : tao::pegtl::seq<tao::pegtl::digit, tao::pegtl::star<tao::pegtl::digit>> {};
+        struct inequality_coefficient : real_number {};
         struct inequality_variable : variable_name {};
         struct inequality_monomial : tao::pegtl::seq<inequality_variable, tao::pegtl::star<opt_whitespace, tao::pegtl::sor<tao::pegtl::string<'*'>, mand_whitespace>, opt_whitespace, inequality_variable>> {};
         struct inequality_term : tao::pegtl::seq< tao::pegtl::opt<sign, opt_whitespace>, tao::pegtl::opt<inequality_coefficient, opt_whitespace, tao::pegtl::opt<tao::pegtl::string<'*'>>, opt_whitespace>, inequality_monomial> {};
-        struct right_hand_side : tao::pegtl::seq< tao::pegtl::opt<sign>, tao::pegtl::digit, tao::pegtl::star<tao::pegtl::digit> > {};
+        struct right_hand_side : real_number {};
 
         struct inequality_line : tao::pegtl::seq< new_inequality, 
             tao::pegtl::star<opt_whitespace, inequality_term, opt_whitespace, tao::pegtl::opt<tao::pegtl::eol>>,

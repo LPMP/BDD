@@ -198,7 +198,7 @@ namespace LPMP {
                 assert(bdd_col.is_qbdd(bdd_nr));
                 assert(bdd_col.is_reordered(bdd_nr));
                 std::vector<bdd_variable> cur_bdd_variables;
-                cur_bdd_variables.push_back({bdd_branch_nodes_.size(), bdd_col.min_max_variables(bdd_nr)[0]}); // TODO: use min_variable
+                cur_bdd_variables.push_back({bdd_branch_nodes_.size(), bdd_col.root_variable(bdd_nr)});
                 for(auto bdd_it=bdd_col.cbegin(bdd_nr); bdd_it!=bdd_col.cend(bdd_nr); ++bdd_it)
                 {
                     const BDD::bdd_instruction& stored_bdd = *bdd_it;

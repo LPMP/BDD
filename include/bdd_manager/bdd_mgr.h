@@ -86,6 +86,9 @@ namespace BDD {
             template<typename BDD_ITERATOR>
                 node_ref cardinality(BDD_ITERATOR begin, BDD_ITERATOR end, const size_t b);
 
+            template<typename BDD_ITERATOR>
+                node_ref all_equal(BDD_ITERATOR begin, BDD_ITERATOR end);
+
             node_ref transform_to_base();
             node_ref add_bdd(bdd_collection& bdd_col, const size_t bdd_nr);
 
@@ -407,5 +410,18 @@ namespace BDD {
                 combine.push_back(and_rec(left[b_left], right[b-b_left]));
 
             return or_rec(combine.begin(), combine.end()); 
+        }
+
+    template<typename BDD_ITERATOR>
+        node_ref bdd_mgr::all_equal(BDD_ITERATOR begin, BDD_ITERATOR end)
+        {
+            assert(std::distance(begin, end) > 0);
+            if(std::distance(begin, end) == 1)
+                return topsink();
+
+            node_ref f = all_false(begin, end);
+            node_ref p = and_rec(begin, end);
+
+            return or_rec(f, p);
         }
 }

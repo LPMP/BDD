@@ -1,10 +1,13 @@
 #include "bdd_preprocessor.h"
 #include <iostream>
 #include <chrono>
+#include <limits>
 #include <tsl/robin_map.h>
 #include <tsl/robin_set.h>
 #include <cmath>
+#include <atomic>
 #include "time_measure_util.h"
+#include "two_dimensional_variable_array.hxx"
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -37,6 +40,9 @@ namespace LPMP {
 #endif
         std::cout << "[bdd preprocessor] #threads = " << nr_threads << "\n";
 
+        // for variable copies when using coefficient decomposition transformation to BDDs
+        std::atomic<size_t> extra_var_counter = input.nr_variables();
+
 #pragma omp parallel for ordered schedule(static) num_threads(nr_threads)
         for(size_t tid=0; tid<nr_threads; ++tid)
         {
@@ -66,19 +72,83 @@ namespace LPMP {
                         const int coeff = constraint.coefficients[monomial_idx];
                         variables.push_back(var);
                     }
-                    BDD::node_ref bdd = converter.convert_to_bdd(constraint.coefficients, constraint.ineq, constraint.right_hand_side);
-                    if(bdd.is_topsink())
+
+                    const size_t nr_vars = constraint.coefficients.size();
+                    const size_t max_coeff = *std::max_element(constraint.coefficients.begin(), constraint.coefficients.end());
+                    if(nr_vars <= 16 || max_coeff <= 100) // convert to BDD directly
+                    {
+                        BDD::node_ref bdd = converter.convert_to_bdd(constraint.coefficients, constraint.ineq, constraint.right_hand_side);
+                        if(bdd.is_topsink())
+                        {
+                            if(constraint_groups == true && input.nr_constraint_groups() > 0)
+                                throw std::runtime_error("constraint groups and empty constraints not both supported");
+                            continue;
+                        }
+                        else if(bdd.is_botsink())
+                            throw std::runtime_error("problem is infeasible");
+                        const size_t bdd_nr = cur_bdd_collection.add_bdd(bdd);
+                        cur_bdd_collection.reorder(bdd_nr);
+                        assert(cur_bdd_collection.is_reordered(bdd_nr));
+                        cur_bdd_collection.rebase(bdd_nr, variables.begin(), variables.end());
+                    }
+                    else // use coefficient decomposition
                     {
                         if(constraint_groups == true && input.nr_constraint_groups() > 0)
-                            throw std::runtime_error("constraint groups and empty constraints not both supported");
-                        continue;
+                            throw std::runtime_error("constraint groups and coefficient decomposition conversion not both supported");
+
+                        std::cout << "[bdd preprocessor] convert inequality " << c << " through coefficient decomposition\n";
+                        auto [bdd, var_split] = converter.coefficient_decomposition_convert_to_bdd(constraint.coefficients, constraint.ineq, constraint.right_hand_side);
+
+                        if(bdd.is_topsink())
+                        {
+                            if(constraint_groups == true && input.nr_constraint_groups() > 0)
+                                throw std::runtime_error("constraint groups and empty constraints not both supported");
+                            continue;
+                        }
+                        else if(bdd.is_botsink())
+                            throw std::runtime_error("problem is infeasible");
+
+                        const size_t bdd_nr = cur_bdd_collection.add_bdd(bdd);
+                        cur_bdd_collection.reorder(bdd_nr);
+                        assert(cur_bdd_collection.is_reordered(bdd_nr));
+
+                        std::vector<size_t> copy_variables(var_split.data().size(), std::numeric_limits<size_t>::max());
+
+                        assert(variables.size() == var_split.size());
+                        for(size_t i=0; i<variables.size(); ++i)
+                        {
+                            std::vector<size_t> var_copy_equal_vars;
+                            assert(var_split.size(i) > 0);
+                            if(var_split.size(i) == 1)
+                            {
+                                assert(var_split(i,0) < copy_variables.size());
+                                copy_variables[var_split(i,0)] = variables[i];
+                            }
+                            else
+                            {
+                                // additionally add BDDs for equality between decomposed variables
+                                var_copy_equal_vars.push_back(variables[i]);
+                                for(size_t j=0; j<var_split.size(i); ++j)
+                                {
+                                    const size_t new_var = extra_var_counter++;
+                                    assert(var_split(i,j) < copy_variables.size());
+                                    assert(copy_variables[var_split(i,j)] == std::numeric_limits<size_t>::max());
+                                    copy_variables[var_split(i,j)] = new_var;
+                                    var_copy_equal_vars.push_back(new_var);
+                                }
+                                std::sort(var_copy_equal_vars.begin(), var_copy_equal_vars.end());
+                                assert(std::unique(var_copy_equal_vars.begin(), var_copy_equal_vars.end()) == var_copy_equal_vars.end());
+                                const size_t equal_bdd_nr = cur_bdd_collection.all_equal_constraint(var_copy_equal_vars.size());
+                                cur_bdd_collection.rebase(equal_bdd_nr, var_copy_equal_vars.begin(), var_copy_equal_vars.end());
+                                assert(cur_bdd_collection.is_reordered(equal_bdd_nr));
+                            }
+                        }
+
+                        for(size_t i=0; i<copy_variables.size(); ++i)
+                            assert(copy_variables[i] != std::numeric_limits<size_t>::max());
+
+                        cur_bdd_collection.rebase(bdd_nr, copy_variables.begin(), copy_variables.end());
                     }
-                    else if(bdd.is_botsink())
-                        throw std::runtime_error("problem is infeasible");
-                    const size_t bdd_nr = cur_bdd_collection.add_bdd(bdd);
-                    cur_bdd_collection.reorder(bdd_nr);
-                    assert(cur_bdd_collection.is_reordered(bdd_nr));
-                    cur_bdd_collection.rebase(bdd_nr, variables.begin(), variables.end());
                 }
                 else if(constraint.distinct_variables())
                 {
@@ -114,11 +184,6 @@ namespace LPMP {
                 bdd_collection.append(cur_bdd_collection);
             }
         }
-
-        // need not hold if some constraints are empty
-        //assert(bdd_collection.nr_bdds() == input.constraints().size());
-
-        assert(bdd_collection.nr_bdds() == input.constraints().size());
 
         if(constraint_groups == true) // coalesce BDDs 
         {

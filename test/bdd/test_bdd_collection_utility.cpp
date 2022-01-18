@@ -13,6 +13,7 @@ int main(int argc, char** argv)
     for(size_t i=0; i<10; ++i)
         bdd_mgr_vars.push_back(bdd_mgr.projection(i));
 
+    // simplex
     for(size_t i=2; i<10; ++i)
     {
         BDD::node_ref bdd_mgr_simplex = bdd_mgr.simplex(bdd_mgr_vars.begin(), bdd_mgr_vars.begin()+i);
@@ -21,11 +22,21 @@ int main(int argc, char** argv)
         test(bdd_col_exported == bdd_mgr_simplex);
     }
 
+    // not all false
     for(size_t i=2; i<10; ++i)
     {
         BDD::node_ref bdd_mgr_not_all_false = bdd_mgr.negate(bdd_mgr.all_false(bdd_mgr_vars.begin(), bdd_mgr_vars.begin()+i));
         const size_t bdd_nr = bdd_col.not_all_false_constraint(i);
         BDD::node_ref bdd_col_exported = bdd_col.export_bdd(bdd_mgr, bdd_nr);
         test(bdd_col_exported == bdd_mgr_not_all_false);
+    }
+
+    // all equal
+    for(size_t i=2; i<10; ++i)
+    {
+        BDD::node_ref bdd_mgr_all_equal = bdd_mgr.all_equal(bdd_mgr_vars.begin(), bdd_mgr_vars.begin()+i);
+        const size_t bdd_nr = bdd_col.all_equal_constraint(i);
+        BDD::node_ref bdd_col_exported = bdd_col.export_bdd(bdd_mgr, bdd_nr);
+        test(bdd_col_exported == bdd_mgr_all_equal);
     }
 }

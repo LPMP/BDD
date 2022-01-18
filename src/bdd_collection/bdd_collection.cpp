@@ -792,7 +792,7 @@ namespace BDD {
         incoming_counter.reserve(vars.size());
         for(const auto a : arcs)
             incoming_counter[a[1]]++;
-        assert(incoming_counter.size() == vars.size()-1);
+        assert(incoming_counter.size() == vars.size()-1); // otherwise some instruction is not reachable or there is more than one root node
 
         while(!q.empty())
         {
@@ -823,6 +823,7 @@ namespace BDD {
     std::array<size_t,2> bdd_collection::min_max_variables(const size_t bdd_nr) const
     {
         assert(bdd_nr < nr_bdds());
+        assert(nr_bdd_nodes(bdd_nr) > 0);
         size_t min_var = std::numeric_limits<size_t>::max();
         size_t max_var = 0;
         for(size_t i=bdd_delimiters[bdd_nr]; i<bdd_delimiters[bdd_nr+1]-2; ++i)
@@ -832,6 +833,14 @@ namespace BDD {
         }
 
         return {min_var, max_var}; 
+    }
+
+    size_t bdd_collection::root_variable(const size_t bdd_nr) const
+    {
+        assert(bdd_nr < nr_bdds());
+        assert(nr_bdd_nodes(bdd_nr) > 0);
+        assert(!bdd_instructions[bdd_delimiters[bdd_nr]].is_terminal());
+        return bdd_instructions[bdd_delimiters[bdd_nr]].index;
     }
 
     void bdd_collection::remove(const size_t bdd_nr)

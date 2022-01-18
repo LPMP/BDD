@@ -4,8 +4,6 @@
 #include "ILP_input.h"
 #include "specialized_solvers/graph_matching_torresani_et_al_grammar.h"
 #include "time_measure_util.h"
-#include "tsl/robin_map.h"
-#include "tsl/robin_set.h"
 #include <limits>
 #include <stdexcept>
 #include <unordered_map>
@@ -14,7 +12,6 @@
 namespace LPMP {
 
     std::tuple<ILP_input, std::unordered_map<std::array<size_t,2>, size_t>, std::unordered_map<std::array<size_t,4>, size_t>> construct_graph_matching_ILP(const graph_matching_instance& gm_instance)
-    //std::tuple<ILP_input, tsl::robin_map<std::array<size_t,2>, size_t>, tsl::robin_map<std::array<size_t,4>, size_t>> construct_graph_matching_ILP(const graph_matching_instance& gm_instance)
     {
         ILP_input ilp;
 
@@ -56,7 +53,6 @@ namespace LPMP {
 
         size_t var_offset = 0;
         std::unordered_map<std::array<size_t,2>,size_t> assignment_map;
-        //tsl::robin_map<std::array<size_t,2>,size_t> assignment_map;
         for(size_t l_idx=0; l_idx<left_assignments.size(); ++l_idx)
         {
             const auto& l = left_assignments[l_idx];
@@ -101,9 +97,6 @@ namespace LPMP {
         struct right_pairwise_var { size_t q_ILP_var; size_t i0; size_t i1; };
         std::unordered_map<std::array<size_t,2>, std::vector<right_pairwise_var>> right_quadratic_simplex;
         std::unordered_map<std::array<size_t,4>, size_t> quadratic_variables;
-        //tsl::robin_set<std::array<size_t,2>> left_quadratic_simplex;
-        //tsl::robin_set<std::array<size_t,2>> right_quadratic_simplex;
-        //tsl::robin_map<std::array<size_t,4>, size_t> quadratic_variables;
 
         auto get_quadratic_var = [&](std::array<size_t,2> i, std::array<size_t,2> j) {
             assert(i[0] != i[1] || i[0] == no_assignment);
