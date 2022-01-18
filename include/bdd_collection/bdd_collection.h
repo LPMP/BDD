@@ -169,10 +169,11 @@ namespace BDD {
             // returns old variables
             std::vector<size_t> rebase_to_contiguous(const size_t bdd_nr);
 
-            // reorder nodes such that variable indices are consecutive
+            // reorder nodes such that variable indices are grouped together
             void reorder(const size_t bdd_nr);
             bool is_reordered(const size_t bdd_nr) const;
 
+            bool variables_sorted(const size_t bdd_nr) const;
             std::vector<size_t> variables(const size_t bdd_nr) const;
             std::array<size_t,2> min_max_variables(const size_t bdd_nr) const;
             size_t root_variable(const size_t bdd_nr) const;

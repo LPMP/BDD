@@ -717,6 +717,24 @@ namespace BDD {
         assert(is_bdd(bdd_nr));
     }
 
+    bool bdd_collection::variables_sorted(const size_t bdd_nr) const
+    {
+        assert(bdd_nr < nr_bdds());
+
+        for(size_t i=bdd_delimiters[bdd_nr]; i<bdd_delimiters[bdd_nr+1]-2; ++i)
+        {
+            const auto& bdd = bdd_instructions[i];
+            assert(!bdd.is_terminal());
+            const auto& lo = bdd_instructions[bdd.lo];
+            if(!lo.is_terminal() && bdd.index > lo.index)
+                return false;
+            const auto& hi = bdd_instructions[bdd.hi];
+            if(!hi.is_terminal() && hi.index > bdd.index)
+                return false;
+        }
+        return true;
+    }
+
     std::vector<size_t> bdd_collection::variables(const size_t bdd_nr) const
     {
         assert(bdd_nr < nr_bdds());

@@ -1186,6 +1186,9 @@ namespace LPMP {
         template<typename BDD_NR_ITERATOR>
         std::vector<size_t> bdd_mma_base<BDD_BRANCH_NODE>::add_bdds(BDD::bdd_collection& bdd_col, BDD_NR_ITERATOR bdd_nrs_begin, BDD_NR_ITERATOR bdd_nrs_end)
         {
+            for(auto bdd_it=bdd_nrs_begin; bdd_it!=bdd_nrs_end; ++bdd_it)
+                assert(bdd_col.variables_sorted(*bdd_it));
+
             message_passing_state_ = message_passing_state::none;
 
             std::vector<BDD_BRANCH_NODE> new_bdd_branch_nodes_;
