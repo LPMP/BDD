@@ -99,7 +99,6 @@ namespace LPMP {
                 const size_t var = cur_instr.index;
                 if(prev_var != var)
                 {
-                    assert(prev_var < var || cur_instr.is_terminal());
                     prev_var = var;
                     if(bdd_node_idx <= bdd_col.nr_bdd_nodes(bdd_idx) - 2)
                         cur_hop_dist++; // both terminal nodes can have same hop distance.
@@ -454,15 +453,14 @@ namespace LPMP {
     void bdd_cuda_base<REAL>::update_costs(COST_ITERATOR cost_lo_begin, COST_ITERATOR cost_lo_end, COST_ITERATOR cost_hi_begin, COST_ITERATOR cost_hi_end)
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME;
-        assert(std::distance(cost_lo_begin, cost_lo_end) == nr_variables() || std::distance(cost_lo_begin, cost_lo_end) == 0);
-        assert(std::distance(cost_hi_begin, cost_hi_end) == nr_variables() || std::distance(cost_hi_begin, cost_hi_end) == 0);
 
-        auto populate_costs = [&](auto cost_begin, auto cost_end, auto base_cost_begin, auto base_cost_end) {
+        auto populate_costs = [&](auto cost_begin, auto cost_end, auto bdd_cost_begin, auto bdd_cost_end) {
             thrust::device_vector<REAL> primal_costs(cost_begin, cost_end);
-
+            
+            const int num_elements = primal_costs.size();
             set_vars_costs_func<REAL, REAL> func({thrust::raw_pointer_cast(num_bdds_per_var_.data()), thrust::raw_pointer_cast(primal_costs.data())});
-            auto first = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.begin(), base_cost_begin));
-            auto last = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.end(), base_cost_end));
+            auto first = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.begin(), bdd_cost_begin));
+            auto last = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.begin() + num_elements, bdd_cost_end));
 
             thrust::for_each(first, last, func);
         };
