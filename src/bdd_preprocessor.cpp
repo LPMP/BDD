@@ -19,7 +19,9 @@ namespace LPMP {
         MEASURE_FUNCTION_EXECUTION_TIME;
         assert(bdd_collection.nr_bdds() == 0);
         // first transform linear inequalities into BDDs
-        std::cout << "[bdd_preprocessor] convert " << input.constraints().size() << " linear inequalities.\n";
+        std::cout << "[bdd preprocessor] convert " << input.constraints().size() << " linear inequalities.\n";
+        if(normalize)
+            std::cout << "[bdd preprocessor] normalize constraints\n";
 
         std::vector<size_t> ineq_to_bdd_nr(input.constraints().size(), std::numeric_limits<size_t>::max());
 
@@ -93,6 +95,8 @@ namespace LPMP {
                     }
                     else // use coefficient decomposition
                     {
+                        if(normalize)
+                            throw std::runtime_error("coefficient decomposition BDDs may not be sorted w.r.t. variable indices"); 
                         if(constraint_groups == true && input.nr_constraint_groups() > 0)
                             throw std::runtime_error("constraint groups and coefficient decomposition conversion not both supported");
 
@@ -152,6 +156,8 @@ namespace LPMP {
                 }
                 else if(constraint.distinct_variables())
                 {
+                    if(normalize)
+                        throw std::runtime_error("nonlinear BDDs may not be sorted w.r.t. variable indices"); 
                     std::vector<size_t> monomial_degrees;
                     monomial_degrees.reserve(constraint.coefficients.size());
                     for(size_t monomial_idx=0; monomial_idx<constraint.monomials.size(); ++monomial_idx)

@@ -10,6 +10,7 @@ int main(int argc, char** argv)
 {
     bdd_collection bdd_col;
 
+    // test variables of various constraints encoded as BDDs
     for(size_t i=2; i<29; ++i)
     {
         std::vector<size_t> var_indices(i);
@@ -30,6 +31,20 @@ int main(int argc, char** argv)
 
         bdd_col.rebase(not_all_false_nr, var_indices.begin(), var_indices.end());
         test(bdd_col.variables(not_all_false_nr) == var_indices);
+    }
+
+    // test for sorting
+    {
+        std::vector<size_t> var_indices(42);
+        std::iota(var_indices.begin(), var_indices.end(), 0);
+        const size_t bdd_nr = bdd_col.simplex_constraint(var_indices.size());
+        test(bdd_col.variables_sorted(bdd_nr));
+        test(bdd_col.variables(bdd_nr) == var_indices);
+
+        std::reverse(var_indices.begin(), var_indices.end());;
+        bdd_col.rebase(bdd_nr, var_indices.begin(), var_indices.end());
+        test(!bdd_col.variables_sorted(bdd_nr));
+        test(bdd_col.variables(bdd_nr) == var_indices);
     }
 }
 

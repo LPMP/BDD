@@ -729,7 +729,7 @@ namespace BDD {
             if(!lo.is_terminal() && bdd.index > lo.index)
                 return false;
             const auto& hi = bdd_instructions[bdd.hi];
-            if(!hi.is_terminal() && hi.index > bdd.index)
+            if(!hi.is_terminal() && bdd.index > hi.index)
                 return false;
         }
         return true;
@@ -749,7 +749,7 @@ namespace BDD {
             if(!lo.is_terminal() && bdd.index > lo.index)
                 are_vars_ordered = false;
             const auto& hi = bdd_instructions[bdd.hi];
-            if(!hi.is_terminal() && hi.index > bdd.index)
+            if(!hi.is_terminal() && bdd.index > hi.index)
                 are_vars_ordered = false;
 
             if(vars.size() > 0 && bdd_instructions[i].index == vars.back())

@@ -52,7 +52,7 @@ int main(int argc, char** argv)
 {
     {
         const ILP_input ilp = ILP_parser::parse_string(infeasible_problem);
-        bdd_preprocessor pre(ilp);
+        bdd_preprocessor pre(ilp, false, true);
         bdd_mma_vec<float> solver(pre.get_bdd_collection(), ilp.objective().begin(), ilp.objective().end());
         for(size_t i=0; i<10; ++i)
             solver.iteration();
@@ -62,7 +62,7 @@ int main(int argc, char** argv)
 
     {
         const ILP_input ilp = ILP_parser::parse_string(infeasible_problem_2);
-        bdd_preprocessor pre(ilp);
+        bdd_preprocessor pre(ilp, false, true);
         bdd_mma_vec<float> solver(pre.get_bdd_collection(), ilp.objective().begin(), ilp.objective().end());
         for(size_t i=0; i<10; ++i)
             solver.iteration();

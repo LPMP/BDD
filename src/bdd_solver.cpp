@@ -116,7 +116,15 @@ namespace LPMP {
 
         costs = options.ilp.objective();
 
-        bdd_preprocessor bdd_pre(options.ilp, options.constraint_groups);
+        const bool normalize_constraints = [&]() {
+            if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::sequential_mma)
+                return true;
+            if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::decomposition_mma)
+                return true;
+            return false;
+        }();
+
+        bdd_preprocessor bdd_pre(options.ilp, options.constraint_groups, normalize_constraints);
 
         std::cout << std::setprecision(10);
 

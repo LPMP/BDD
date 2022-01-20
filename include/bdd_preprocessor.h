@@ -13,7 +13,7 @@ namespace LPMP {
     
     class bdd_preprocessor {
         public:
-            bdd_preprocessor(const ILP_input& ilp, const bool constraint_groups = true, const bool normalize = true);
+            bdd_preprocessor(const ILP_input& ilp, const bool constraint_groups = true, const bool normalize = false);
 
             template<typename VARIABLE_ITERATOR>
                 void add_bdd(BDD::node_ref bdd, VARIABLE_ITERATOR var_begin, VARIABLE_ITERATOR var_end);
