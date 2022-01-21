@@ -44,13 +44,13 @@ namespace LPMP {
                                
                                */
         struct term_identifier : tao::pegtl::seq<
-                                 tao::pegtl::plus<tao::pegtl::sor<tao::pegtl::alnum, tao::pegtl::string<'_'>, tao::pegtl::string<'-'>, tao::pegtl::string<'/'>, tao::pegtl::string<'('>, tao::pegtl::string<')'>, tao::pegtl::string<'{'>, tao::pegtl::string<'}'>, tao::pegtl::string<','>, tao::pegtl::string<';'>, tao::pegtl::string<'@'>, tao::pegtl::string<'['>, tao::pegtl::string<']'>, tao::pegtl::string<'#'> > >
+                                 tao::pegtl::plus<tao::pegtl::sor<tao::pegtl::alnum, tao::pegtl::string<'_'>, tao::pegtl::string<'-'>, tao::pegtl::string<'/'>, tao::pegtl::string<'('>, tao::pegtl::string<')'>, tao::pegtl::string<'{'>, tao::pegtl::string<'}'>, tao::pegtl::string<','>, tao::pegtl::string<';'>, tao::pegtl::string<'@'>, tao::pegtl::string<'['>, tao::pegtl::string<']'>, tao::pegtl::string<'#'>, tao::pegtl::string<'.'> > >
                                  > {};
 
 
         struct variable_name : tao::pegtl::seq< 
                                tao::pegtl::alpha, 
-                               tao::pegtl::star< tao::pegtl::sor< tao::pegtl::alnum, tao::pegtl::string<'_'>, tao::pegtl::string<'-'>, tao::pegtl::string<'/'>, tao::pegtl::string<'('>, tao::pegtl::string<')'>, tao::pegtl::string<'{'>, tao::pegtl::string<'}'>, tao::pegtl::string<','>, tao::pegtl::string<'#'>, tao::pegtl::string<';'>, tao::pegtl::string<'['>, tao::pegtl::string<']'> > > 
+                               tao::pegtl::star< tao::pegtl::sor< tao::pegtl::alnum, tao::pegtl::string<'_'>, tao::pegtl::string<'-'>, tao::pegtl::string<'/'>, tao::pegtl::string<'('>, tao::pegtl::string<')'>, tao::pegtl::string<'{'>, tao::pegtl::string<'}'>, tao::pegtl::string<','>, tao::pegtl::string<'#'>, tao::pegtl::string<';'>, tao::pegtl::string<'['>, tao::pegtl::string<']'>, tao::pegtl::string<'.'> > > 
                                    > {};
 
         // TODO: remove?
