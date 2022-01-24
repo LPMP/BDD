@@ -88,6 +88,10 @@ if(WITH_CUDA)
     add_executable(test_bdd_cuda_min_marginals test_bdd_cuda_min_marginals.cpp)
     target_link_libraries(test_bdd_cuda_min_marginals LPMP-BDD bdd_cuda_base)
     add_test(test_bdd_cuda_min_marginals test_bdd_cuda_min_marginals)
+
+    add_executable(test_bdd_cuda_base_sol test_bdd_cuda_base_sol.cpp)
+    target_link_libraries(test_bdd_cuda_base_sol LPMP-BDD bdd_cuda_base)
+    add_test(test_bdd_cuda_base_sol test_bdd_cuda_base_sol)
 endif()
 
 add_executable(test_bdd_solver_fix_variable test_bdd_solver_fix_variable.cpp)

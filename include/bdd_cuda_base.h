@@ -54,14 +54,18 @@ namespace LPMP {
             void set_cost(const double c, const size_t var);
             
             two_dim_variable_array<std::array<double,2>> min_marginals();
-            std::tuple<thrust::device_vector<int>, thrust::device_vector<REAL>, thrust::device_vector<REAL>> min_marginals_cuda();
+            std::tuple<thrust::device_vector<int>, thrust::device_vector<REAL>, thrust::device_vector<REAL>> min_marginals_cuda(bool get_sorted = true);
+
+            thrust::device_vector<REAL> bdds_solution_cuda(); // Computes argmin for each BDD separately. The output vector is of exactly same layout and size as of hi_cost_ and contains 0 values at terminal nodes.
+            two_dim_variable_array<REAL> bdds_solution(); // Returns the solution on CPU and laid out in similar way as the output of min_marginals()
 
             std::vector<REAL> compute_primal_objective_vector();
 
             size_t nr_variables() const { return nr_vars_; }
-            size_t nr_variables(const int block_idx) const { return nr_variables_per_hop_dist_[block_idx]; }
             size_t nr_bdds() const { return nr_bdds_; }
-            size_t nr_variable_blocks() const { return nr_variables_per_hop_dist_.size() - 1; } // excludes terminal nodes from calculation.
+            size_t nr_dual_variables() const { return num_dual_variables_; }
+            size_t nr_dual_variables(const int block_idx) const { return nr_variables_per_hop_dist_[block_idx]; }
+            size_t nr_blocks() const { return nr_variables_per_hop_dist_.size() - 1; } // excludes terminal nodes from calculation.
 
             void forward_run();
             std::tuple<thrust::device_vector<REAL>, thrust::device_vector<REAL>> backward_run(bool compute_path_costs = true);
@@ -70,13 +74,14 @@ namespace LPMP {
             // First all roots nodes, then all nodes at hop distance 1 and so on.
             std::tuple<thrust::device_vector<int>, thrust::device_vector<int>> var_constraint_indices() const;
             
-            // Compute lagrange multiplier by (hi_costs - lo_costs) for variables in var_block_idx, and sets in GPU array reference by out_ptr.
+            // Compute lagrange multiplier by (hi_costs - lo_costs) and sets in GPU array reference by out_ptr.
             // Does not contain data of terminal nodes similar to set_dual_costs.
-            void get_dual_costs(const int var_block_idx, thrust::device_ptr<REAL> out_ptr) const;
+            // lambda_out_ptr should allocate a space of size nr_dual_variables().
+            void get_dual_costs(thrust::device_ptr<REAL> lambda_out_ptr) const;
 
-            // Set lagrange multipliers for variables at var_block_idx.
+            // Set lagrange multipliers so perform opposite of get_dual_costs(...).
             template<typename ITERATOR>
-            void set_dual_costs(const int var_block_idx, ITERATOR dual_costs_begin, ITERATOR dual_costs_end);
+            void set_dual_costs(ITERATOR dual_costs_begin, ITERATOR dual_costs_end);
 
             // For serialization using cereal:
             template <class Archive>

@@ -45,11 +45,12 @@ PYBIND11_MODULE(bdd_cuda_parallel_mma_py, m) {
             return std::string("<bdd_cuda_parallel_mma>: ") + 
                 "nr_variables: "+ std::to_string(solver.nr_variables()) +
                 ", nr_bdds: "+ std::to_string(solver.nr_bdds()) +
-                ", nr_variable_blocks: "+ std::to_string(solver.nr_variable_blocks());
+                ", nr_dual_variable_blocks: "+ std::to_string(solver.nr_blocks());
                 })
-        .def("nr_variables", [](bdd_type& solver) { return solver.nr_variables(); })
-        .def("nr_variables", [](bdd_type& solver, const int var_block_idx) { return solver.nr_variables(var_block_idx); })
-        .def("nr_variable_blocks", &bdd_type::nr_variable_blocks)
+        .def("nr_primal_variables", [](bdd_type& solver) { return solver.nr_variables(); })
+        .def("nr_dual_variables", [](bdd_type& solver) { return solver.nr_dual_variables(); })
+        .def("nr_dual_variables", [](bdd_type& solver, const int var_block_idx) { return solver.nr_dual_variables(var_block_idx); })
+        .def("nr_dual_variable_blocks", &bdd_type::nr_blocks)
         .def("nr_bdds", &bdd_type::nr_bdds)
         .def("lower_bound", &bdd_type::lower_bound)
         .def("min_marginal_diff_of_block", [](bdd_type& solver, const int var_block_idx, const long mm_diff_out_ptr) 
