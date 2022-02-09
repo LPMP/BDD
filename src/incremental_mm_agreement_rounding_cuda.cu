@@ -40,7 +40,7 @@ namespace LPMP {
     struct fill_mm_type_func
     {
         mm_type* mm_types;
-        const int nr_vars;
+        const unsigned long nr_vars;
 
         __host__ __device__
         void operator()(const thrust::tuple<char, char, int> t) const

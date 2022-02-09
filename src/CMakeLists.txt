@@ -43,6 +43,9 @@ if(WITH_CUDA)
 
     add_library(bdd_cuda_parallel_mma bdd_cuda_parallel_mma.cu)
     target_link_libraries(bdd_cuda_parallel_mma bdd_cuda_base incremental_mm_agreement_rounding_cuda LPMP-BDD) 
+
+    add_library(bdd_cuda_learned_mma bdd_cuda_learned_mma.cu)
+    target_link_libraries(bdd_cuda_learned_mma bdd_cuda_parallel_mma LPMP-BDD) 
 endif()
 
 add_library(bdd_cuda bdd_cuda.cpp)
@@ -60,7 +63,7 @@ if(WITH_CUDA)
     target_link_libraries(bdd_solver bdd_cuda_base bdd_cuda_parallel_mma incremental_mm_agreement_rounding_cuda)
     target_compile_options(bdd_solver PRIVATE "$<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CUDA>>:--generate-line-info>")
     
-    pybind11_add_module(bdd_cuda_parallel_mma_py bdd_cuda_parallel_mma_py.cpp)
+    pybind11_add_module(bdd_cuda_parallel_mma_py bdd_cuda_parallel_mma_py.cu)
     target_link_libraries(bdd_cuda_parallel_mma_py PRIVATE LPMP-BDD ILP_input bdd_storage bdd_preprocessor bdd_cuda_parallel_mma)
 endif()
 

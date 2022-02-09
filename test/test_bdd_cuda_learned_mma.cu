@@ -1,8 +1,9 @@
-#include "bdd_cuda_parallel_mma.h"
+#include "bdd_cuda_learned_mma.h"
 #include "ILP_parser.h"
 #include "bdd_collection/bdd_collection.h"
 #include "bdd_preprocessor.h"
 #include "test.h"
+#include "cuda_utils.h"
 
 using namespace LPMP;
 using namespace BDD;
@@ -193,13 +194,27 @@ mu_8_0 - mu_78_00 - mu_78_10 = 0
 mu_8_1 - mu_78_01 - mu_78_11 = 0
 End)";
 
+struct isotropic_dist_w_func {
+    const int* primal_index;
+    const int* num_bdds_var;
+    double* dist_weights;
+    const unsigned long num_vars;
+    __device__ void operator()(const int i)
+    {
+        const int primal_var = primal_index[i];
+        if (primal_var < num_vars) // ignores terminal nodes.
+            dist_weights[i] = 1.0 / num_bdds_var[primal_var];
+        else
+            dist_weights[i] = 0.0;
+    }
+};
 
 void test_problem(const char* instance, const double expected_lb, const double tol = 1e-12)
 {
     ILP_input ilp = ILP_parser::parse_string(instance);
     bdd_preprocessor bdd_pre(ilp);
     bdd_collection bdd_col = bdd_pre.get_bdd_collection();
-    bdd_cuda_parallel_mma<double> solver(bdd_col);
+    bdd_cuda_learned_mma<double> solver(bdd_col);
 
     for(size_t i=0; i<solver.nr_variables(); ++i)
         solver.set_cost(ilp.objective()[i], i);
@@ -213,12 +228,23 @@ void test_problem(const char* instance, const double expected_lb, const double t
         test(diff <= tol, buffer.str());
     }
 
-    for(size_t iter=0; iter<200; ++iter)
-        solver.iteration();
+    const thrust::device_vector<int> primal_var_index = solver.get_primal_variable_index();
+    const thrust::device_vector<int> num_bdds_var = solver.get_num_bdds_per_var();
+
+    thrust::device_vector<double> dist_weights(primal_var_index.size());
+
+    isotropic_dist_w_func func({thrust::raw_pointer_cast(primal_var_index.data()), 
+                            thrust::raw_pointer_cast(num_bdds_var.data()), 
+                            thrust::raw_pointer_cast(dist_weights.data()),
+                            solver.nr_variables()});
+
+    thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + dist_weights.size(), func);
+    thrust::device_vector<double> new_mm_diff(solver.nr_layers());
+    solver.iterations(dist_weights.data(), new_mm_diff.data(), 200, 0.5);
     
-    std::cout<<"Final lower bound: "<<solver.lower_bound()<<", Expected: "<<expected_lb<<"\n";
-    solver.distribute_delta();
-    test(std::abs(solver.lower_bound() - expected_lb) <= tol);
+    std::cout<<"Lower bound before distribute: "<<solver.lower_bound()<<", Expected: "<<expected_lb<<"\n";
+    solver.compute_delta(new_mm_diff.data());
+    solver.distribute_delta(dist_weights.data());
 
     std::vector<double> cost_vector_after = solver.compute_primal_objective_vector();
     for(size_t i=0; i<solver.nr_variables(); ++i)
@@ -228,6 +254,9 @@ void test_problem(const char* instance, const double expected_lb, const double t
         buffer<<i<<" "<<ilp.objective()[i]<<" "<<cost_vector_before[i]<<" "<<diff<<"\n";
         test(diff <= tol, buffer.str());
     }
+
+    std::cout<<"Final lower bound: "<<solver.lower_bound()<<", Expected: "<<expected_lb<<"\n";
+    test(std::abs(solver.lower_bound() - expected_lb) <= tol);
 }
 
 int main(int argc, char** argv)

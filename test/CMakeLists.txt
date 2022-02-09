@@ -81,7 +81,7 @@ if(WITH_CUDA)
     target_link_libraries(test_bdd_cuda_base_serialization LPMP-BDD bdd_cuda_base)
     add_test(test_bdd_cuda_base_serialization test_bdd_cuda_base_serialization)
 
-    add_executable(test_bdd_cuda_parallel_mma test_bdd_cuda_parallel_mma.cpp)
+    add_executable(test_bdd_cuda_parallel_mma test_bdd_cuda_parallel_mma.cu)
     target_link_libraries(test_bdd_cuda_parallel_mma LPMP-BDD bdd_cuda_parallel_mma)
     add_test(test_bdd_cuda_parallel_mma test_bdd_cuda_parallel_mma)
 
@@ -92,6 +92,14 @@ if(WITH_CUDA)
     add_executable(test_bdd_cuda_base_sol test_bdd_cuda_base_sol.cpp)
     target_link_libraries(test_bdd_cuda_base_sol LPMP-BDD bdd_cuda_base)
     add_test(test_bdd_cuda_base_sol test_bdd_cuda_base_sol)
+
+    add_executable(test_bdd_cuda_learned_mma test_bdd_cuda_learned_mma.cu)
+    target_link_libraries(test_bdd_cuda_learned_mma LPMP-BDD bdd_cuda_learned_mma)
+    add_test(test_bdd_cuda_learned_mma test_bdd_cuda_learned_mma)
+
+    add_executable(test_bdd_cuda_grad_learned_mma test_bdd_cuda_grad_learned_mma.cu)
+    target_link_libraries(test_bdd_cuda_grad_learned_mma LPMP-BDD bdd_cuda_learned_mma)
+    add_test(test_bdd_cuda_grad_learned_mma test_bdd_cuda_grad_learned_mma)
 endif()
 
 add_executable(test_bdd_solver_fix_variable test_bdd_solver_fix_variable.cpp)

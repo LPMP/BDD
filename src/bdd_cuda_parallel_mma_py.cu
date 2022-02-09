@@ -6,6 +6,7 @@
 #include "ILP_input.h"
 #include "bdd_preprocessor.h"
 #include <sstream>
+#include "cuda_utils.h"
 
 namespace py=pybind11;
 
@@ -45,22 +46,28 @@ PYBIND11_MODULE(bdd_cuda_parallel_mma_py, m) {
             return std::string("<bdd_cuda_parallel_mma>: ") + 
                 "nr_variables: "+ std::to_string(solver.nr_variables()) +
                 ", nr_bdds: "+ std::to_string(solver.nr_bdds()) +
-                ", nr_dual_variable_blocks: "+ std::to_string(solver.nr_blocks());
+                ", nr_layers: "+ std::to_string(solver.nr_layers());
                 })
         .def("nr_primal_variables", [](bdd_type& solver) { return solver.nr_variables(); })
-        .def("nr_dual_variables", [](bdd_type& solver) { return solver.nr_dual_variables(); })
-        .def("nr_dual_variables", [](bdd_type& solver, const int var_block_idx) { return solver.nr_dual_variables(var_block_idx); })
-        .def("nr_dual_variable_blocks", &bdd_type::nr_blocks)
+        .def("nr_layers", [](bdd_type& solver) { return solver.nr_layers(); })
+        .def("nr_layers", [](bdd_type& solver, const int hop_index) { return solver.nr_layers(hop_index); })
+        .def("nr_hops", &bdd_type::nr_hops)
         .def("nr_bdds", &bdd_type::nr_bdds)
         .def("lower_bound", &bdd_type::lower_bound)
-        .def("min_marginal_diff_of_block", [](bdd_type& solver, const int var_block_idx, const long mm_diff_out_ptr) 
+        .def("compute_and_set_min_marginal_diff", [](bdd_type& solver, const long mm_diff_out_ptr) 
         {
-            // Computes min-marginal of variables in block: 'block_idx' and sets the result in mm_diff_ptr. 
-            // Assumes enough space is allocated. To query required space call: solver.nr_variables(block_idx).
+            // Computes min-marginal of all variables sets the result in mm_diff_out_ptr. 
+            // Assumes enough space is allocated. To query required space call: solver.nr_layers().
 
             float* mm_diff_ptr = reinterpret_cast<float*>(mm_diff_out_ptr); // Points to memory allocated by Python.
             thrust::device_ptr<float> mm_diff_ptr_thrust = thrust::device_pointer_cast(mm_diff_ptr);
-            solver.min_marginals_from_directional_costs(var_block_idx, 1.0, mm_diff_ptr_thrust);
+
+            const auto mms = solver.min_marginals_cuda(false);
+            const thrust::device_vector<int> primal_index = std::get<0>(mms);
+            const thrust::device_vector<float> mm_0 = std::get<1>(mms);
+            const thrust::device_vector<float> mm_1 = std::get<2>(mms);
+            // set hi - lo in mm_diff_out_ptr.
+            thrust::transform(mm_1.begin(), mm_1.end(), mm_0.begin(), mm_diff_ptr_thrust, thrust::minus<float>());
         })
     ;
 }

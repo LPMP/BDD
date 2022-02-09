@@ -181,6 +181,14 @@ inline void print_vector(const thrust::device_vector<T>& v, const char* name, co
     std::cout<<"\n";
 }
 
+template<typename T>
+inline void print_vector(const thrust::device_ptr<T>& v, const char* name, const int num)
+{
+    std::cout<<name<<": ";
+    thrust::copy(v, v + num, std::ostream_iterator<T>(std::cout, " "));
+    std::cout<<"\n";
+}
+
 struct tuple_min
 {
     template<typename REAL>
