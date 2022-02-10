@@ -37,6 +37,15 @@ namespace LPMP {
             // Returns {grad_lo_costs, grad_hi_costs}
             std::tuple<thrust::device_vector<REAL>, thrust::device_vector<REAL>> grad_mm_diff_all_hops(const thrust::device_ptr<const REAL> incoming_grad_mm, const REAL omega);
 
+            // During primal rounding calling update_costs(lo_pert, hi_pert) changes the dual costs, the underlying primal objective vector also changes.
+            // Here we compute gradients of such pertubation operation assuming that distribution of (lo_pert, hi_pert) was done with isoptropic weights.
+            void grad_cost_pertubation(
+                thrust::device_ptr<REAL> grad_lo_cost, // Input: incoming grad w.r.t lo_cost which were output after adding primal pertubation and Outputs in-place to compute grad. lo_cost before it.
+                thrust::device_ptr<REAL> grad_hi_cost, // Input: incoming grad w.r.t hi_cost which were output after adding primal pertubation and Outputs in-place to compute grad. hi_cost before it.
+                thrust::device_ptr<REAL> grad_lo_pert_out, // Output: contains grad w.r.t pertubation in lo costs, assumes the memory is already allocated (= nr_variables()).
+                thrust::device_ptr<REAL> grad_hi_pert_out // Output: contains grad w.r.t pertubation in hi costs, assumes the memory is already allocated (= nr_variables()).
+            );
+
         private:
             // last_hop should be equal to nr_hops() - 1 for complete forward pass.
             void forward_iteration_learned_mm_dist(const thrust::device_ptr<const REAL> dist_weights, thrust::device_ptr<REAL> mm_diff_out_ptr, const int last_hop, const REAL omega);

@@ -556,7 +556,6 @@ namespace LPMP {
         thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + this->nr_layers(), func_grad_def_mm);
     }
 
-    
     template<typename REAL>
     void bdd_cuda_learned_mma<REAL>::grad_distribute_delta(
         thrust::device_ptr<REAL> grad_lo_cost, // Input: incoming grad w.r.t lo_cost which were output after distributing delta.
@@ -575,6 +574,43 @@ namespace LPMP {
                             this->nr_variables()
                         });
         thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + this->nr_layers(), func_grad_dist_w);
+    }
+
+    template<typename REAL>
+    struct normalize_by_num_bdds {
+        __host__ __device__ void operator()(const thrust::tuple<REAL&, REAL&, int> t) const
+        {
+            const int num_bdds = thrust::get<2>(t);
+            REAL& hi_cost = thrust::get<0>(t);
+            hi_cost /= num_bdds;
+            REAL& lo_cost = thrust::get<1>(t);
+            lo_cost /= num_bdds;
+        }
+    };
+
+    template<typename REAL>
+    void bdd_cuda_learned_mma<REAL>::grad_cost_pertubation(
+        thrust::device_ptr<REAL> grad_lo_cost, // Input: incoming grad w.r.t lo_cost which were output after adding primal pertubation and Outputs in-place to compute grad. lo_cost before it.
+        thrust::device_ptr<REAL> grad_hi_cost, // Input: incoming grad w.r.t hi_cost which were output after adding primal pertubation and Outputs in-place to compute grad. hi_cost before it.
+        thrust::device_ptr<REAL> grad_lo_pert_out, // Output: contains grad w.r.t pertubation in lo costs, assumes the memory is already allocated (= nr_variables()).
+        thrust::device_ptr<REAL> grad_hi_pert_out // Output: contains grad w.r.t pertubation in hi costs, assumes the memory is already allocated (= nr_variables()).
+    )
+    {
+        auto first_val = thrust::make_zip_iterator(thrust::make_tuple(
+            thrust::make_permutation_iterator(grad_lo_cost, this->primal_variable_sorting_order_.begin()),
+            thrust::make_permutation_iterator(grad_hi_cost, this->primal_variable_sorting_order_.begin())));
+
+        auto first_out_val = thrust::make_zip_iterator(thrust::make_tuple(grad_lo_pert_out, grad_hi_pert_out));
+
+        thrust::equal_to<int> binary_pred;
+        auto new_end = thrust::reduce_by_key(this->primal_variable_index_sorted_.begin(), this->primal_variable_index_sorted_.end() - this->nr_bdds_, first_val, 
+                            thrust::make_discard_iterator(), first_out_val, binary_pred, tuple_sum());
+        assert(thrust::distance(first_out_val, new_end.second) == this->delta_hi_.size());
+
+        // Normalize by number of BDDs (assumes isotropic cost distribution during forward pass).
+        auto first = thrust::make_zip_iterator(thrust::make_tuple(grad_lo_pert_out, grad_hi_pert_out, this->num_bdds_per_var_.begin()));
+        auto last = thrust::make_zip_iterator(thrust::make_tuple(grad_lo_pert_out + this->nr_variables(), grad_hi_pert_out + this->nr_variables(), this->num_bdds_per_var_.end()));
+        thrust::for_each(first, last, normalize_by_num_bdds<REAL>());
     }
 
     template class bdd_cuda_learned_mma<float>;

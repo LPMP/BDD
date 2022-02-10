@@ -303,16 +303,6 @@ namespace LPMP {
     };
 
     template<typename REAL>
-    struct tuple_sum
-    {
-        __host__ __device__
-        thrust::tuple<REAL, REAL> operator()(const thrust::tuple<REAL, REAL>& t0, const thrust::tuple<REAL, REAL>& t1)
-        {
-            return thrust::make_tuple(thrust::get<0>(t0) + thrust::get<0>(t1), thrust::get<1>(t0) + thrust::get<1>(t1));
-        }
-    };
-
-    template<typename REAL>
     void bdd_cuda_parallel_mma<REAL>::compute_delta(const thrust::device_ptr<const REAL> mm_to_distribute)
     {
         auto first_val = thrust::make_zip_iterator(thrust::make_tuple(
@@ -323,11 +313,11 @@ namespace LPMP {
 
         thrust::equal_to<int> binary_pred;
         auto new_end = thrust::reduce_by_key(this->primal_variable_index_sorted_.begin(), this->primal_variable_index_sorted_.end() - this->nr_bdds_, first_val, 
-                            thrust::make_discard_iterator(), first_out_val, binary_pred, tuple_sum<REAL>());
+                            thrust::make_discard_iterator(), first_out_val, binary_pred, tuple_sum());
         assert(thrust::distance(first_out_val, new_end.second) == this->delta_hi_.size());
         // thrust::reduce_by_key(thrust::make_permutation_iterator(this->primal_variable_index_.begin(), primal_variable_sorting_order_.begin()),
         //                     thrust::make_permutation_iterator(this->primal_variable_index_.end(), primal_variable_sorting_order_.end()), first_val, 
-        //                     thrust::make_discard_iterator(), first_out_val, binary_pred, tuple_sum<REAL>()); // Uses less memory but slower.
+        //                     thrust::make_discard_iterator(), first_out_val, binary_pred, tuple_sum()); // Uses less memory but slower.
         this->delta_normalized_ = false;
     }
 
