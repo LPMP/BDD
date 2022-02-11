@@ -22,7 +22,8 @@ namespace LPMP {
                 thrust::device_ptr<REAL> grad_hi_cost, // Input: incoming grad w.r.t hi_cost which were output from iterations and Outputs in-place to compute grad. hi_cost before iterations.
                 thrust::device_ptr<REAL> grad_mm, // Input: incoming grad w.r.t min-marg. diff. which were output from iterations and Outputs in-place to compute grad. w.r.t deferred min-marginals used in iterations.
                 thrust::device_ptr<REAL> grad_dist_weights_out, // Output: contains grad w.r.t distribution weights, assumes the memory is already allocated (= nr_layers()).
-                const double omega,
+                thrust::device_ptr<REAL> grad_omega,    // Output: contains grad w.r.t omega (size = 1).
+                const REAL omega,
                 const int track_grad_after_itr,      // First runs the solver for track_grad_after_itr many iterations without tracking gradients and then backpropagates through only last track_grad_for_num_itr many itrs.
                 const int track_grad_for_num_itr     // See prev. argument.
             );
@@ -34,12 +35,15 @@ namespace LPMP {
             );
 
             // Useful for cases when min_marginals_cuda() was called during forward pass to compute all min marginals (e.g. to compute loss).
-            // Returns {grad_lo_costs, grad_hi_costs}
-            std::tuple<thrust::device_vector<REAL>, thrust::device_vector<REAL>> grad_mm_diff_all_hops(const thrust::device_ptr<const REAL> incoming_grad_mm, const REAL omega);
+            void grad_mm_diff_all_hops(
+                const thrust::device_ptr<const REAL> incoming_grad_mm,
+                thrust::device_ptr<REAL> grad_lo_cost_out, // Outputs in-place to compute grad. lo_cost before all min-marginal difference computation.
+                thrust::device_ptr<REAL> grad_hi_cost_out // Outputs in-place to compute grad. hi_cost before all min-marginal difference computation.
+                );
 
             // During primal rounding calling update_costs(lo_pert, hi_pert) changes the dual costs, the underlying primal objective vector also changes.
             // Here we compute gradients of such pertubation operation assuming that distribution of (lo_pert, hi_pert) was done with isoptropic weights.
-            void grad_cost_pertubation(
+            void grad_cost_perturbation(
                 thrust::device_ptr<REAL> grad_lo_cost, // Input: incoming grad w.r.t lo_cost which were output after adding primal pertubation and Outputs in-place to compute grad. lo_cost before it.
                 thrust::device_ptr<REAL> grad_hi_cost, // Input: incoming grad w.r.t hi_cost which were output after adding primal pertubation and Outputs in-place to compute grad. hi_cost before it.
                 thrust::device_ptr<REAL> grad_lo_pert_out, // Output: contains grad w.r.t pertubation in lo costs, assumes the memory is already allocated (= nr_variables()).
@@ -62,7 +66,8 @@ namespace LPMP {
                 thrust::device_ptr<REAL> grad_hi_cost, // Input: incoming grad w.r.t hi_cost which were output from current iteration and Outputs in-place to compute grad. hi_cost before iteration.
                 thrust::device_ptr<REAL> grad_mm, // Input: incoming grad w.r.t min-marg. diff. which were output from current iteration and Outputs in-place to compute grad. w.r.t deferred min-marginals used in iteration.
                 thrust::device_ptr<REAL> grad_dist_weights_out, // Output: contains grad w.r.t distribution weights, assumes the memory is already allocated (= nr_layers()).
-                const double omega
+                const REAL omega,
+                thrust::device_ptr<REAL> grad_omega    // Output: contains grad w.r.t omega (size = 1).
                 );
 
             // Compute gradient of backward_iteration_learned_mm_dist.
@@ -74,7 +79,9 @@ namespace LPMP {
                 thrust::device_ptr<REAL> grad_hi_cost, // Input: incoming grad w.r.t hi_cost which were output from current iteration and Outputs in-place to compute grad. hi_cost before iteration.
                 thrust::device_ptr<REAL> grad_mm, // Input: incoming grad w.r.t min-marg. diff. which were output from current iteration and Outputs in-place to compute grad. w.r.t deferred min-marginals used in iteration.
                 thrust::device_ptr<REAL> grad_dist_weights_out, // Output: contains grad w.r.t distribution weights, assumes the memory is already allocated (= nr_layers()).
-                const double omega);
+                const REAL omega,
+                thrust::device_ptr<REAL> grad_omega    // Output: contains grad w.r.t omega (size = 1).
+                );
 
             // Compute gradient for all computations done for a hop i.e., min-marginal calculation and hi / lo costs update.
             // Where the update is performed only for all dual variables only in the current hop (i.e., block).
@@ -88,7 +95,9 @@ namespace LPMP {
                 thrust::device_ptr<REAL> grad_delta_lo, // To accumulate gradients w.r.t delta lo (should be intialized by zero for first hop)
                 thrust::device_ptr<REAL> grad_delta_hi, // To accumulate gradients w.r.t delta hi (should be intialized by zero for first hop)
                 const thrust::device_ptr<const REAL> dist_weights,            // distribution weights used in the forward pass.
-                const int hop_index, const double omega);
+                const int hop_index, const REAL omega,
+                thrust::device_ptr<REAL> grad_omega    // Output: contains grad w.r.t omega (size = 1).
+                );
 
             // Computes gradient of min-marginal difference computation for the given hop. So given dL / d mm_diff as input, it computes
             // dL / d(hi - lo costs) = (dL / dmm)^T. (dmm / d (hi - lo costs)). The output has same dimensions as 

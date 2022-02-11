@@ -147,7 +147,8 @@ void test_problem(const char* instance, const thrust::device_vector<double>& exp
     thrust::device_vector<double> new_mm_diff(solver.nr_layers());
     thrust::device_vector<double> final_mm_diff(solver.nr_layers());
     thrust::device_vector<double> loss_grad_mm(solver.nr_layers());
-    thrust::device_vector<double> grad_lo_costs, grad_hi_costs;
+    thrust::device_vector<double> grad_lo_costs(solver.nr_layers());
+    thrust::device_vector<double> grad_hi_costs(solver.nr_layers());
 
     const int num_solver_itr = 5;
     double prev_loss = 0;
@@ -192,11 +193,12 @@ void test_problem(const char* instance, const thrust::device_vector<double>& exp
                                             solver.nr_variables()});
 
         thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + solver.nr_layers(), compute_loss_grad);
-        std::tie(grad_lo_costs, grad_hi_costs) = solver.grad_mm_diff_all_hops(loss_grad_mm.data(), omega);
+        solver.grad_mm_diff_all_hops(loss_grad_mm.data(), grad_lo_costs.data(), grad_hi_costs.data());
 
         thrust::device_vector<double> grad_dist_weights(solver.nr_layers(), 0.0);
         thrust::device_vector<double> grad_def_mm(solver.nr_layers(), 0.0);
         thrust::device_vector<double> deferred_min_marginals(solver.nr_layers(), 0.0);
+        thrust::device_vector<double> grad_omega(1);
         
         solver.set_solver_costs(costs_before_dist);
         solver.grad_distribute_delta(grad_lo_costs.data(), grad_hi_costs.data(), grad_dist_weights.data());
@@ -204,10 +206,10 @@ void test_problem(const char* instance, const thrust::device_vector<double>& exp
         solver.set_solver_costs(orig_costs); // reset to orig state.
         solver.update_costs(pert_lo, pert_hi); // Perturb costs to backprop through iterations().
         solver.grad_iterations(dist_weights.data(), grad_lo_costs.data(), grad_hi_costs.data(),
-                                grad_def_mm.data(), grad_dist_weights.data(),
+                                grad_def_mm.data(), grad_dist_weights.data(), grad_omega.data(),
                                 omega, 0, num_solver_itr);
         solver.set_solver_costs(orig_costs); // reset to orig state.
-        solver.grad_cost_pertubation(grad_lo_costs.data(), grad_hi_costs.data(), grad_pert_lo.data(), grad_pert_hi.data());
+        solver.grad_cost_perturbation(grad_lo_costs.data(), grad_hi_costs.data(), grad_pert_lo.data(), grad_pert_hi.data());
         
         grad_step_pert grad_step_func({
             thrust::raw_pointer_cast(grad_pert_lo.data()),
