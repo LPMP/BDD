@@ -415,15 +415,7 @@ namespace LPMP {
             if (primal >= num_vars)
                 out[i] = 0;
             else
-            {
-                if(!isfinite(mm_diff[i]))
-                {
-                    printf("Inf for primal var: %d, val: %f\n", primal, mm_diff[i]);
-                }
-                assert(isfinite(mm_diff[i]));
-                assert(isfinite(grad_mm[i]));
                 out[i] = mm_diff[i] * grad_mm[i] / omega;
-            }
         }
     };
 
@@ -445,6 +437,7 @@ namespace LPMP {
 
         // 1.1 Backprop through hop update to accumulate grad w.r.t mm difference, grad w.r.t delta lo and hi:
         // This needs access to current min-marginal difference:
+        this->flush_mm(this->mm_diff_.data(), hop_index);
         this->min_marginals_from_directional_costs(hop_index, omega);
         grad_dual_update_func<REAL> func_grad_dual_update({
                                                 thrust::raw_pointer_cast(this->primal_variable_index_.data()  + start_offset),
@@ -458,18 +451,18 @@ namespace LPMP {
                                                 this->nr_variables()
                                             });
         thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + num_layers_hop, func_grad_dual_update);
-        // {
-        //     // compute grad_omega by taking dot product between mm_diff (without omega scaling) and incoming grad_mm
-        //     thrust::device_vector<REAL> grad_mm_multi_mm_diff(num_layers_hop); // store the elements after pointwise multiplication
-        //     grad_omega_func<REAL> grad_omega_calc({
-        //                                     thrust::raw_pointer_cast(this->primal_variable_index_.data()  + start_offset),
-        //                                     thrust::raw_pointer_cast(grad_mm + start_offset),
-        //                                     thrust::raw_pointer_cast(this->mm_diff_.data() + start_offset),
-        //                                     thrust::raw_pointer_cast(grad_mm_multi_mm_diff.data()),
-        //                                     omega, this->nr_variables()});
-        //     thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + num_layers_hop, grad_omega_calc);
-        //     grad_omega[0] += thrust::reduce(grad_mm_multi_mm_diff.begin(), grad_mm_multi_mm_diff.end());
-        // }
+        {
+            // compute grad_omega by taking dot product between mm_diff (without omega scaling) and incoming grad_mm
+            thrust::device_vector<REAL> grad_mm_multi_mm_diff(num_layers_hop); // store the elements after pointwise multiplication
+            grad_omega_func<REAL> grad_omega_calc({
+                                            thrust::raw_pointer_cast(this->primal_variable_index_.data()  + start_offset),
+                                            thrust::raw_pointer_cast(grad_mm + start_offset),
+                                            thrust::raw_pointer_cast(this->mm_diff_.data() + start_offset),
+                                            thrust::raw_pointer_cast(grad_mm_multi_mm_diff.data()),
+                                            omega, this->nr_variables()});
+            thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + num_layers_hop, grad_omega_calc);
+            grad_omega[0] += thrust::reduce(grad_mm_multi_mm_diff.begin(), grad_mm_multi_mm_diff.end());
+        }
         // Backprop through mm computation:
         const thrust::device_vector<REAL> grad_lambda_hop_mm = grad_mm_diff_of_hop(grad_mm + start_offset, hop_index, omega);
         // After this the input grad_mm can be overwritten with updated gradients to send back.
@@ -531,6 +524,7 @@ namespace LPMP {
         const REAL omega,
         thrust::device_ptr<REAL> grad_omega)
     {
+        this->backward_run(false);
         const auto initial_costs = this->get_solver_costs();
 
         thrust::device_vector<REAL> grad_delta_lo(this->delta_lo_.size(), 0.0);
@@ -541,11 +535,11 @@ namespace LPMP {
             // Reset solver to original state.
             if (s < this->cum_nr_bdd_nodes_per_hop_dist_.size() - 2)
                 this->set_solver_costs(initial_costs);
-    
+
+            this->backward_run(false);
             // To compute grad for hop s, first take the solver to state of hop s - 1.
             if (s > 0)
                 forward_iteration_learned_mm_dist(dist_weights, this->mm_diff_.data(), s - 1, omega);
-
             grad_hop_update_learned_mm_dist(grad_lo_cost, grad_hi_cost, grad_mm, grad_dist_weights_out, grad_delta_lo.data(), grad_delta_hi.data(), dist_weights, s, omega, grad_omega);
         }
 
@@ -583,13 +577,11 @@ namespace LPMP {
             // Reset solver to original state.
             if (s > 0)
                 this->set_solver_costs(initial_costs);
-    
+
+            this->forward_run();
             // To compute grad for hop s, first take the solver to state of hop s + 1.
             if (s < this->cum_nr_bdd_nodes_per_hop_dist_.size() - 2)
-            {
-                this->forward_run();
                 backward_iteration_learned_mm_dist(dist_weights, this->mm_diff_.data(), s + 1, omega);
-            }
 
             grad_hop_update_learned_mm_dist(grad_lo_cost, grad_hi_cost, grad_mm, grad_dist_weights_out, grad_delta_lo.data(), grad_delta_hi.data(), dist_weights, s, omega, grad_omega);
         }

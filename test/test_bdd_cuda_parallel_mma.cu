@@ -236,8 +236,8 @@ void test_problem(const char* instance, const double expected_lb, const double t
 
 int main(int argc, char** argv)
 {
-    // std::cout<<"matching_3x3"<<"\n";
-    // test_problem(matching_3x3, -6.0);
+    std::cout<<"matching_3x3"<<"\n";
+    test_problem(matching_3x3, -6.0);
     std::cout<<"short_chain_shuffled"<<"\n";
     test_problem(short_chain_shuffled, 1.0);
     std::cout<<"long_chain"<<"\n";

@@ -320,7 +320,7 @@ thrust::device_vector<double> compute_expected_mm_diff(const char* instance)
     return expected_mm_diff;
 }
 
-void test_problem(const char* instance, const double expected_lb, double omega = 0.9, const double tol = 1e-12)
+void test_problem(const char* instance, const double expected_lb, double omega = 1.0, const double tol = 1e-12)
 {
     const thrust::device_vector<double> expected_mm_diff = compute_expected_mm_diff(instance);
     ILP_input ilp = ILP_parser::parse_string(instance);
@@ -347,7 +347,7 @@ void test_problem(const char* instance, const double expected_lb, double omega =
     const int num_solver_itr = 5;
     double prev_loss = 0;
     double avg_loss_improvement_per_itr = 0;
-    const int num_learning_itr = 25;
+    const int num_learning_itr = 50;
     for(int learning_itr = 0; learning_itr < num_learning_itr; learning_itr++)
     {
         solver.set_solver_costs(initial_costs); // reset to initial state.
@@ -396,7 +396,7 @@ void test_problem(const char* instance, const double expected_lb, double omega =
                                 grad_def_mm.data(), grad_dist_weights.data(), grad_omega.data(),
                                 omega, 0, num_solver_itr);
 
-        omega = omega - 1e-2 * grad_omega[0];
+        omega = max(min(omega - 1e-3 * grad_omega[0], 1.0), 0.0);
         std::cout<<"Updated omega: "<<omega<<"\n";
     }
     avg_loss_improvement_per_itr = avg_loss_improvement_per_itr / num_learning_itr;

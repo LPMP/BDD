@@ -22,6 +22,7 @@ namespace LPMP {
             void min_marginals_from_directional_costs(const int hop_index, const REAL omega, thrust::device_ptr<REAL> mm_diff_ptr_with_start_offset);
 
             void flush_mm(thrust::device_ptr<REAL> mm_diff_ptr);
+            void flush_mm(thrust::device_ptr<REAL> mm_diff_ptr, const int hop_index);
             thrust::device_vector<REAL> mm_diff_, hi_cost_out_, lo_cost_out_; // One entry per BDD layer.
 
         private:

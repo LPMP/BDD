@@ -328,6 +328,15 @@ namespace LPMP {
         thrust::fill(mm_diff_ptr, mm_diff_ptr + this->nr_layers(), CUDART_INF_F_HOST);
     }
 
+    template<typename REAL>
+    void bdd_cuda_parallel_mma<REAL>::flush_mm(thrust::device_ptr<REAL> mm_diff_ptr, const int hop_index)
+    {   // Makes min marginals INF for current hop so that they can be populated again by in-place minimization
+        const int start_offset = hop_index > 0 ? this->cum_nr_layers_per_hop_dist_[hop_index - 1] : 0;
+        const int end_offset = this->cum_nr_layers_per_hop_dist_[hop_index];
+        thrust::fill(mm_lo_local_.begin(), mm_lo_local_.end(), CUDART_INF_F_HOST);
+        thrust::fill(mm_diff_ptr + start_offset, mm_diff_ptr + end_offset, CUDART_INF_F_HOST);
+    }
+
     template class bdd_cuda_parallel_mma<float>;
     template class bdd_cuda_parallel_mma<double>;
 }
