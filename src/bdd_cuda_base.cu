@@ -459,10 +459,9 @@ namespace LPMP {
         auto populate_costs = [&](auto cost_begin, auto cost_end, auto bdd_cost_begin, auto bdd_cost_end) {
             thrust::device_vector<REAL> primal_costs(cost_begin, cost_end);
             
-            const int num_elements = primal_costs.size();
             set_vars_costs_func<REAL, REAL> func({thrust::raw_pointer_cast(num_bdds_per_var_.data()), thrust::raw_pointer_cast(primal_costs.data())});
             auto first = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.begin(), bdd_cost_begin));
-            auto last = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.begin() + num_elements, bdd_cost_end));
+            auto last = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.end(), bdd_cost_end));
 
             thrust::for_each(first, last, func);
         };
