@@ -38,7 +38,7 @@ namespace LPMP {
     class bdd_cuda_base {
         public:
             using value_type = REAL;
-            using SOLVER_COSTS_VECS = std::tuple<thrust::device_vector<REAL>, thrust::device_vector<REAL>, thrust::device_vector<REAL>, thrust::device_vector<REAL>>;
+            using SOLVER_COSTS_VECS = std::tuple<thrust::device_vector<REAL>, thrust::device_vector<REAL>, thrust::device_vector<REAL>>;
             bdd_cuda_base() {}
             bdd_cuda_base(const BDD::bdd_collection& bdd_col);
 
@@ -72,6 +72,11 @@ namespace LPMP {
             size_t nr_layers(const int hop_index) const { 
                 return cum_nr_layers_per_hop_dist_[hop_index] - (hop_index > 0 ? cum_nr_layers_per_hop_dist_[hop_index - 1] : 0); 
             }
+
+            size_t nr_bdd_nodes() const { return cum_nr_bdd_nodes_per_hop_dist_.back(); }
+            size_t nr_bdd_nodes(const int hop_index) const { 
+                return cum_nr_bdd_nodes_per_hop_dist_[hop_index] - (hop_index > 0 ? cum_nr_bdd_nodes_per_hop_dist_[hop_index - 1] : 0); 
+            }
             size_t nr_hops() const { return cum_nr_layers_per_hop_dist_.size() - 1; } // ignores terminal nodes.
 
             void forward_run();
@@ -81,16 +86,17 @@ namespace LPMP {
             // First all roots nodes, then all nodes at hop distance 1 and so on.
             std::tuple<thrust::device_vector<int>, thrust::device_vector<int>> var_constraint_indices() const;
             
-            // Both lo_cost_out_ptr and hi_cost_out_ptr should allocate a space of size nr_layers().
-            // delta_lo_cost_out_ptr, delta_i_cost_out_ptr should allocate a space of size nr_variables().
-            void get_solver_costs(thrust::device_ptr<REAL> lo_cost_out_ptr, thrust::device_ptr<REAL> hi_cost_out_ptr,
-                                thrust::device_ptr<REAL> delta_lo_out_ptr, thrust::device_ptr<REAL> delta_hi_out_ptr) const;
+            // All pointers allocate a space of size nr_layers().
+            void get_solver_costs(thrust::device_ptr<REAL> lo_cost_out_ptr, 
+                                thrust::device_ptr<REAL> hi_cost_out_ptr, 
+                                thrust::device_ptr<REAL> deferred_mm_diff_out_ptr) const;
 
             SOLVER_COSTS_VECS get_solver_costs() const;
 
             // Set solver costs so perform opposite of get_solver_costs(...).
-            void set_solver_costs(const thrust::device_ptr<const REAL> lo_costs, const thrust::device_ptr<const REAL> hi_costs, 
-                                const thrust::device_ptr<const REAL> delta_lo, const thrust::device_ptr<const REAL> delta_hi);
+            void set_solver_costs(const thrust::device_ptr<const REAL> lo_costs, 
+                                const thrust::device_ptr<const REAL> hi_costs, 
+                                const thrust::device_ptr<const REAL> deferred_mm_diff);
 
             void set_solver_costs(const SOLVER_COSTS_VECS& costs); // similar to above but takes device_vectors
 
@@ -98,6 +104,7 @@ namespace LPMP {
             const thrust::device_vector<int> get_bdd_index() const { return bdd_index_; }
             const thrust::device_vector<int> get_num_bdds_per_var() const {return num_bdds_per_var_; }
 
+            void distribute_delta(thrust::device_ptr<REAL> def_min_marg_diff_ptr);
             void distribute_delta();
 
             // For serialization using cereal:
@@ -108,18 +115,14 @@ namespace LPMP {
             void load(Archive & archive);
 
         protected:
-            void normalize_delta();
+
             void update_costs(const thrust::device_vector<REAL>& update_vec);
             void flush_costs_from_root();
 
             // Following arrays have one entry per layer of BDD in each BDD:
             thrust::device_vector<int> primal_variable_index_;
             thrust::device_vector<int> bdd_index_;
-            thrust::device_vector<REAL> hi_cost_, lo_cost_;
-
-            // Deferred min-marginal sums. These values and arc costs determine the state of solver.
-            thrust::device_vector<REAL> delta_lo_, delta_hi_; // One entry in each per primal variable.
-            bool delta_normalized_ = false; // true in case the above deltas contain average instead of sum.
+            thrust::device_vector<REAL> hi_cost_, lo_cost_, deffered_mm_diff_;
 
             // Following arrays are allocated for each bdd node:
             thrust::device_vector<int> lo_bdd_node_index_; // = 0
@@ -133,6 +136,8 @@ namespace LPMP {
             thrust::device_vector<int> root_indices_, bot_sink_indices_, top_sink_indices_;
             thrust::device_vector<int> primal_variable_sorting_order_; // indices to sort primal_variables_indices_
             thrust::device_vector<int> primal_variable_index_sorted_;  // to reduce min-marginals by key.
+
+            thrust::device_vector<int> layer_offsets_; // Similar to CSR representation where row is layer index, and column is bdd node.
 
             std::vector<int> cum_nr_bdd_nodes_per_hop_dist_; // How many BDD nodes (cumulative) are present with a given hop distance away from root node.
             std::vector<int> cum_nr_layers_per_hop_dist_; // Similar to cum_nr_bdd_nodes_per_hop_dist_ but for BDD layer instead of BDD node.

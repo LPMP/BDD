@@ -8,6 +8,15 @@
 using namespace LPMP;
 using namespace BDD;
 
+const char * two_simplex = 
+R"(Minimize
+1 x_1 + 2 x_2 + 1 x_3
++2 x_4 + 1 x_5 + 2 x_6
+Subject To
+x_1 + x_2 + x_3 + x_4 = 1
+x_4 + x_5 + x_6 = 2
+End)";
+
 const char * matching_3x3 = 
 R"(Minimize
 -2 x_11 - 1 x_12 - 1 x_13
@@ -334,7 +343,7 @@ void test_problem(const char* instance, const double expected_lb, const double o
     thrust::device_vector<double> dist_weights(solver.nr_layers(), 1.0);
     const thrust::device_vector<int> primal_var_index = solver.get_primal_variable_index();
 
-    thrust::device_vector<double> new_mm_diff(solver.nr_layers());
+    thrust::device_vector<double> mm_diff(solver.nr_layers());
 
     thrust::device_vector<double> final_mm_diff(solver.nr_layers());
     thrust::device_vector<double> loss_grad_mm(solver.nr_layers());
@@ -350,19 +359,21 @@ void test_problem(const char* instance, const double expected_lb, const double o
     for(int learning_itr = 0; learning_itr < num_learning_itr; learning_itr++)
     {
         solver.set_solver_costs(initial_costs); // reset to initial state.
+        thrust::fill(mm_diff.begin(), mm_diff.end(), 0.0);
 
         // Forward pass:
         project_dist_weights(solver, dist_weights, primal_var_index);
         // test(initial_lb == solver.lower_bound());
-        solver.iterations(dist_weights.data(), new_mm_diff.data(), num_solver_itr, omega);
+        solver.iterations(dist_weights.data(), mm_diff.data(), num_solver_itr, omega);
         const auto costs_before_dist = solver.get_solver_costs();
-        solver.distribute_delta(dist_weights.data());
+        solver.distribute_delta(mm_diff.data());
         const auto mms = solver.min_marginals_cuda(false);
         const auto& mms_0 = std::get<1>(mms);
         const auto& mms_1 = std::get<2>(mms);
         thrust::transform(mms_1.begin(), mms_1.end(), mms_0.begin(), final_mm_diff.begin(), thrust::minus<double>());
         thrust::device_vector<double> loss(final_mm_diff.size());
-        loss_func compute_loss({thrust::raw_pointer_cast(solver.get_primal_variable_index().data()),
+        const thrust::device_vector<int> pv = solver.get_primal_variable_index();
+        loss_func compute_loss({thrust::raw_pointer_cast(pv.data()),
                                 thrust::raw_pointer_cast(final_mm_diff.data()),
                                 thrust::raw_pointer_cast(expected_mm_diff.data()),
                                 thrust::raw_pointer_cast(loss.data()),
@@ -415,16 +426,16 @@ void test_problem(const char* instance, const double expected_lb, const double o
 
         thrust::device_vector<double> grad_dist_weights(solver.nr_layers(), 0.0);
         thrust::device_vector<double> grad_def_mm(solver.nr_layers(), 0.0);
-        thrust::device_vector<double> deferred_min_marginals(solver.nr_layers(), 0.0);
+        thrust::device_vector<double> grad_cost_from_terminal(solver.nr_bdd_nodes(), 0.0);
         thrust::device_vector<double> grad_omega(1);
 
         solver.set_solver_costs(costs_before_dist);
-        solver.grad_distribute_delta(grad_lo_costs.data(), grad_hi_costs.data(), grad_dist_weights.data());
+        solver.grad_distribute_delta(grad_lo_costs.data(), grad_hi_costs.data(), grad_def_mm.data());
         solver.set_solver_costs(initial_costs); // reset to initial state.
-        solver.grad_iterations(dist_weights.data(), grad_lo_costs.data(), grad_hi_costs.data(),
+        solver.grad_iterations(dist_weights.data(), grad_lo_costs.data(), grad_hi_costs.data(), grad_cost_from_terminal.data(),
                                 grad_def_mm.data(), grad_dist_weights.data(), grad_omega.data(),
                                 omega, 0, num_solver_itr);
-
+        
         grad_step_dist_w grad_step_func({
             thrust::raw_pointer_cast(grad_dist_weights.data()),
             thrust::raw_pointer_cast(dist_weights.data()),
@@ -437,8 +448,9 @@ void test_problem(const char* instance, const double expected_lb, const double o
 
     solver.set_solver_costs(initial_costs); // reset to initial state.
     project_dist_weights(solver, dist_weights, primal_var_index);
-    solver.iterations(dist_weights.data(), new_mm_diff.data(), num_solver_itr, omega);
-    solver.distribute_delta(dist_weights.data());
+    thrust::fill(mm_diff.begin(), mm_diff.end(), 0.0);
+    solver.iterations(dist_weights.data(), mm_diff.data(), num_solver_itr, omega);
+    solver.distribute_delta(mm_diff.data());
     std::cout<<"Final lower bound: "<<solver.lower_bound()<<", Max. possible:  "<<expected_lb<<"\n\n\n";
 
     // Check feasibility:
@@ -454,6 +466,8 @@ void test_problem(const char* instance, const double expected_lb, const double o
 
 int main(int argc, char** argv)
 {
+    std::cout<<"two_simplex"<<"\n";
+    test_problem(two_simplex, 3.0);
     std::cout<<"matching_3x3"<<"\n";
     test_problem(matching_3x3, -6.0);
     std::cout<<"short_chain_shuffled"<<"\n";

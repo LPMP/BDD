@@ -71,30 +71,25 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
         .def("get_solver_costs", [](bdd_type& solver, 
                                 const long lo_cost_out_ptr,
                                 const long hi_cost_out_ptr,
-                                const long delta_lo_out_ptr,
-                                const long delta_hi_out_ptr)
+                                const long deferred_mm_out_ptr)
         {
             thrust::device_ptr<float> lo_cost_out_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(lo_cost_out_ptr));
             thrust::device_ptr<float> hi_cost_out_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(hi_cost_out_ptr));
-            thrust::device_ptr<float> delta_lo_out_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(delta_lo_out_ptr));
-            thrust::device_ptr<float> delta_hi_out_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(delta_hi_out_ptr));
-            solver.get_solver_costs(lo_cost_out_ptr_thrust, hi_cost_out_ptr_thrust, delta_lo_out_ptr_thrust, delta_hi_out_ptr_thrust);
-        },"Get the costs i.e., (lo_costs (size = nr_layers()), hi_costs (size = nr_layers()), delta_lo (size = nr_variables()), delta_hi (size = nr_variables())),\n"
+            thrust::device_ptr<float> deferred_mm_out_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(deferred_mm_out_ptr));
+            solver.get_solver_costs(lo_cost_out_ptr_thrust, hi_cost_out_ptr_thrust, deferred_mm_out_ptr_thrust);
+        },"Get the costs i.e., (lo_costs (size = nr_layers()), hi_costs (size = nr_layers()), deferred_mm_out_ptr_thrust (size = nr_variables()), \n"
         "and set in the memory pointed to by input pointers to preallocated memory. This method can be used to restore solver state by calling set_solver_costs().")
 
         .def("set_solver_costs", [](bdd_type& solver, 
             const long lo_cost_ptr,
             const long hi_cost_ptr,
-            const long delta_lo_ptr,
-            const long delta_hi_ptr)
+            const long def_mm_ptr)
         {
             thrust::device_ptr<float> lo_cost_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(lo_cost_ptr));
             thrust::device_ptr<float> hi_cost_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(hi_cost_ptr));
-            thrust::device_ptr<float> delta_lo_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(delta_lo_ptr));
-            thrust::device_ptr<float> delta_hi_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(delta_hi_ptr));
-            solver.set_solver_costs(lo_cost_ptr_thrust, hi_cost_ptr_thrust, delta_lo_ptr_thrust, delta_hi_ptr_thrust);
-        },"Set the costs i.e., (lo_costs (size = nr_layers()), hi_costs (size = nr_layers()), delta_lo (size = nr_variables()), delta_hi (size = nr_variables())),\n"
-        "to set solver state.")
+            thrust::device_ptr<float> def_mm_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(def_mm_ptr));
+            solver.set_solver_costs(lo_cost_ptr_thrust, hi_cost_ptr_thrust, def_mm_ptr_thrust);
+        },"Set the costs i.e., (lo_costs (size = nr_layers()), hi_costs (size = nr_layers()), def_mm_ptr (size = nr_layers()) to set solver state.")
 
         .def("iterations", [](bdd_type& solver, 
                             const long dist_weights_ptr, 
@@ -112,6 +107,7 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
                                 const long dist_weights_ptr,
                                 const long grad_lo_cost_ptr,
                                 const long grad_hi_cost_ptr,
+                                const long cost_from_terminal_ptr,
                                 const long grad_mm_ptr,
                                 const long grad_dist_weights_out_ptr,
                                 const long grad_omega_out_ptr,
@@ -122,12 +118,14 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
             thrust::device_ptr<const float> dist_weights_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(dist_weights_ptr));
             thrust::device_ptr<float> grad_lo_cost_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(grad_lo_cost_ptr));
             thrust::device_ptr<float> grad_hi_cost_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(grad_hi_cost_ptr));
+            thrust::device_ptr<float> cost_from_terminal_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(cost_from_terminal_ptr));
             thrust::device_ptr<float> grad_mm_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(grad_mm_ptr));
             thrust::device_ptr<float> grad_dist_weights_out_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(grad_dist_weights_out_ptr));
             thrust::device_ptr<float> grad_omega_out_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(grad_omega_out_ptr));
             solver.grad_iterations(dist_weights_ptr_thrust, 
                                 grad_lo_cost_ptr_thrust, 
                                 grad_hi_cost_ptr_thrust,
+                                cost_from_terminal_ptr_thrust,
                                 grad_mm_ptr_thrust,
                                 grad_dist_weights_out_ptr_thrust,
                                 grad_omega_out_ptr_thrust,
@@ -139,29 +137,31 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
             "dist_weights: distribution weights used in the forward pass.\n"
             "grad_lo_cost: Input: incoming grad w.r.t lo_cost which were output from iterations and Outputs in-place to compute grad. lo_cost before iterations.\n"
             "grad_hi_cost: Input: incoming grad w.r.t hi_cost which were output from iterations and Outputs in-place to compute grad. hi_cost before iterations.\n"
+            "grad_cost_from_terminal: Input: incoming grad w.r.t costs_from_terminal which were output (not exposed to Python) from previous call to iterations().\n"
+                "\t The underlying array should have size nr_bdd_nodes(). If this function is used at the start of backward pass then initialize with 0's."
             "grad_mm: Input: incoming grad w.r.t min-marg. diff. which were output from iterations and Outputs in-place to compute grad. w.r.t deferred min-marginals used in iterations.\n"
             "grad_dist_weights_out: Output: contains grad w.r.t distribution weights, assumes the memory is already allocated (= nr_layers()).\n"
-            "grad_dist_weights_out_ptr_thrust:  Output: contains grad w.r.t omega (size = 1)."
+            "grad_omega_out_ptr:  Output: contains grad w.r.t omega (size = 1)."
             "omega: floating point scalar in [0, 1] to scale current min-marginal difference before subtracting. (Same value as used in forward pass).\n"
             "track_grad_after_itr: First runs the solver for track_grad_after_itr many iterations without tracking gradients and then backpropagates through only last track_grad_for_num_itr many itrs.\n"
             "track_grad_for_num_itr: See prev. argument")
 
-        .def("distribute_delta", [](bdd_type& solver, const long dist_weights_ptr) 
+        .def("distribute_delta", [](bdd_type& solver, const long def_mm_ptr) 
         {
-            thrust::device_ptr<float> distw_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(dist_weights_ptr));
-            solver.distribute_delta(distw_ptr_thrust);
+            thrust::device_ptr<float> def_mm_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(def_mm_ptr));
+            solver.distribute_delta(def_mm_ptr_thrust);
         }, "Distributes the deferred min-marginals back to lo and hi costs such that dual constraint are satisfied with equality.\n"
-            "For distributing the weights pointed to by dist_weights_ptr are used.")
+            "def_mm_ptr is zero-ed out after distributing.")
 
         .def("grad_distribute_delta", [](bdd_type& solver, 
             const long grad_lo_cost_ptr,
             const long grad_hi_cost_ptr,
-            const long grad_dist_weights_out_ptr)
+            const long grad_def_mm_out_ptr)
         {
             thrust::device_ptr<float> grad_lo_cost_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(grad_lo_cost_ptr));
             thrust::device_ptr<float> grad_hi_cost_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(grad_hi_cost_ptr));
-            thrust::device_ptr<float> grad_dist_weights_out_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(grad_dist_weights_out_ptr));
-            solver.grad_distribute_delta(grad_lo_cost_ptr_thrust, grad_hi_cost_ptr_thrust, grad_dist_weights_out_ptr_thrust);
+            thrust::device_ptr<float> grad_def_mm_out_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(grad_def_mm_out_ptr));
+            solver.grad_distribute_delta(grad_lo_cost_ptr_thrust, grad_hi_cost_ptr_thrust, grad_def_mm_out_ptr_thrust);
         }, "Backprop. through distribute_delta.")
 
         .def("all_min_marginal_differences", [](bdd_type& solver, const long mm_diff_out_ptr)
