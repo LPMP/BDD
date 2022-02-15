@@ -8,15 +8,6 @@
 using namespace LPMP;
 using namespace BDD;
 
-const char * two_simplex = 
-R"(Minimize
-1 x_1 + 2 x_2 + 1 x_3
-+2 x_4 + 1 x_5 + 2 x_6
-Subject To
-x_1 + x_2 + x_3 + x_4 = 1
-x_4 + x_5 + x_6 = 2
-End)";
-
 const char * matching_3x3 = 
 R"(Minimize
 -2 x_11 - 1 x_12 - 1 x_13
@@ -329,7 +320,7 @@ thrust::device_vector<double> compute_expected_mm_diff(const char* instance)
     return expected_mm_diff;
 }
 
-void test_problem(const char* instance, const double expected_lb, const double omega = 0.5, const double tol = 1e-12)
+void test_problem(const char* instance, const double expected_lb, double omega = 0.1, const double tol = 1e-12)
 {
     const thrust::device_vector<double> expected_mm_diff = compute_expected_mm_diff(instance);
     ILP_input ilp = ILP_parser::parse_string(instance);
@@ -343,27 +334,25 @@ void test_problem(const char* instance, const double expected_lb, const double o
     thrust::device_vector<double> dist_weights(solver.nr_layers(), 1.0);
     const thrust::device_vector<int> primal_var_index = solver.get_primal_variable_index();
 
-    thrust::device_vector<double> mm_diff(solver.nr_layers());
+    thrust::device_vector<double> mm_diff(solver.nr_layers(), 0.0);
 
     thrust::device_vector<double> final_mm_diff(solver.nr_layers());
     thrust::device_vector<double> loss_grad_mm(solver.nr_layers());
     thrust::device_vector<double> grad_lo_costs(solver.nr_layers());
     thrust::device_vector<double> grad_hi_costs(solver.nr_layers());
 
+    project_dist_weights(solver, dist_weights, primal_var_index);
     auto initial_costs = solver.get_solver_costs();
     const double initial_lb = solver.lower_bound();
     const int num_solver_itr = 5;
     double prev_loss = 0;
     double avg_loss_improvement_per_itr = 0;
-    const int num_learning_itr = 25;
+    const int num_learning_itr = 500;
     for(int learning_itr = 0; learning_itr < num_learning_itr; learning_itr++)
     {
         solver.set_solver_costs(initial_costs); // reset to initial state.
-        thrust::fill(mm_diff.begin(), mm_diff.end(), 0.0);
 
         // Forward pass:
-        project_dist_weights(solver, dist_weights, primal_var_index);
-        // test(initial_lb == solver.lower_bound());
         solver.iterations(dist_weights.data(), mm_diff.data(), num_solver_itr, omega);
         const auto costs_before_dist = solver.get_solver_costs();
         solver.distribute_delta(mm_diff.data());
@@ -372,8 +361,7 @@ void test_problem(const char* instance, const double expected_lb, const double o
         const auto& mms_1 = std::get<2>(mms);
         thrust::transform(mms_1.begin(), mms_1.end(), mms_0.begin(), final_mm_diff.begin(), thrust::minus<double>());
         thrust::device_vector<double> loss(final_mm_diff.size());
-        const thrust::device_vector<int> pv = solver.get_primal_variable_index();
-        loss_func compute_loss({thrust::raw_pointer_cast(pv.data()),
+        loss_func compute_loss({thrust::raw_pointer_cast(solver.get_primal_variable_index().data()),
                                 thrust::raw_pointer_cast(final_mm_diff.data()),
                                 thrust::raw_pointer_cast(expected_mm_diff.data()),
                                 thrust::raw_pointer_cast(loss.data()),
@@ -384,7 +372,7 @@ void test_problem(const char* instance, const double expected_lb, const double o
         if (learning_itr > 0)
             avg_loss_improvement_per_itr += (prev_loss - loss_val);
         prev_loss = loss_val;
-        std::cout<<"Grad itr: "<<learning_itr<<", Loss: "<<loss_val<<", LB: "<<solver.lower_bound()<<", Max. possible LB:  "<<expected_lb<<"\n";
+        std::cout<<"Grad itr: "<<learning_itr<<", Omega: "<<omega<<", Loss: "<<loss_val<<", LB: "<<solver.lower_bound()<<", Max. possible LB:  "<<expected_lb<<"\n";
 
         //Backward pass:
         loss_gradient_func compute_loss_grad({thrust::raw_pointer_cast(solver.get_primal_variable_index().data()),
@@ -396,38 +384,11 @@ void test_problem(const char* instance, const double expected_lb, const double o
         thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + solver.nr_layers(), compute_loss_grad);
         solver.grad_mm_diff_all_hops(loss_grad_mm.data(), grad_lo_costs.data(), grad_hi_costs.data());
 
-        // Check min_marginal derivative sign:
-        // const auto final_costs = solver.get_solver_costs();
-        // thrust::device_vector<double> pert_lo_costs(std::get<0>(final_costs));
-        // thrust::device_vector<double> pert_hi_costs(std::get<1>(final_costs));
-        // grad_step_min_marginals grad_step_mm_func({
-        //                                         thrust::raw_pointer_cast(grad_lo_costs.data()),
-        //                                         thrust::raw_pointer_cast(grad_hi_costs.data()),
-        //                                         thrust::raw_pointer_cast(pert_lo_costs.data()),
-        //                                         thrust::raw_pointer_cast(pert_hi_costs.data()),
-        //                                         5e-3});
-        // thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + solver.nr_layers(), grad_step_mm_func);
-        // initial_costs = std::make_tuple(pert_lo_costs, pert_hi_costs, std::get<2>(initial_costs), std::get<3>(initial_costs));
-        // solver.set_solver_costs(std::make_tuple(pert_lo_costs, pert_hi_costs, std::get<2>(final_costs), std::get<3>(final_costs)));
-        // const auto pmms = solver.min_marginals_cuda(false);
-        // const auto& pmms_0 = std::get<1>(pmms);
-        // const auto& pmms_1 = std::get<2>(pmms);
-        // thrust::transform(pmms_1.begin(), pmms_1.end(), pmms_0.begin(), final_mm_diff.begin(), thrust::minus<double>());
-        // thrust::device_vector<double> lossp(final_mm_diff.size());
-        // loss_func compute_lossp({thrust::raw_pointer_cast(solver.get_primal_variable_index().data()),
-        //                         thrust::raw_pointer_cast(final_mm_diff.data()),
-        //                         thrust::raw_pointer_cast(expected_mm_diff.data()),
-        //                         thrust::raw_pointer_cast(lossp.data()),
-        //                         solver.nr_variables()});
-
-        // thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + solver.nr_layers(), compute_lossp);
-        // const double loss_valp = thrust::reduce(lossp.begin(), lossp.end());
-        // std::cout<<"Grad itr: "<<learning_itr<<", Loss: "<<loss_valp<<", LB: "<<solver.lower_bound()<<", Max. possible:  "<<expected_lb<<"\n";
-
         thrust::device_vector<double> grad_dist_weights(solver.nr_layers(), 0.0);
         thrust::device_vector<double> grad_def_mm(solver.nr_layers(), 0.0);
+        thrust::device_vector<double> deferred_min_marginals(solver.nr_layers(), 0.0);
         thrust::device_vector<double> grad_cost_from_terminal(solver.nr_bdd_nodes(), 0.0);
-        thrust::device_vector<double> grad_omega(1);
+        thrust::device_vector<double> grad_omega(1, 0.0);
 
         solver.set_solver_costs(costs_before_dist);
         solver.grad_distribute_delta(grad_lo_costs.data(), grad_hi_costs.data(), grad_def_mm.data());
@@ -436,18 +397,13 @@ void test_problem(const char* instance, const double expected_lb, const double o
                                 grad_def_mm.data(), grad_dist_weights.data(), grad_omega.data(),
                                 omega, 0, num_solver_itr);
         
-        grad_step_dist_w grad_step_func({
-            thrust::raw_pointer_cast(grad_dist_weights.data()),
-            thrust::raw_pointer_cast(dist_weights.data()),
-            2.5e-3});
-        thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + solver.nr_layers(), grad_step_func);
+        omega = max(min(omega - 5e-4 * grad_omega[0], 1.0), 0.0);
     }
     avg_loss_improvement_per_itr = avg_loss_improvement_per_itr / num_learning_itr;
     std::cout<<"\n Avg. loss improvment per gradient iteration: "<<avg_loss_improvement_per_itr<<" (should be positive)\n";
-    test(avg_loss_improvement_per_itr > tol);
+    // test(avg_loss_improvement_per_itr > tol);
 
     solver.set_solver_costs(initial_costs); // reset to initial state.
-    project_dist_weights(solver, dist_weights, primal_var_index);
     thrust::fill(mm_diff.begin(), mm_diff.end(), 0.0);
     solver.iterations(dist_weights.data(), mm_diff.data(), num_solver_itr, omega);
     solver.distribute_delta(mm_diff.data());
@@ -466,8 +422,6 @@ void test_problem(const char* instance, const double expected_lb, const double o
 
 int main(int argc, char** argv)
 {
-    std::cout<<"two_simplex"<<"\n";
-    test_problem(two_simplex, 3.0);
     std::cout<<"matching_3x3"<<"\n";
     test_problem(matching_3x3, -6.0);
     std::cout<<"short_chain_shuffled"<<"\n";

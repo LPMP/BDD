@@ -85,7 +85,8 @@ class CMakeBuild(build_ext):
     def build_extension(self, ext):
         extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
         cmake_args = ['-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=' + extdir,
-                      '-DPYTHON_EXECUTABLE=' + sys.executable]
+                      '-DPYTHON_EXECUTABLE=' + sys.executable,
+                      '-DWITH_CUDA=ON']
 
         cfg = 'Debug' if self.debug else 'Release'
         build_args = ['--config', cfg]
@@ -114,8 +115,12 @@ setup(
     version='0.0.1',
     description='Bindings for solving 0-1 integer linear programs via BDDs',
     packages=find_packages('src'),
+    package_dir={'':'src'},
     ext_package='BDD',
-    ext_modules=[CMakeExtension(name='bdd_mp_py'), CMakeExtension(name='ILP_instance_py')],
+    ext_modules=[CMakeExtension(name='bdd_mp_py'), 
+                CMakeExtension(name='ILP_instance_py'),
+                CMakeExtension(name='bdd_cuda_learned_mma_py')],
+    py_modules=['bdd_cuda_torch'],
     cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,
     setup_requires=['wheel']

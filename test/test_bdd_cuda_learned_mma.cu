@@ -239,12 +239,11 @@ void test_problem(const char* instance, const double expected_lb, const double t
                             solver.nr_variables()});
 
     thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + dist_weights.size(), func);
-    thrust::device_vector<double> new_mm_diff(solver.nr_layers());
-    solver.iterations(dist_weights.data(), new_mm_diff.data(), 200, 0.5);
+    thrust::device_vector<double> mm_diff(solver.nr_layers(), 0.0);
+    solver.iterations(dist_weights.data(), mm_diff.data(), 200, 0.5);
     
     std::cout<<"Lower bound before distribute: "<<solver.lower_bound()<<", Expected: "<<expected_lb<<"\n";
-    solver.compute_delta(new_mm_diff.data());
-    solver.distribute_delta(dist_weights.data());
+    solver.distribute_delta(mm_diff.data());
 
     std::vector<double> cost_vector_after = solver.compute_primal_objective_vector();
     for(size_t i=0; i<solver.nr_variables(); ++i)

@@ -50,21 +50,21 @@ namespace LPMP {
     }
 
     template<typename REAL>
-    void bdd_cuda_learned_mma<REAL>::forward_iteration_learned_mm_dist(const thrust::device_ptr<const REAL> dist_weights, thrust::device_ptr<REAL> mm_diff_out_ptr, const int last_hop, const REAL omega)
+    void bdd_cuda_learned_mma<REAL>::forward_iteration_learned_mm_dist(const thrust::device_ptr<const REAL> dist_weights, thrust::device_ptr<REAL> mm_diff_ptr, const REAL omega)
     {
-        assert(last_hop < this->nr_hops());
-        if(!this->backward_state_valid_) // TODO: This can be optimized during grad. calculation by only running for unsolved hops.
+        if(!this->backward_state_valid_)
             this->backward_run(false); //For the first iteration need to have costs from terminal. 
         
+        this->compute_delta(mm_diff_ptr);
+        this->flush_mm(mm_diff_ptr);
         // Clear states.
         this->flush_costs_from_root();
-        this->flush_mm(mm_diff_out_ptr);
-        for (int s = 0; s <= last_hop; s++)
+        for (int s = 0; s < this->nr_hops(); s++)
         {
-            this->min_marginals_from_directional_costs(s, omega, mm_diff_out_ptr);
+            this->min_marginals_from_directional_costs(s, omega, mm_diff_ptr);
 
             const int num_nodes_processed = s > 0 ? this->cum_nr_bdd_nodes_per_hop_dist_[s - 1] : 0;
-            const int cur_num_bdd_nodes = this->cum_nr_bdd_nodes_per_hop_dist_[s] - num_nodes_processed;
+            const int cur_num_bdd_nodes = this->nr_bdd_nodes(s);
             const int blockCount = ceil(cur_num_bdd_nodes / (float) NUM_THREADS);
 
             forward_step_learned_mm_dist<<<blockCount, NUM_THREADS>>>(cur_num_bdd_nodes, num_nodes_processed,
@@ -74,7 +74,7 @@ namespace LPMP {
                                                             thrust::raw_pointer_cast(this->primal_variable_index_.data()),
                                                             thrust::raw_pointer_cast(this->delta_lo_.data()),
                                                             thrust::raw_pointer_cast(this->delta_hi_.data()),
-                                                            thrust::raw_pointer_cast(mm_diff_out_ptr),
+                                                            thrust::raw_pointer_cast(mm_diff_ptr),
                                                             thrust::raw_pointer_cast(dist_weights),
                                                             thrust::raw_pointer_cast(this->lo_cost_.data()),
                                                             thrust::raw_pointer_cast(this->hi_cost_.data()),
@@ -82,17 +82,7 @@ namespace LPMP {
                                                             thrust::raw_pointer_cast(this->hi_cost_out_.data()),
                                                             thrust::raw_pointer_cast(this->cost_from_root_.data()));
         }
-        if (last_hop == this->nr_hops() - 1) // if was complete forward pass.
-        {
-            this->forward_state_valid_ = true;
-            this->compute_delta(mm_diff_out_ptr);
-        }
-        else
-        {   // Since the solver was run incompletely so copy the not updated dual variables to output.
-            const int start_offset = this->cum_nr_layers_per_hop_dist_[last_hop];
-            thrust::copy(this->lo_cost_.begin() + start_offset, this->lo_cost_.end(), this->lo_cost_out_.begin());
-            thrust::copy(this->hi_cost_.begin() + start_offset, this->hi_cost_.end(), this->hi_cost_out_.begin());
-        }
+        this->forward_state_valid_ = true;
         thrust::swap(this->lo_cost_, this->lo_cost_out_);
         thrust::swap(this->hi_cost_, this->hi_cost_out_);
         this->flush_backward_states();
@@ -141,19 +131,18 @@ namespace LPMP {
     }
 
     template<typename REAL>
-    void bdd_cuda_learned_mma<REAL>::backward_iteration_learned_mm_dist(const thrust::device_ptr<const REAL> dist_weights, thrust::device_ptr<REAL> mm_diff_out_ptr, const int last_hop, const REAL omega)
+    void bdd_cuda_learned_mma<REAL>::backward_iteration_learned_mm_dist(const thrust::device_ptr<const REAL> dist_weights, thrust::device_ptr<REAL> mm_diff_ptr, const REAL omega)
     {
-        assert(last_hop < this->nr_hops());
         assert(this->forward_state_valid_);
 
-        this->flush_mm(mm_diff_out_ptr);
-        for (int s = this->cum_nr_bdd_nodes_per_hop_dist_.size() - 2; s >= last_hop; s--)
+        this->compute_delta(mm_diff_ptr);
+        this->flush_mm(mm_diff_ptr);
+        for (int s = this->nr_hops() - 1; s >= 0; s--)
         {
-            this->min_marginals_from_directional_costs(s, omega, mm_diff_out_ptr);
+            this->min_marginals_from_directional_costs(s, omega, mm_diff_ptr);
 
             const int start_offset = s > 0 ? this->cum_nr_bdd_nodes_per_hop_dist_[s - 1] : 0;
-
-            const int cur_num_bdd_nodes = this->cum_nr_bdd_nodes_per_hop_dist_[s] - start_offset;
+            const int cur_num_bdd_nodes = this->nr_bdd_nodes(s);
             const int blockCount = ceil(cur_num_bdd_nodes / (REAL) NUM_THREADS);
 
             backward_step_learned_mm_dist<<<blockCount, NUM_THREADS>>>(cur_num_bdd_nodes, start_offset,
@@ -163,7 +152,7 @@ namespace LPMP {
                                                             thrust::raw_pointer_cast(this->primal_variable_index_.data()),
                                                             thrust::raw_pointer_cast(this->delta_lo_.data()),
                                                             thrust::raw_pointer_cast(this->delta_hi_.data()),
-                                                            thrust::raw_pointer_cast(mm_diff_out_ptr),
+                                                            thrust::raw_pointer_cast(mm_diff_ptr),
                                                             thrust::raw_pointer_cast(dist_weights),
                                                             thrust::raw_pointer_cast(this->lo_cost_.data()),
                                                             thrust::raw_pointer_cast(this->hi_cost_.data()),
@@ -171,85 +160,42 @@ namespace LPMP {
                                                             thrust::raw_pointer_cast(this->hi_cost_out_.data()),
                                                             thrust::raw_pointer_cast(this->cost_from_terminal_.data()));
         }
-        if (last_hop == 0) // if was complete backward pass.
-        {
-            this->backward_state_valid_ = true;
-            this->compute_delta(mm_diff_out_ptr);
-        }
-        else
-        {   // Since the solver was run incompletely so copy the not updated dual variables to output.
-            const int end_offset = this->cum_nr_layers_per_hop_dist_[last_hop - 1];
-            thrust::copy(this->lo_cost_.begin(), this->lo_cost_.begin() + end_offset, this->lo_cost_out_.begin());
-            thrust::copy(this->hi_cost_.begin(), this->hi_cost_.begin() + end_offset, this->hi_cost_out_.begin());
-        }
+        this->backward_state_valid_ = true;
         thrust::swap(this->lo_cost_, this->lo_cost_out_);
         thrust::swap(this->hi_cost_, this->hi_cost_out_);
         this->flush_forward_states();
     }
 
     template<typename REAL>
-    void bdd_cuda_learned_mma<REAL>::iterations(const thrust::device_ptr<const REAL> dist_weights, thrust::device_ptr<REAL> mm_diff_out_ptr, const int num_itr, const REAL omega)
+    void bdd_cuda_learned_mma<REAL>::iterations(const thrust::device_ptr<const REAL> dist_weights, thrust::device_ptr<REAL> mm_diff_ptr, const int num_itr, const REAL omega)
     {
         for(int itr = 0; itr < num_itr; itr++)
         {
-            forward_iteration_learned_mm_dist(dist_weights, mm_diff_out_ptr, this->nr_hops() - 1, omega);
-            backward_iteration_learned_mm_dist(dist_weights, mm_diff_out_ptr, 0, omega);
+            forward_iteration_learned_mm_dist(dist_weights, mm_diff_ptr, omega);
+            backward_iteration_learned_mm_dist(dist_weights, mm_diff_ptr, omega);
         }
-    }
-
-    template<typename REAL>
-    struct distribute_delta_weighted_func {
-        const int* primal_index;
-        const REAL* delta_lo;
-        const REAL* delta_hi;
-        const REAL* dist_weights;
-        REAL* lo_costs;
-        REAL* hi_costs;
-        __host__ __device__ void operator()(const int i)
-        {
-            const int current_primal_index = primal_index[i];
-            if (current_primal_index == INT_MAX)
-                return; // terminal node.
-
-            lo_costs[i] += dist_weights[i] * delta_lo[current_primal_index];
-            hi_costs[i] += dist_weights[i] * delta_hi[current_primal_index];
-        }
-    };
-
-    template<typename REAL>
-    void bdd_cuda_learned_mma<REAL>::distribute_delta(const thrust::device_ptr<const REAL> dist_weights)
-    {
-        assert(!this->delta_normalized_);
-        distribute_delta_weighted_func<REAL> func_dist_delta({
-                                            thrust::raw_pointer_cast(this->primal_variable_index_.data()),
-                                            thrust::raw_pointer_cast(this->delta_lo_.data()),
-                                            thrust::raw_pointer_cast(this->delta_hi_.data()),
-                                            thrust::raw_pointer_cast(dist_weights),
-                                            thrust::raw_pointer_cast(this->lo_cost_.data()),
-                                            thrust::raw_pointer_cast(this->hi_cost_.data())});
-
-        thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + this->nr_layers(), func_dist_delta);
-        this->flush_forward_states();
-        this->flush_backward_states();
-
-        thrust::fill(this->delta_lo_.begin(), this->delta_lo_.end(), 0.0f);
-        thrust::fill(this->delta_hi_.begin(), this->delta_hi_.end(), 0.0f);
     }
 
     template<typename REAL>
     void bdd_cuda_learned_mma<REAL>::grad_iterations(
             const thrust::device_ptr<const REAL> dist_weights, // distribution weights used in the forward pass.
-            thrust::device_ptr<REAL> grad_lo_cost, // Input: incoming grad w.r.t lo_cost which were output from iterations and Outputs in-place to compute grad. lo_cost before iterations.
-            thrust::device_ptr<REAL> grad_hi_cost, // Input: incoming grad w.r.t hi_cost which were output from iterations and Outputs in-place to compute grad. hi_cost before iterations.
-            thrust::device_ptr<REAL> grad_mm, // Input: incoming grad w.r.t min-marg. diff. which were output from iterations and Outputs in-place to compute grad. w.r.t deferred min-marginals used in iterations.
+            thrust::device_ptr<REAL> grad_lo_cost, // Input: incoming grad w.r.t lo_cost, Outputs in-place to compute grad. lo_cost before iterations.
+            thrust::device_ptr<REAL> grad_hi_cost, // Input: incoming grad w.r.t hi_cost, Outputs in-place to compute grad. hi_cost before iterations.
+            thrust::device_ptr<REAL> grad_cost_from_terminal, // Input: incoming grad w.r.t cost_from_terminal (size = nr_bdd_nodes()), Outputs in-place to compute grad before iterations.
+            thrust::device_ptr<REAL> grad_mm, // Input: incoming grad w.r.t min-marg. diff., Outputs in-place to compute grad. w.r.t deferred min-marginals used in iterations.
             thrust::device_ptr<REAL> grad_dist_weights_out, // Output: contains grad w.r.t distribution weights, assumes the memory is already allocated (= nr_layers()) and contains valid gradients upto the current point.
-            const double omega,
+            thrust::device_ptr<REAL> grad_omega,    // Output: contains grad w.r.t omega (size = 1).
+            const REAL omega,
             const int track_grad_after_itr,      // First runs the solver for track_grad_after_itr many iterations without tracking gradients and then backpropagates through only last track_grad_for_num_itr many itrs.
             const int track_grad_for_num_itr     // See prev. argument.
         )
     {
         thrust::fill(grad_dist_weights_out, grad_dist_weights_out + this->nr_layers(), 0.0);
-        iterations(dist_weights, this->mm_diff_.data(), track_grad_after_itr, omega);
+        thrust::fill(grad_omega, grad_omega + 1, 0.0);
+
+        thrust::device_vector<REAL> grad_cost_from_root(this->cost_from_root_.size(), 0.0);
+
+        iterations(dist_weights, this->deffered_mm_diff_.data(), track_grad_after_itr, omega);
         const auto initial_costs = this->get_solver_costs();
 
         for(int itr = track_grad_for_num_itr - 1; itr >= 0; itr--)
@@ -260,97 +206,66 @@ namespace LPMP {
     
             // To compute grad for iteration itr, first take the solver to state of iteration itr - 1.
             if (itr > 0)
-                iterations(dist_weights, this->mm_diff_.data(), itr - 1, omega);
+                iterations(dist_weights, this->deffered_mm_diff_.data(), itr - 1, omega);
 
+            // save costs and mm for later.
             const auto cur_costs = this->get_solver_costs();
 
             // First backprop through backward iteration which requires running forward iteration to get to the required state.
-            forward_iteration_learned_mm_dist(dist_weights, this->mm_diff_.data(), this->nr_hops() - 1, omega);
-            grad_backward_iteration_learned_mm_dist(this->mm_diff_.data(), dist_weights, grad_lo_cost, grad_hi_cost, grad_mm, grad_dist_weights_out, omega);
-            // std::cout<<"grad_lo_min: "<<*thrust::min_element(grad_lo_cost, grad_lo_cost + this->nr_layers());
-            // std::cout<<", grad_lo_max: "<<*thrust::max_element(grad_lo_cost, grad_lo_cost + this->nr_layers())<<"\n";
+            forward_iteration_learned_mm_dist(dist_weights, this->deffered_mm_diff_.data(), omega);
+
+            // backward_iteration mapped (lo_costs, hi_costs, dist_weights, deferred mms, cost from root) -> (new_lo_costs, new_hi_costs, new mms, costs from terminal)
+            grad_backward_iteration_learned_mm_dist(this->deffered_mm_diff_.data(), dist_weights, 
+                                                    grad_lo_cost, grad_hi_cost, 
+                                                    grad_cost_from_root.data(), grad_cost_from_terminal, 
+                                                    grad_mm, grad_dist_weights_out, omega, grad_omega);
+            // backward_iteration produced terminal costs whose gradients are now accumulated into their predecessors.
+            // So zero-out terminal costs gradients for accumulation from forward_iteration.
+            thrust::fill(grad_cost_from_terminal, grad_cost_from_terminal + this->nr_bdd_nodes(), 0.0); 
 
             this->set_solver_costs(cur_costs);
-            grad_forward_iteration_learned_mm_dist(this->mm_diff_.data(), dist_weights, grad_lo_cost, grad_hi_cost, grad_mm, grad_dist_weights_out, omega);
-            // std::cout<<"grad_lo_min: "<<*thrust::min_element(grad_lo_cost, grad_lo_cost + this->nr_layers());
-            // std::cout<<", grad_lo_max: "<<*thrust::max_element(grad_lo_cost, grad_lo_cost + this->nr_layers())<<"\n\n";
+            // forward_iteration mapped (lo_costs, hi_costs, dist_weights, deferred mms, cost from terminal) -> (new_lo_costs, new_hi_costs, new mms, costs from root)
+            grad_forward_iteration_learned_mm_dist(this->deffered_mm_diff_.data(), dist_weights, 
+                                                grad_lo_cost, grad_hi_cost, 
+                                                grad_cost_from_root.data(), grad_cost_from_terminal, 
+                                                grad_mm, grad_dist_weights_out, omega, grad_omega);
+
+            thrust::fill(grad_cost_from_root.data(), grad_cost_from_root.data() + this->nr_bdd_nodes(), 0.0);
         }
     }
 
     template<typename REAL>
-    struct scale_grad_mm {
-        const int* bdd_index;
-        const REAL* incoming_grad_mm_diff;
-        REAL* grad_out;
-        const REAL omega;
-        __host__ __device__ void operator()(const int layer_index)
-        {
-            const int current_bdd_index = bdd_index[layer_index];
-            const REAL w = incoming_grad_mm_diff[current_bdd_index] * omega;
-            grad_out[layer_index] *= w;
-        }
-    };
-
-    // computing gradients w.r.t lambda = hi_cost - lo_cost. Gradient w.r.t hi_cost and lo_cost can be computed outside this function.
-    template<typename REAL>
-    thrust::device_vector<REAL> bdd_cuda_learned_mma<REAL>::grad_mm_diff_of_hop(const thrust::device_ptr<const REAL> incoming_grad_mm_hop, const int hop_index, const REAL omega)
+    void bdd_cuda_learned_mma<REAL>::grad_mm_diff_all_hops(
+        const thrust::device_ptr<const REAL> incoming_grad_mm,
+        thrust::device_ptr<REAL> grad_lo_cost_out, // Outputs in-place to compute grad. lo_cost before all min-marginal difference computation.
+        thrust::device_ptr<REAL> grad_hi_cost_out // Outputs in-place to compute grad. hi_cost before all min-marginal difference computation.
+        )
     {
-        thrust::device_vector<REAL> grad_lambda; 
-        const int start_offset = hop_index > 0 ? this->cum_nr_layers_per_hop_dist_[hop_index - 1] : 0;
-        const int end_offset = this->cum_nr_layers_per_hop_dist_[hop_index];
-        const int num_layers_hop = end_offset - start_offset; // incoming_grad_mm should point to a vector of size num_layers_hop.
-        assert(hop_index < this->cum_nr_layers_per_hop_dist_.size() - 1); // last hop contains terminal nodes so its mm's are not computed in forward pass anyway.
+        thrust::device_vector<REAL> grad_cost_from_root(this->cost_from_root_.size(), 0.0);
+        thrust::device_vector<REAL> grad_cost_from_terminal(this->cost_from_terminal_.size(), 0.0);
+
+        thrust::fill(grad_lo_cost_out, grad_lo_cost_out + this->nr_layers(), 0.0);
+        thrust::fill(grad_hi_cost_out, grad_hi_cost_out + this->nr_layers(), 0.0);
+        
+        thrust::device_vector<REAL> grad_omega(1, 0.0);
+
+        // Backprop through min-marginal computation from arc costs and root, terminal costs:
+        for (int hop_index = 0; hop_index < this->nr_hops(); hop_index++)
         {
-            thrust::device_vector<REAL> orig_costs(num_layers_hop);
-
-            auto grad_mm_hi_or_lo = [&](auto arc_cost_begin, auto arc_cost_end) -> thrust::device_vector<REAL> {
-                // Set lo (or hi) costs of hop to INF so that when we compute opt. solution per bdd, then it automatically uses hi (or lo) arcs.
-                thrust::copy(arc_cost_begin, arc_cost_end, orig_costs.begin()); 
-                thrust::fill(arc_cost_begin, arc_cost_end, CUDART_INF_F_HOST);
-                this->flush_forward_states();
-                this->flush_backward_states();
-                const thrust::device_vector<REAL> per_bdd_sol = this->bdds_solution_cuda();
-                assert(std::isfinite(this->lower_bound()));
-                thrust::copy(orig_costs.begin(), orig_costs.end(), arc_cost_begin); // Revert the operation of settings costs to INF.
-                this->flush_forward_states();
-                this->flush_backward_states();
-                return per_bdd_sol;
-            };
-
-            thrust::device_vector<REAL> per_bdd_sol_lo = grad_mm_hi_or_lo(this->hi_cost_.begin() + start_offset, this->hi_cost_.begin() + end_offset);
-            thrust::device_vector<REAL> per_bdd_sol_hi = grad_mm_hi_or_lo(this->lo_cost_.begin() + start_offset, this->lo_cost_.begin() + end_offset);
-            grad_lambda = thrust::device_vector<REAL>(per_bdd_sol_lo.size());
-            thrust::transform(per_bdd_sol_hi.begin(), per_bdd_sol_hi.end(), per_bdd_sol_lo.begin(), grad_lambda.begin(), thrust::minus<REAL>());
+            grad_mm_diff_of_hop(this->lo_cost_.data(), this->hi_cost_.data(), NULL, incoming_grad_mm, grad_lo_cost_out, grad_hi_cost_out, 
+                                grad_cost_from_root.data(), grad_cost_from_terminal.data(), 
+                                grad_omega.data(), hop_index, 1.0, false);
         }
-        thrust::device_vector<REAL> rearranged_grad_mm_bdd_index(this->nr_bdds(), 0.0); // arrange grad_mm_hop so that grad value for each BDD can be found at the BDD index.
-        thrust::scatter(incoming_grad_mm_hop, incoming_grad_mm_hop + num_layers_hop, this->bdd_index_.begin() + start_offset, rearranged_grad_mm_bdd_index.begin());
-
-        // Now multiply each BDD solution by corresponding gradient dL / d mm_diff.
-        scale_grad_mm<REAL> func({thrust::raw_pointer_cast(this->bdd_index_.data()), 
-                                thrust::raw_pointer_cast(rearranged_grad_mm_bdd_index.data()), 
-                                thrust::raw_pointer_cast(grad_lambda.data()),
-                                omega});
-        thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + this->bdd_index_.size(), func);
-        return grad_lambda;
-    }
-    
-    // computing gradients w.r.t lambda = hi_cost - lo_cost. Gradient w.r.t hi_cost and lo_cost can be computed outside this function.
-    template<typename REAL>
-    std::tuple<thrust::device_vector<REAL>, thrust::device_vector<REAL>> bdd_cuda_learned_mma<REAL>::grad_mm_diff_all_hops(const thrust::device_ptr<const REAL> incoming_grad_mm, const REAL omega)
-    {
-        thrust::device_vector<REAL> grad_hi_cost(this->hi_cost_.size(), 0.0);
-        const int num_hops = this->cum_nr_bdd_nodes_per_hop_dist_.size() - 1;
-        for (int hop_index = 0; hop_index < num_hops; hop_index++) // Compute vJp by populating few rows of the Jacobian, multiplying by part of v and then accumulating into the output.
+        // mm gradients are backpropagated into arc costs and costs from root/terminal. Now backprop through costs from root/terminal calculation.
+        for (int hop_index = 0; hop_index < this->nr_hops(); hop_index++) // Inverse direction as that of backward_run().
         {
-            const int start_offset = hop_index > 0 ? this->cum_nr_layers_per_hop_dist_[hop_index - 1] : 0;
-            const thrust::device_vector<REAL> grad_hi_cost_hop = grad_mm_diff_of_hop(incoming_grad_mm + start_offset, hop_index, omega);
-            assert(grad_hi_cost_hop.size() == grad_hi_cost.size());
-            thrust::transform(grad_hi_cost.begin(), grad_hi_cost.end(), grad_hi_cost_hop.begin(), grad_hi_cost.begin(), thrust::plus<REAL>());
+            compute_grad_cost_from_terminal(grad_cost_from_terminal.data(), grad_lo_cost_out, grad_hi_cost_out, hop_index);
         }
-        thrust::device_vector<REAL> grad_lo_cost(this->lo_cost_.size());
-        // grad_lo_cost is just opposite of grad_hi_cost:
-        thrust::copy(thrust::make_transform_iterator(grad_hi_cost.begin(), thrust::negate<REAL>()), thrust::make_transform_iterator(grad_hi_cost.end(), thrust::negate<REAL>()), grad_lo_cost.begin());
-        return {grad_lo_cost, grad_hi_cost};
+
+        for (int hop_index = this->nr_hops() - 1; hop_index >= 0; hop_index--) // Inverse direction as that of forward_run().
+        {
+            compute_grad_cost_from_root(grad_cost_from_root.data(), grad_lo_cost_out, grad_hi_cost_out, hop_index);
+        }
     }
 
     template<typename REAL>
@@ -358,34 +273,13 @@ namespace LPMP {
         const int* primal_index;
         const REAL* cur_mm_diff;
         const REAL* dist_weights;
-        REAL* grad_lo_cost;
-        REAL* grad_hi_cost;
-        REAL* grad_cur_mm_diff;
-        REAL* grad_delta_lo;
-        REAL* grad_delta_hi;
-        const unsigned long num_vars;
-        __host__ __device__ void operator()(const int i)
-        {
-            const int primal = primal_index[i];
-            if (primal >= num_vars)
-                return; 
-            const REAL current_mm = cur_mm_diff[i];
-            if (current_mm >= 0)
-                grad_cur_mm_diff[i] -= grad_hi_cost[i];
-            else
-                grad_cur_mm_diff[i] += grad_lo_cost[i];
-            atomicAdd(&grad_delta_lo[primal], grad_lo_cost[i] * dist_weights[i]);
-            atomicAdd(&grad_delta_hi[primal], grad_hi_cost[i] * dist_weights[i]);
-        }
-    };
-
-    template<typename REAL>
-    struct grad_dist_weights_func {
-        const int* primal_index;
         const REAL* grad_lo_cost;
         const REAL* grad_hi_cost;
         const REAL* delta_lo;
         const REAL* delta_hi;
+        REAL* grad_cur_mm_diff;
+        REAL* grad_delta_lo;
+        REAL* grad_delta_hi;
         REAL* grad_dist_weights;
         const unsigned long num_vars;
         __host__ __device__ void operator()(const int i)
@@ -393,62 +287,63 @@ namespace LPMP {
             const int primal = primal_index[i];
             if (primal >= num_vars)
                 return; 
-            grad_dist_weights[i] += delta_lo[primal] * grad_lo_cost[i] + delta_hi[primal] * grad_hi_cost[i];
+            const REAL current_mm = cur_mm_diff[i];
+            const REAL current_grad_lo_cost = grad_lo_cost[i];
+            const REAL current_grad_hi_cost = grad_hi_cost[i];
+            if (current_mm >= 0)
+                grad_cur_mm_diff[i] -= current_grad_hi_cost;
+            else
+                grad_cur_mm_diff[i] += current_grad_lo_cost;
+
+            atomicAdd(&grad_delta_lo[primal], current_grad_lo_cost * dist_weights[i]);
+            atomicAdd(&grad_delta_hi[primal], current_grad_hi_cost * dist_weights[i]);
+
+            grad_dist_weights[i] += delta_lo[primal] * current_grad_lo_cost + delta_hi[primal] * current_grad_hi_cost;
         }
     };
 
     template<typename REAL>
     void bdd_cuda_learned_mma<REAL>::grad_hop_update_learned_mm_dist(
-            thrust::device_ptr<REAL> grad_lo_cost, // Input: incoming grad w.r.t lo_cost which were output from current hop update and Outputs in-place to compute grad. lo_cost before hop update.
-            thrust::device_ptr<REAL> grad_hi_cost, // Input: incoming grad w.r.t hi_cost which were output from current hop update and Outputs in-place to compute grad. hi_cost before hop update.
-            thrust::device_ptr<REAL> grad_mm,     // Input: incoming grad w.r.t min-marginal differences which were output from current hop update. Is overwritten by accumulated grad_mm (not useful).
+            const thrust::device_ptr<const REAL> before_update_lo_cost,
+            const thrust::device_ptr<const REAL> before_update_hi_cost,
+            thrust::device_ptr<REAL> cur_min_marg_diff, // current min-marginals which were subtracted in present iteration.
+            thrust::device_ptr<REAL> grad_lo_cost, // Input: incoming grad w.r.t lo_cost and Outputs in-place to compute grad. lo_cost before hop update.
+            thrust::device_ptr<REAL> grad_hi_cost, // Input: incoming grad w.r.t hi_cost and Outputs in-place to compute grad. hi_cost before hop update.
+            thrust::device_ptr<REAL> grad_cost_from_root, // grad w.r.t cost_from_terminal (size = nr_bdd_nodes()).
+            thrust::device_ptr<REAL> grad_cost_from_terminal, // grad w.r.t cost_from_terminal (size = nr_bdd_nodes()).
+            thrust::device_ptr<REAL> grad_mm,     // Input: incoming grad w.r.t min-marginal differences of current hop update. Is overwritten by accumulated grad_mm.
             thrust::device_ptr<REAL> grad_dist_weights_out, // Output: contains grad w.r.t distribution weights, assumes the memory is already allocated (= nr_layers()) and contains valid gradients upto current point.
             thrust::device_ptr<REAL> grad_delta_lo, // To accumulate gradients w.r.t delta lo (should be intialized by zero for first hop)
             thrust::device_ptr<REAL> grad_delta_hi, // To accumulate gradients w.r.t delta hi (should be intialized by zero for first hop)
             const thrust::device_ptr<const REAL> dist_weights,            // Input: distribution weights used in the forward pass.
-            const int hop_index, const double omega)
+            const int hop_index, const REAL omega,
+            thrust::device_ptr<REAL> grad_omega)
     {
         const int start_offset = hop_index > 0 ? this->cum_nr_layers_per_hop_dist_[hop_index - 1] : 0;
         const int end_offset = this->cum_nr_layers_per_hop_dist_[hop_index];
         const int num_layers_hop = end_offset - start_offset;
 
-        // 1.1 Backprop through hop update to accumulate grad w.r.t mm difference, grad w.r.t delta lo and hi:
-        // This needs access to current min-marginal difference:
-        this->min_marginals_from_directional_costs(hop_index, omega);
-
         grad_dual_update_func<REAL> func_grad_dual_update({
                                                 thrust::raw_pointer_cast(this->primal_variable_index_.data()  + start_offset),
-                                                thrust::raw_pointer_cast(this->mm_diff_.data() + start_offset),
+                                                thrust::raw_pointer_cast(cur_min_marg_diff + start_offset),
                                                 thrust::raw_pointer_cast(dist_weights + start_offset),
                                                 thrust::raw_pointer_cast(grad_lo_cost + start_offset),
                                                 thrust::raw_pointer_cast(grad_hi_cost + start_offset),
+                                                thrust::raw_pointer_cast(this->delta_lo_.data()),
+                                                thrust::raw_pointer_cast(this->delta_hi_.data()),
                                                 thrust::raw_pointer_cast(grad_mm + start_offset),
                                                 thrust::raw_pointer_cast(grad_delta_lo),
                                                 thrust::raw_pointer_cast(grad_delta_hi),
+                                                thrust::raw_pointer_cast(grad_dist_weights_out + start_offset),
                                                 this->nr_variables()
                                             });
         thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + num_layers_hop, func_grad_dual_update);
 
         // Backprop through mm computation:
-        const thrust::device_vector<REAL> grad_lambda_hop_mm = grad_mm_diff_of_hop(grad_mm + start_offset, hop_index, omega);
-        // After this the input grad_mm can be overwritten with updated gradients to send back.
-
-        // Compute grad w.r.t dist_weights.
-        grad_dist_weights_func<REAL> func_grad_dist_w({
-                                                thrust::raw_pointer_cast(this->primal_variable_index_.data() + start_offset),
-                                                thrust::raw_pointer_cast(grad_lo_cost + start_offset),
-                                                thrust::raw_pointer_cast(grad_hi_cost + start_offset),
-                                                thrust::raw_pointer_cast(this->delta_lo_.data()),
-                                                thrust::raw_pointer_cast(this->delta_hi_.data()),
-                                                thrust::raw_pointer_cast(grad_dist_weights_out + start_offset),
-                                                this->nr_variables()
-                                            });
-        thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + num_layers_hop, func_grad_dist_w);
-
-        // After this the input grad_lo_cost, grad_hi_cost can be overwritten with updated gradients to send back.
-        // Add contribution to grad_lo_cost, grad_hi_cost by the step of mm computation. (Jacobian of hi(lo) costs w.r.t prev. hi(lo) costs is identity):
-        thrust::transform(grad_hi_cost, grad_hi_cost + this->nr_layers(), grad_lambda_hop_mm.begin(), grad_hi_cost, thrust::plus<REAL>());
-        thrust::transform(grad_lo_cost, grad_lo_cost + this->nr_layers(), grad_lambda_hop_mm.begin(), grad_lo_cost, thrust::minus<REAL>());
+        grad_mm_diff_of_hop(before_update_lo_cost, before_update_hi_cost, cur_min_marg_diff, 
+                            grad_mm, grad_lo_cost, grad_hi_cost, 
+                            grad_cost_from_root, grad_cost_from_terminal, 
+                            grad_omega, hop_index, omega);
     }
 
     template<typename REAL>
@@ -463,12 +358,17 @@ namespace LPMP {
         {
             const int primal = primal_index[i];
             if (primal >= num_vars)
-                return;
-            const REAL def_mm = def_min_marg_diff[i];
-            if (def_mm >= 0)
-                grad_def_min_marg[i] = 1.0 * grad_delta_hi[primal];
+            {
+                grad_def_min_marg[i] = 0.0;
+            }
             else
-                grad_def_min_marg[i] = -1.0 * grad_delta_lo[primal];
+            {
+                const REAL def_mm = def_min_marg_diff[i];
+                if (def_mm >= 0)
+                    grad_def_min_marg[i] = 1.0 * grad_delta_hi[primal];
+                else
+                    grad_def_min_marg[i] = -1.0 * grad_delta_lo[primal];
+            }
         }
     };
 
@@ -476,38 +376,46 @@ namespace LPMP {
     // Assumes solver state is set to state before forward_iteration_learned_mm_dist was called. 
     template<typename REAL>
     void bdd_cuda_learned_mma<REAL>::grad_forward_iteration_learned_mm_dist(
-        const thrust::device_ptr<const REAL> deferred_min_marg_diff, // deferred min-marginals used in forward pass.
+        thrust::device_ptr<REAL> deferred_min_marg_diff, // deferred min-marginals used in forward pass.
         const thrust::device_ptr<const REAL> dist_weights, // distribution weights used in the forward pass.
-        thrust::device_ptr<REAL> grad_lo_cost, // Input: incoming grad w.r.t lo_cost which were output from current iteration and Outputs in-place to compute grad. lo_cost before iteration.
-        thrust::device_ptr<REAL> grad_hi_cost, // Input: incoming grad w.r.t hi_cost which were output from current iteration and Outputs in-place to compute grad. hi_cost before iteration.
-        thrust::device_ptr<REAL> grad_mm, // Input: incoming grad w.r.t min-marg. diff. which were output from current iteration and Outputs in-place to compute grad. w.r.t deferred min-marginals used in iteration.
+        thrust::device_ptr<REAL> grad_lo_cost, // Input: incoming grad w.r.t lo_cost current iteration and Outputs in-place to compute grad. lo_cost before iteration.
+        thrust::device_ptr<REAL> grad_hi_cost, // Input: incoming grad w.r.t hi_cost current iteration and Outputs in-place to compute grad. hi_cost before iteration.
+        thrust::device_ptr<REAL> grad_cost_from_root, // Input: incoming grad w.r.t cost_from_root (size = nr_bdd_nodes()), Outputs in-place to compute grad before iteration.
+        thrust::device_ptr<REAL> grad_cost_from_terminal, // Input: incoming grad w.r.t cost_from_terminal (size = nr_bdd_nodes()), Outputs in-place to compute grad before iteration.
+        thrust::device_ptr<REAL> grad_mm, // Input: incoming grad w.r.t min-marg. diff. current iteration and Outputs in-place to compute grad. w.r.t deferred min-marginals used in iteration.
         thrust::device_ptr<REAL> grad_dist_weights_out, // Output: contains grad w.r.t distribution weights, assumes the memory is already allocated (= nr_layers()) and contains valid gradients upto the current point.
-        const double omega)
+        const REAL omega,
+        thrust::device_ptr<REAL> grad_omega)
     {
-        const auto initial_costs = this->get_solver_costs();
+        thrust::device_vector<REAL> deffered_min_marg_diff_orig(deferred_min_marg_diff, deferred_min_marg_diff + this->nr_layers());
+
+        // Reconstruct the states used in forward pass of this iteration.
+        // deferred_min_marg_diff now contains current min-marginal differences
+        // and deffered_min_marg_diff_orig contains the deferred ones.
+        forward_iteration_learned_mm_dist(dist_weights, deferred_min_marg_diff, omega);
+        // lo_cost_out_, hi_cost_out_ now contain dual costs before this.
 
         thrust::device_vector<REAL> grad_delta_lo(this->delta_lo_.size(), 0.0);
         thrust::device_vector<REAL> grad_delta_hi(this->delta_hi_.size(), 0.0);
 
-        for (int s = this->cum_nr_bdd_nodes_per_hop_dist_.size() - 2; s >= 0; s--)
+        for (int s = this->nr_hops() - 1; s >= 0; s--)
         {
-            // Reset solver to original state.
-            if (s < this->cum_nr_bdd_nodes_per_hop_dist_.size() - 2)
-                this->set_solver_costs(initial_costs);
-    
-            // To compute grad for hop s, first take the solver to state of hop s - 1.
-            if (s > 0)
-                forward_iteration_learned_mm_dist(dist_weights, this->mm_diff_.data(), s - 1, omega);
-
-            grad_hop_update_learned_mm_dist(grad_lo_cost, grad_hi_cost, grad_mm, grad_dist_weights_out, grad_delta_lo.data(), grad_delta_hi.data(), dist_weights, s, omega);
+            compute_grad_cost_from_root(grad_cost_from_root, grad_lo_cost, grad_hi_cost, s);
+            grad_hop_update_learned_mm_dist(this->lo_cost_out_.data(), this->hi_cost_out_.data(), deferred_min_marg_diff, 
+                                            grad_lo_cost, grad_hi_cost,
+                                            grad_cost_from_root, grad_cost_from_terminal, 
+                                            grad_mm, grad_dist_weights_out, 
+                                            grad_delta_lo.data(), grad_delta_hi.data(), 
+                                            dist_weights, s, omega, grad_omega);
         }
 
         // Deferred min-marginals were used to compute delta_lo and delta_hi, perform backprop through this op.
         grad_def_min_marg_func<REAL> func_grad_def_mm({thrust::raw_pointer_cast(this->primal_variable_index_.data()),
-                                                    thrust::raw_pointer_cast(deferred_min_marg_diff),
+                                                    thrust::raw_pointer_cast(deffered_min_marg_diff_orig.data()),
                                                     thrust::raw_pointer_cast(grad_delta_lo.data()),
-                                                    thrust::raw_pointer_cast(grad_delta_lo.data()),
-                                                    thrust::raw_pointer_cast(grad_mm)});
+                                                    thrust::raw_pointer_cast(grad_delta_hi.data()),
+                                                    thrust::raw_pointer_cast(grad_mm),
+                                                    this->nr_variables()});
 
         thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + this->nr_layers(), func_grad_def_mm);
     }
@@ -516,38 +424,42 @@ namespace LPMP {
     // Assumes solver state is set to state before backward_iteration_learned_mm_dist was called. 
     template<typename REAL>
     void bdd_cuda_learned_mma<REAL>::grad_backward_iteration_learned_mm_dist(
-        const thrust::device_ptr<const REAL> deferred_min_marg_diff, // deferred min-marginals used in forward pass.
+        thrust::device_ptr<REAL> deferred_min_marg_diff, // deferred min-marginals used in forward pass, output will contains deferred min-marginals after backward iteration (not useful)
         const thrust::device_ptr<const REAL> dist_weights, // distribution weights used in the forward pass.
-        thrust::device_ptr<REAL> grad_lo_cost, // Input: incoming grad w.r.t lo_cost which were output from current iteration and Outputs in-place to compute grad. lo_cost before iteration.
-        thrust::device_ptr<REAL> grad_hi_cost, // Input: incoming grad w.r.t hi_cost which were output from current iteration and Outputs in-place to compute grad. hi_cost before iteration.
-        thrust::device_ptr<REAL> grad_mm, // Input: incoming grad w.r.t min-marg. diff. which were output from current iteration and Outputs in-place to compute grad. w.r.t deferred min-marginals used in iteration.
+        thrust::device_ptr<REAL> grad_lo_cost, // Input: incoming grad w.r.t lo_cost current iteration and Outputs in-place to compute grad. lo_cost before iteration.
+        thrust::device_ptr<REAL> grad_hi_cost, // Input: incoming grad w.r.t hi_cost current iteration and Outputs in-place to compute grad. hi_cost before iteration.
+        thrust::device_ptr<REAL> grad_cost_from_root, // Input: incoming grad w.r.t cost_from_root (size = nr_bdd_nodes()), Outputs in-place to compute grad before iteration.
+        thrust::device_ptr<REAL> grad_cost_from_terminal, // Input: incoming grad w.r.t cost_from_terminal (size = nr_bdd_nodes()), Outputs in-place to compute grad before iteration.
+        thrust::device_ptr<REAL> grad_mm, // Input: incoming grad w.r.t min-marg. diff. current iteration and Outputs in-place to compute grad. w.r.t deferred min-marginals used in iteration.
         thrust::device_ptr<REAL> grad_dist_weights_out, // Output: contains grad w.r.t distribution weights, assumes the memory is already allocated (= nr_layers()) and contains valid gradients upto the current point.
-        const double omega)
+        const REAL omega,
+        thrust::device_ptr<REAL> grad_omega)
     {
-        const auto initial_costs = this->get_solver_costs();
+        thrust::device_vector<REAL> deffered_min_marg_diff_orig(deferred_min_marg_diff, deferred_min_marg_diff + this->nr_layers());
+
+        // Reconstruct the states used in forward pass of this iteration.
+        // deferred_min_marg_diff now contains current min-marginal differences
+        backward_iteration_learned_mm_dist(dist_weights, deferred_min_marg_diff, omega);
+        // lo_cost_out_, hi_cost_out_ now contain dual costs before this.
 
         thrust::device_vector<REAL> grad_delta_lo(this->delta_lo_.size(), 0.0);
         thrust::device_vector<REAL> grad_delta_hi(this->delta_hi_.size(), 0.0);
 
         for (int s = 0; s < this->cum_nr_bdd_nodes_per_hop_dist_.size() - 1; s++)
         {
-            // Reset solver to original state.
-            if (s > 0)
-                this->set_solver_costs(initial_costs);
-    
-            // To compute grad for hop s, first take the solver to state of hop s + 1.
-            if (s < this->cum_nr_bdd_nodes_per_hop_dist_.size() - 2)
-            {
-                this->forward_run();
-                backward_iteration_learned_mm_dist(dist_weights, this->mm_diff_.data(), s + 1, omega);
-            }
+            compute_grad_cost_from_terminal(grad_cost_from_terminal, grad_lo_cost, grad_hi_cost, s);
 
-            grad_hop_update_learned_mm_dist(grad_lo_cost, grad_hi_cost, grad_mm, grad_dist_weights_out, grad_delta_lo.data(), grad_delta_hi.data(), dist_weights, s, omega);
+            grad_hop_update_learned_mm_dist(this->lo_cost_out_.data(), this->hi_cost_out_.data(), deferred_min_marg_diff, 
+                                            grad_lo_cost, grad_hi_cost,
+                                            grad_cost_from_root, grad_cost_from_terminal, 
+                                            grad_mm, grad_dist_weights_out, 
+                                            grad_delta_lo.data(), grad_delta_hi.data(), 
+                                            dist_weights, s, omega, grad_omega);
         }
 
         // Deferred min-marginals were used to compute delta_lo and delta_hi, perform backprop through this op.
         grad_def_min_marg_func<REAL> func_grad_def_mm({thrust::raw_pointer_cast(this->primal_variable_index_.data()),
-                                                    thrust::raw_pointer_cast(deferred_min_marg_diff),
+                                                    thrust::raw_pointer_cast(deffered_min_marg_diff_orig.data()),
                                                     thrust::raw_pointer_cast(grad_delta_lo.data()),
                                                     thrust::raw_pointer_cast(grad_delta_hi.data()),
                                                     thrust::raw_pointer_cast(grad_mm),
@@ -557,23 +469,417 @@ namespace LPMP {
     }
 
     template<typename REAL>
+    __global__ void argmin_cost_from_root_cuda(const int cur_num_bdd_nodes, const int start_offset, const int start_offset_next_hop,
+                                                const int* const __restrict__ lo_bdd_node_index, 
+                                                const int* const __restrict__ hi_bdd_node_index, 
+                                                const int* const __restrict__ bdd_node_to_layer_map, 
+                                                const REAL* const __restrict__ lo_cost,
+                                                const REAL* const __restrict__ hi_cost,
+                                                const REAL* const __restrict__ cost_from_root,
+                                                int* __restrict__ prev_best_node,
+                                                REAL* __restrict__ next_hop_root_costs,
+                                                const int next_size)
+    {
+        const int start_index = blockIdx.x * blockDim.x + threadIdx.x;
+        const int num_threads = blockDim.x * gridDim.x;
+        for (int bdd_node_idx = start_index + start_offset; bdd_node_idx < cur_num_bdd_nodes + start_offset; bdd_node_idx += num_threads) 
+        {
+            const int next_lo_node = lo_bdd_node_index[bdd_node_idx];
+            if (next_lo_node < 0) // will matter when one row contains multiple BDDs, otherwise the terminal nodes are at the end anyway.
+                continue; // nothing needs to be done for terminal node.
+            
+            const int layer_idx = bdd_node_to_layer_map[bdd_node_idx];
+
+            const REAL cur_lo_cost = lo_cost[layer_idx];
+            const REAL cur_c_from_root = cost_from_root[bdd_node_idx];
+
+            const int local_next_lo = next_lo_node - start_offset_next_hop;
+            if(local_next_lo < next_size) // otherwise botsink.
+            {
+                atomicMin(&next_hop_root_costs[local_next_lo], cur_c_from_root + cur_lo_cost);
+                if (next_hop_root_costs[local_next_lo] == cur_c_from_root + cur_lo_cost)
+                    prev_best_node[local_next_lo] = bdd_node_idx;
+            }
+            const REAL cur_hi_cost = hi_cost[layer_idx];
+            const int next_hi_node = hi_bdd_node_index[bdd_node_idx];
+            const int local_next_hi = next_hi_node - start_offset_next_hop;
+            if(local_next_hi < next_size) // otherwise going to bot sink.
+            {
+                atomicMin(&next_hop_root_costs[local_next_hi], cur_c_from_root + cur_hi_cost);
+                if(next_hop_root_costs[local_next_hi] == cur_c_from_root + cur_hi_cost)
+                    prev_best_node[local_next_hi] = bdd_node_idx;
+            }
+        }
+    }
+
+    template<typename REAL>
+    __global__ void propagate_grad_cost_from_root_cuda(const int cur_num_bdd_nodes, const int start_offset,
+                                                const int* const __restrict__ lo_bdd_node_index, 
+                                                const int* const __restrict__ hi_bdd_node_index, 
+                                                const int* const __restrict__ bdd_node_to_layer_map, 
+                                                const int* const __restrict__ primal_index, 
+                                                const int* const __restrict__ prev_best_node,
+                                                REAL* __restrict__ grad_cost_from_root,
+                                                REAL* __restrict__ grad_lo_cost,
+                                                REAL* __restrict__ grad_hi_cost)
+    {
+        const int start_index = blockIdx.x * blockDim.x + threadIdx.x;
+        const int num_threads = blockDim.x * gridDim.x;
+        for (int bdd_node_idx = start_index + start_offset; bdd_node_idx < cur_num_bdd_nodes + start_offset; bdd_node_idx += num_threads) 
+        {
+            if (primal_index[bdd_node_idx] == INT_MAX)
+                continue;
+
+            const int prev_hop_best_node = prev_best_node[bdd_node_idx - start_offset];
+            assert(prev_hop_best_node >= 0);
+            bool is_on_hi_arc = true;
+            if (bdd_node_idx == lo_bdd_node_index[prev_hop_best_node])
+                is_on_hi_arc = false;
+            else
+                assert(bdd_node_idx == hi_bdd_node_index[prev_hop_best_node]);
+
+            const int prev_layer_idx = bdd_node_to_layer_map[prev_hop_best_node];
+            const REAL incoming_grad = grad_cost_from_root[bdd_node_idx];
+            grad_cost_from_root[prev_hop_best_node] += incoming_grad;
+            if (!is_on_hi_arc)
+                atomicAdd(&grad_lo_cost[prev_layer_idx], incoming_grad);
+            else
+                atomicAdd(&grad_hi_cost[prev_layer_idx], incoming_grad);
+        }
+    }
+
+    template<typename REAL>
+    void bdd_cuda_learned_mma<REAL>::compute_grad_cost_from_root(
+        thrust::device_ptr<REAL> grad_cost_from_root,  // incoming gradient of hop_index + 1 root costs is used to compute grad for hop_index root costs.
+        thrust::device_ptr<REAL> grad_lo_cost,          // accumulates gradient for hop_index
+        thrust::device_ptr<REAL> grad_hi_cost,          // accumulates gradient for hop_index
+        const int hop_index)
+    {
+        assert(hop_index < this->nr_hops());
+        thrust::device_vector<int> next_hop_prev_best_nodes(this->nr_bdd_nodes(hop_index + 1), -1);
+        thrust::device_vector<REAL> next_hop_root_costs(this->nr_bdd_nodes(hop_index + 1), CUDART_INF_F_HOST);
+        {
+            const int start_offset = hop_index > 0 ? this->cum_nr_bdd_nodes_per_hop_dist_[hop_index - 1] : 0;
+            const int start_offset_next_hop = this->cum_nr_bdd_nodes_per_hop_dist_[hop_index];
+            const int cur_num_bdd_nodes = this->nr_bdd_nodes(hop_index);
+            const int blockCount = ceil(cur_num_bdd_nodes / (float) NUM_THREADS);
+
+            argmin_cost_from_root_cuda<<<blockCount, NUM_THREADS>>>(cur_num_bdd_nodes, start_offset, start_offset_next_hop,
+                                                            thrust::raw_pointer_cast(this->lo_bdd_node_index_.data()),
+                                                            thrust::raw_pointer_cast(this->hi_bdd_node_index_.data()),
+                                                            thrust::raw_pointer_cast(this->bdd_node_to_layer_map_.data()),
+                                                            thrust::raw_pointer_cast(this->lo_cost_.data()),
+                                                            thrust::raw_pointer_cast(this->hi_cost_.data()),
+                                                            thrust::raw_pointer_cast(this->cost_from_root_.data()),
+                                                            thrust::raw_pointer_cast(next_hop_prev_best_nodes.data()),
+                                                            thrust::raw_pointer_cast(next_hop_root_costs.data()),
+                                                            next_hop_root_costs.size());
+
+        }
+        {
+            const int start_offset = this->cum_nr_bdd_nodes_per_hop_dist_[hop_index];
+            const int cur_num_bdd_nodes = this->nr_bdd_nodes(hop_index + 1);
+            const int blockCount = ceil(cur_num_bdd_nodes / (float) NUM_THREADS);
+            propagate_grad_cost_from_root_cuda<<<blockCount, NUM_THREADS>>>(cur_num_bdd_nodes, start_offset,
+                                                            thrust::raw_pointer_cast(this->lo_bdd_node_index_.data()),
+                                                            thrust::raw_pointer_cast(this->hi_bdd_node_index_.data()),
+                                                            thrust::raw_pointer_cast(this->bdd_node_to_layer_map_.data()),
+                                                            thrust::raw_pointer_cast(this->primal_variable_index_.data()),
+                                                            thrust::raw_pointer_cast(next_hop_prev_best_nodes.data()),
+                                                            thrust::raw_pointer_cast(grad_cost_from_root),
+                                                            thrust::raw_pointer_cast(grad_lo_cost),
+                                                            thrust::raw_pointer_cast(grad_hi_cost));
+        }
+    }
+
+    template<typename REAL>
+    __global__ void grad_cost_from_terminal_cuda(const int cur_num_bdd_nodes, const int start_offset,
+                                            const int* const __restrict__ lo_bdd_node_index, 
+                                            const int* const __restrict__ hi_bdd_node_index, 
+                                            const int* const __restrict__ bdd_node_to_layer_map, 
+                                            const int* const __restrict__ primal_variable_index, 
+                                            const REAL* const __restrict__ lo_cost,
+                                            const REAL* const __restrict__ hi_cost,
+                                            const REAL* const __restrict__ cost_from_terminal,
+                                            REAL* __restrict__ grad_cost_from_terminal,
+                                            REAL* __restrict__ grad_lo_cost,
+                                            REAL* __restrict__ grad_hi_cost)
+    {
+        const int start_index = blockIdx.x * blockDim.x + threadIdx.x;
+        const int num_threads = blockDim.x * gridDim.x;
+        for (int bdd_node_idx = start_index + start_offset; bdd_node_idx < cur_num_bdd_nodes + start_offset; bdd_node_idx += num_threads) 
+        {
+            const int next_lo_node = lo_bdd_node_index[bdd_node_idx];
+            if (next_lo_node < 0) // will matter when one row contains multiple BDDs, otherwise the terminal nodes are at the end anyway.
+                continue; // nothing needs to be done for terminal node.
+            
+            const int layer_idx = bdd_node_to_layer_map[bdd_node_idx];
+
+            const REAL current_incoming_grad = grad_cost_from_terminal[bdd_node_idx];
+            const int next_hi_node = hi_bdd_node_index[bdd_node_idx];
+
+            if (hi_cost[layer_idx] + cost_from_terminal[next_hi_node] < lo_cost[layer_idx] + cost_from_terminal[next_lo_node])
+            { // min is coming from hi_arc:
+                atomicAdd(&grad_cost_from_terminal[next_hi_node], current_incoming_grad);
+                atomicAdd(&grad_hi_cost[layer_idx], current_incoming_grad);
+            }
+            else
+            {
+                atomicAdd(&grad_cost_from_terminal[next_lo_node], current_incoming_grad);
+                atomicAdd(&grad_lo_cost[layer_idx], current_incoming_grad);
+            }
+        }
+    }
+
+    template<typename REAL>
+    void bdd_cuda_learned_mma<REAL>::compute_grad_cost_from_terminal(
+        thrust::device_ptr<REAL> grad_cost_from_terminal,  // incoming gradient of hop_index terminal costs is used to compute grad for hop_index + 1 terminal costs.
+        thrust::device_ptr<REAL> grad_lo_cost,          // accumulates gradient for hop_index
+        thrust::device_ptr<REAL> grad_hi_cost,          // accumulates gradient for hop_index
+        const int hop_index)
+    {
+        assert(hop_index < this->nr_hops());
+        const int start_offset = hop_index > 0 ? this->cum_nr_bdd_nodes_per_hop_dist_[hop_index - 1] : 0;
+        const int cur_num_bdd_nodes = this->nr_bdd_nodes(hop_index);
+        const int blockCount = ceil(cur_num_bdd_nodes / (float) NUM_THREADS);
+        grad_cost_from_terminal_cuda<<<blockCount, NUM_THREADS>>>(cur_num_bdd_nodes, start_offset,
+                                                        thrust::raw_pointer_cast(this->lo_bdd_node_index_.data()),
+                                                        thrust::raw_pointer_cast(this->hi_bdd_node_index_.data()),
+                                                        thrust::raw_pointer_cast(this->bdd_node_to_layer_map_.data()),
+                                                        thrust::raw_pointer_cast(this->primal_variable_index_.data()),
+                                                        thrust::raw_pointer_cast(this->lo_cost_.data()),
+                                                        thrust::raw_pointer_cast(this->hi_cost_.data()),
+                                                        thrust::raw_pointer_cast(this->cost_from_terminal_.data()),
+                                                        thrust::raw_pointer_cast(grad_cost_from_terminal),
+                                                        thrust::raw_pointer_cast(grad_lo_cost),
+                                                        thrust::raw_pointer_cast(grad_hi_cost));
+    }
+
+    template<typename REAL>
+    __global__ void grad_min_marginals_cuda(const int cur_num_bdd_nodes, const int start_offset, const int start_offset_layer, const REAL omega,
+                                            const int* const __restrict__ lo_bdd_node_index, 
+                                            const int* const __restrict__ hi_bdd_node_index, 
+                                            const int* const __restrict__ bdd_node_to_layer_map, 
+                                            const REAL* const __restrict__ lo_cost,
+                                            const REAL* const __restrict__ hi_cost,
+                                            const REAL* const __restrict__ cost_from_root,
+                                            const REAL* const __restrict__ cost_from_terminal,
+                                            const REAL* const __restrict__ grad_mm_diff,
+                                            REAL* __restrict__ mm_lo_local, 
+                                            REAL* __restrict__ mm_hi_local,
+                                            REAL* __restrict__ grad_lo_cost,
+                                            REAL* __restrict__ grad_hi_cost,
+                                            REAL* __restrict__ grad_cost_from_root,
+                                            REAL* __restrict__ grad_cost_from_terminal)
+    {
+        const int start_index = blockIdx.x * blockDim.x + threadIdx.x;
+        const int num_threads = blockDim.x * gridDim.x;
+        for (int bdd_node_idx = start_index + start_offset; bdd_node_idx < cur_num_bdd_nodes + start_offset; bdd_node_idx += num_threads) 
+        {
+            const int next_lo_node = lo_bdd_node_index[bdd_node_idx];
+            if (next_lo_node < 0) // will matter when one row contains multiple BDDs, otherwise the terminal nodes are at the end anyway.
+                continue; // nothing needs to be done for terminal node.
+
+            const int next_hi_node = hi_bdd_node_index[bdd_node_idx];
+
+            const REAL cur_c_from_root = cost_from_root[bdd_node_idx];
+            const int layer_idx = bdd_node_to_layer_map[bdd_node_idx];
+            
+            const REAL current_lo_path_cost = cur_c_from_root + lo_cost[layer_idx] + cost_from_terminal[next_lo_node];
+            atomicMin(&mm_lo_local[layer_idx - start_offset_layer], current_lo_path_cost);
+            if (mm_lo_local[layer_idx - start_offset_layer] == current_lo_path_cost)
+            {
+                const REAL incoming_grad = -1.0 * omega * grad_mm_diff[layer_idx];
+                grad_lo_cost[layer_idx] += incoming_grad; // Dont need atomic because each layer will have exactly one one min. path.
+                grad_cost_from_root[bdd_node_idx] += incoming_grad;
+                atomicAdd(&grad_cost_from_terminal[next_lo_node], incoming_grad); // Next layer nodes can be accessed by some other thread.
+            }
+            const REAL current_hi_path_cost = cur_c_from_root + hi_cost[layer_idx] + cost_from_terminal[next_hi_node];
+            atomicMin(&mm_hi_local[layer_idx - start_offset_layer], current_hi_path_cost);
+            if (mm_hi_local[layer_idx - start_offset_layer] == current_hi_path_cost)
+            {
+                const REAL incoming_grad = omega * grad_mm_diff[layer_idx];
+                grad_hi_cost[layer_idx] += incoming_grad;
+                grad_cost_from_root[bdd_node_idx] += incoming_grad;
+                atomicAdd(&grad_cost_from_terminal[next_hi_node], incoming_grad);
+            }
+        }
+    }
+
+    template<typename REAL>
+    __global__ void grad_min_marginals_cuda_layer(const int cur_num_layers, const int start_offset_layer, const REAL omega,
+                                                const int* const __restrict__ lo_bdd_node_index, 
+                                                const int* const __restrict__ hi_bdd_node_index, 
+                                                const int* const __restrict__ bdd_node_to_layer_map,
+                                                const int* const __restrict__ primal_variable_index, 
+                                                const REAL* const __restrict__ lo_cost,
+                                                const REAL* const __restrict__ hi_cost,
+                                                const REAL* const __restrict__ cost_from_root,
+                                                const REAL* const __restrict__ cost_from_terminal,
+                                                const REAL* const __restrict__ grad_mm_diff,
+                                                const int* const __restrict__ layer_offsets,
+                                                REAL* __restrict__ grad_lo_cost,
+                                                REAL* __restrict__ grad_hi_cost,
+                                                REAL* __restrict__ grad_cost_from_root,
+                                                REAL* __restrict__ grad_cost_from_terminal)
+    {
+        const int start_index = blockIdx.x * blockDim.x + threadIdx.x;
+        const int num_threads = blockDim.x * gridDim.x;
+        for (int layer_index = start_index + start_offset_layer; layer_index < cur_num_layers + start_offset_layer; layer_index += num_threads) 
+        {
+            const int cur_primal_idx = primal_variable_index[layer_index];
+            if (cur_primal_idx == INT_MAX)
+                continue; // terminal node.
+
+            const int start_bdd_node = layer_offsets[layer_index];
+            const int end_bdd_node = layer_offsets[layer_index + 1];
+            const REAL cur_lo_cost = lo_cost[layer_index];
+            const REAL cur_hi_cost = hi_cost[layer_index];
+            REAL min_lo_path = CUDART_INF_F;
+            int best_lo_node, best_lo_next_node;
+            REAL min_hi_path = CUDART_INF_F;
+            int best_hi_node, best_hi_next_node;
+            for (int bdd_node_idx = start_bdd_node; bdd_node_idx < end_bdd_node; bdd_node_idx++) // TODO: for loop might be slow for wide BDDs?
+            {
+                const int next_lo_node = lo_bdd_node_index[bdd_node_idx];
+                const int next_hi_node = hi_bdd_node_index[bdd_node_idx];
+                const REAL cur_c_from_root = cost_from_root[bdd_node_idx];
+                
+                const REAL current_lo_path_cost = cur_c_from_root + cur_lo_cost + cost_from_terminal[next_lo_node];
+                if (current_lo_path_cost < min_lo_path)
+                {
+                    min_lo_path = current_lo_path_cost;
+                    best_lo_node = bdd_node_idx;
+                    best_lo_next_node = next_lo_node;
+                }
+                const REAL current_hi_path_cost = cur_c_from_root + cur_hi_cost + cost_from_terminal[next_hi_node];
+
+                if (current_hi_path_cost < min_hi_path)
+                {
+                    min_hi_path = current_hi_path_cost;
+                    best_hi_node = bdd_node_idx;
+                    best_hi_next_node = next_hi_node;
+                }
+            }
+            const REAL incoming_grad = omega * grad_mm_diff[layer_index];
+            grad_lo_cost[layer_index] -= incoming_grad;
+            grad_hi_cost[layer_index] += incoming_grad;
+            grad_cost_from_root[best_lo_node] -= incoming_grad;
+            grad_cost_from_root[best_hi_node] += incoming_grad;
+            atomicAdd(&grad_cost_from_terminal[best_lo_next_node], -incoming_grad); // Next layer nodes can be accessed by some other thread.
+            atomicAdd(&grad_cost_from_terminal[best_hi_next_node], incoming_grad); // Next layer nodes can be accessed by some other thread.
+        }
+    }
+
+    template<typename REAL>
+    struct grad_omega_func {
+        const int* primal_index;
+        const REAL* grad_mm;
+        const REAL* mm_diff;
+        REAL* out;
+        const REAL omega;
+        const unsigned long num_vars;
+        __host__ __device__ void operator()(const int i)
+        {
+            const int primal = primal_index[i];
+            if (primal >= num_vars)
+                out[i] = 0;
+            else
+                out[i] = grad_mm[i] * mm_diff[i] / omega;
+        }
+    };
+
+    template<typename REAL>
+    void bdd_cuda_learned_mma<REAL>::grad_mm_diff_of_hop(
+        const thrust::device_ptr<const REAL> before_update_lo_cost,
+        const thrust::device_ptr<const REAL> before_update_hi_cost,
+        const thrust::device_ptr<const REAL> mm_diff,
+        const thrust::device_ptr<const REAL> incoming_grad_mm_diff_hop,
+        thrust::device_ptr<REAL> grad_lo_cost,
+        thrust::device_ptr<REAL> grad_hi_cost,
+        thrust::device_ptr<REAL> grad_cost_from_root,
+        thrust::device_ptr<REAL> grad_cost_from_terminal,
+        thrust::device_ptr<REAL> grad_omega,
+        const int hop_index, const REAL omega, 
+        bool compute_grad_omega)
+    {
+        const int start_offset_layer = hop_index > 0 ? this->cum_nr_layers_per_hop_dist_[hop_index - 1]: 0;
+        const int end_offset_layer = this->cum_nr_layers_per_hop_dist_[hop_index];
+        const int cur_num_layers = end_offset_layer - start_offset_layer;
+        const int blockCount_layer = ceil(cur_num_layers / (REAL) NUM_THREADS);
+
+        grad_min_marginals_cuda_layer<<<blockCount_layer, NUM_THREADS>>>(cur_num_layers, start_offset_layer, omega,
+                                                thrust::raw_pointer_cast(this->lo_bdd_node_index_.data()),
+                                                thrust::raw_pointer_cast(this->hi_bdd_node_index_.data()),
+                                                thrust::raw_pointer_cast(this->bdd_node_to_layer_map_.data()),
+                                                thrust::raw_pointer_cast(this->primal_variable_index_.data()),
+                                                thrust::raw_pointer_cast(before_update_lo_cost),
+                                                thrust::raw_pointer_cast(before_update_hi_cost),
+                                                thrust::raw_pointer_cast(this->cost_from_root_.data()),
+                                                thrust::raw_pointer_cast(this->cost_from_terminal_.data()),
+                                                thrust::raw_pointer_cast(incoming_grad_mm_diff_hop),
+                                                thrust::raw_pointer_cast(this->layer_offsets_.data()),
+                                                thrust::raw_pointer_cast(grad_lo_cost),
+                                                thrust::raw_pointer_cast(grad_hi_cost),
+                                                thrust::raw_pointer_cast(grad_cost_from_root),
+                                                thrust::raw_pointer_cast(grad_cost_from_terminal));
+
+
+        if (compute_grad_omega)
+        {
+            // Compute grad omega. 
+            thrust::device_vector<REAL> grad_mm_multi_mm_diff(cur_num_layers); // store the elements after pointwise multiplication
+            grad_omega_func<REAL> grad_omega_calc({
+                                            thrust::raw_pointer_cast(this->primal_variable_index_.data()  + start_offset_layer),
+                                            thrust::raw_pointer_cast(incoming_grad_mm_diff_hop + start_offset_layer),
+                                            thrust::raw_pointer_cast(mm_diff + start_offset_layer),
+                                            thrust::raw_pointer_cast(grad_mm_multi_mm_diff.data()),
+                                            omega, this->nr_variables()});
+            thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + cur_num_layers, grad_omega_calc);
+            grad_omega[0] += thrust::reduce(grad_mm_multi_mm_diff.begin(), grad_mm_multi_mm_diff.end());
+        }
+    }
+    
+    template<typename REAL>
+    struct grad_dist_deffered_mm_diff_func {
+        const int* primal_index;
+        const REAL* mm_diff;
+        const REAL* grad_lo_cost;
+        const REAL* grad_hi_cost;
+        REAL* grad_deff_mm;
+        const unsigned long num_vars;
+        __host__ __device__ void operator()(const int i)
+        {
+            const int primal = primal_index[i];
+            if (primal >= num_vars)
+            {
+                grad_deff_mm[i] = 0;
+                return; 
+            }
+            const REAL cur_mm_diff = mm_diff[i];
+            if (cur_mm_diff > 0)
+                grad_deff_mm[i] = grad_hi_cost[i];
+            else
+                grad_deff_mm[i] = -grad_lo_cost[i];
+        }
+    };
+
+    template<typename REAL>
     void bdd_cuda_learned_mma<REAL>::grad_distribute_delta(
         thrust::device_ptr<REAL> grad_lo_cost, // Input: incoming grad w.r.t lo_cost which were output after distributing delta.
         thrust::device_ptr<REAL> grad_hi_cost, // Input: incoming grad w.r.t hi_cost which were output after distributing delta.
-        thrust::device_ptr<REAL> grad_dist_weights_out // Output: contains grad w.r.t distribution weights, assumes the memory is already allocated (= nr_layers()) and contains valid gradients upto current point.
+        thrust::device_ptr<REAL> grad_deff_mm // Output: contains grad w.r.t deff. min-marginal differences.
     )
     {
         // Nothing to do for grad_lo_cost, grad_hi_cost since Jacobian is identity. Only need to compute grad_dist_weights_out. 
-        grad_dist_weights_func<REAL> func_grad_dist_w({
+        grad_dist_deffered_mm_diff_func<REAL> func_grad_dist({
                             thrust::raw_pointer_cast(this->primal_variable_index_.data()),
+                            thrust::raw_pointer_cast(this->deffered_mm_diff_.data()),
                             thrust::raw_pointer_cast(grad_lo_cost),
                             thrust::raw_pointer_cast(grad_hi_cost),
-                            thrust::raw_pointer_cast(this->delta_lo_.data()),
-                            thrust::raw_pointer_cast(this->delta_hi_.data()),
-                            thrust::raw_pointer_cast(grad_dist_weights_out),
-                            this->nr_variables()
-                        });
-        thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + this->nr_layers(), func_grad_dist_w);
+                            thrust::raw_pointer_cast(grad_deff_mm),
+                            this->nr_variables()});
+        thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + this->nr_layers(), func_grad_dist);
     }
 
     template<typename REAL>
@@ -589,7 +895,7 @@ namespace LPMP {
     };
 
     template<typename REAL>
-    void bdd_cuda_learned_mma<REAL>::grad_cost_pertubation(
+    void bdd_cuda_learned_mma<REAL>::grad_cost_perturbation(
         thrust::device_ptr<REAL> grad_lo_cost, // Input: incoming grad w.r.t lo_cost which were output after adding primal pertubation and Outputs in-place to compute grad. lo_cost before it.
         thrust::device_ptr<REAL> grad_hi_cost, // Input: incoming grad w.r.t hi_cost which were output after adding primal pertubation and Outputs in-place to compute grad. hi_cost before it.
         thrust::device_ptr<REAL> grad_lo_pert_out, // Output: contains grad w.r.t pertubation in lo costs, assumes the memory is already allocated (= nr_variables()).
