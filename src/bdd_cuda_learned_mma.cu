@@ -167,12 +167,12 @@ namespace LPMP {
     }
 
     template<typename REAL>
-    void bdd_cuda_learned_mma<REAL>::iterations(const thrust::device_ptr<const REAL> dist_weights, thrust::device_ptr<REAL> mm_diff_ptr, const int num_itr, const REAL omega)
+    void bdd_cuda_learned_mma<REAL>::iterations(const thrust::device_ptr<const REAL> dist_weights, const int num_itr, const REAL omega)
     {
         for(int itr = 0; itr < num_itr; itr++)
         {
-            forward_iteration_learned_mm_dist(dist_weights, mm_diff_ptr, omega);
-            backward_iteration_learned_mm_dist(dist_weights, mm_diff_ptr, omega);
+            forward_iteration_learned_mm_dist(dist_weights, this->deffered_mm_diff_.data(), omega);
+            backward_iteration_learned_mm_dist(dist_weights, this->deffered_mm_diff_.data(), omega);
         }
     }
 
@@ -181,7 +181,6 @@ namespace LPMP {
             const thrust::device_ptr<const REAL> dist_weights, // distribution weights used in the forward pass.
             thrust::device_ptr<REAL> grad_lo_cost, // Input: incoming grad w.r.t lo_cost, Outputs in-place to compute grad. lo_cost before iterations.
             thrust::device_ptr<REAL> grad_hi_cost, // Input: incoming grad w.r.t hi_cost, Outputs in-place to compute grad. hi_cost before iterations.
-            thrust::device_ptr<REAL> grad_cost_from_terminal, // Input: incoming grad w.r.t cost_from_terminal (size = nr_bdd_nodes()), Outputs in-place to compute grad before iterations.
             thrust::device_ptr<REAL> grad_mm, // Input: incoming grad w.r.t min-marg. diff., Outputs in-place to compute grad. w.r.t deferred min-marginals used in iterations.
             thrust::device_ptr<REAL> grad_dist_weights_out, // Output: contains grad w.r.t distribution weights, assumes the memory is already allocated (= nr_layers()) and contains valid gradients upto the current point.
             thrust::device_ptr<REAL> grad_omega,    // Output: contains grad w.r.t omega (size = 1).
@@ -194,8 +193,9 @@ namespace LPMP {
         thrust::fill(grad_omega, grad_omega + 1, 0.0);
 
         thrust::device_vector<REAL> grad_cost_from_root(this->cost_from_root_.size(), 0.0);
+        thrust::device_vector<REAL> grad_cost_from_terminal(this->cost_from_terminal_.size(), 0.0);
 
-        iterations(dist_weights, this->deffered_mm_diff_.data(), track_grad_after_itr, omega);
+        iterations(dist_weights, track_grad_after_itr, omega);
         const auto initial_costs = this->get_solver_costs();
 
         for(int itr = track_grad_for_num_itr - 1; itr >= 0; itr--)
@@ -206,7 +206,7 @@ namespace LPMP {
     
             // To compute grad for iteration itr, first take the solver to state of iteration itr - 1.
             if (itr > 0)
-                iterations(dist_weights, this->deffered_mm_diff_.data(), itr - 1, omega);
+                iterations(dist_weights, itr - 1, omega);
 
             // save costs and mm for later.
             const auto cur_costs = this->get_solver_costs();
@@ -217,21 +217,24 @@ namespace LPMP {
             // backward_iteration mapped (lo_costs, hi_costs, dist_weights, deferred mms, cost from root) -> (new_lo_costs, new_hi_costs, new mms, costs from terminal)
             grad_backward_iteration_learned_mm_dist(this->deffered_mm_diff_.data(), dist_weights, 
                                                     grad_lo_cost, grad_hi_cost, 
-                                                    grad_cost_from_root.data(), grad_cost_from_terminal, 
+                                                    grad_cost_from_root.data(), grad_cost_from_terminal.data(), 
                                                     grad_mm, grad_dist_weights_out, omega, grad_omega);
             // backward_iteration produced terminal costs whose gradients are now accumulated into their predecessors.
             // So zero-out terminal costs gradients for accumulation from forward_iteration.
-            thrust::fill(grad_cost_from_terminal, grad_cost_from_terminal + this->nr_bdd_nodes(), 0.0); 
+            thrust::fill(grad_cost_from_terminal.begin(), grad_cost_from_terminal.end(), 0.0); 
 
             this->set_solver_costs(cur_costs);
             // forward_iteration mapped (lo_costs, hi_costs, dist_weights, deferred mms, cost from terminal) -> (new_lo_costs, new_hi_costs, new mms, costs from root)
             grad_forward_iteration_learned_mm_dist(this->deffered_mm_diff_.data(), dist_weights, 
                                                 grad_lo_cost, grad_hi_cost, 
-                                                grad_cost_from_root.data(), grad_cost_from_terminal, 
+                                                grad_cost_from_root.data(), grad_cost_from_terminal.data(), 
                                                 grad_mm, grad_dist_weights_out, omega, grad_omega);
 
-            thrust::fill(grad_cost_from_root.data(), grad_cost_from_root.data() + this->nr_bdd_nodes(), 0.0);
+            thrust::fill(grad_cost_from_root.begin(), grad_cost_from_root.end(), 0.0);
         }
+        if (track_grad_for_num_itr > 0) // Now backpropagate gradients of terminal costs back to hi and lo costs.
+            for (int hop_index = 0; hop_index < this->nr_hops(); hop_index++) // Inverse direction as that of backward_run().
+                compute_grad_cost_from_terminal(grad_cost_from_terminal.data(), grad_lo_cost, grad_hi_cost, hop_index);
     }
 
     template<typename REAL>
@@ -251,21 +254,15 @@ namespace LPMP {
 
         // Backprop through min-marginal computation from arc costs and root, terminal costs:
         for (int hop_index = 0; hop_index < this->nr_hops(); hop_index++)
-        {
             grad_mm_diff_of_hop(this->lo_cost_.data(), this->hi_cost_.data(), NULL, incoming_grad_mm, grad_lo_cost_out, grad_hi_cost_out, 
                                 grad_cost_from_root.data(), grad_cost_from_terminal.data(), 
                                 grad_omega.data(), hop_index, 1.0, false);
-        }
         // mm gradients are backpropagated into arc costs and costs from root/terminal. Now backprop through costs from root/terminal calculation.
         for (int hop_index = 0; hop_index < this->nr_hops(); hop_index++) // Inverse direction as that of backward_run().
-        {
             compute_grad_cost_from_terminal(grad_cost_from_terminal.data(), grad_lo_cost_out, grad_hi_cost_out, hop_index);
-        }
 
         for (int hop_index = this->nr_hops() - 1; hop_index >= 0; hop_index--) // Inverse direction as that of forward_run().
-        {
             compute_grad_cost_from_root(grad_cost_from_root.data(), grad_lo_cost_out, grad_hi_cost_out, hop_index);
-        }
     }
 
     template<typename REAL>

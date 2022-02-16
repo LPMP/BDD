@@ -1,15 +1,18 @@
-#include "bdd_cuda_learned_mma.h"
-#include "ILP_parser.h"
-#include "bdd_collection/bdd_collection.h"
-#include "bdd_preprocessor.h"
-#include "test.h"
-#include "cuda_utils.h"
+import torch
+import BDD.bdd_cuda_learned_mma_py
+import BDD.ILP_instance_py
+from torch_scatter import scatter_sum
+from bdd_cuda_torch import DualIterations, DistributeDeferredDelta, ComputeAllMinMarginalsDiff, PerturbPrimalCosts
 
-using namespace LPMP;
-using namespace BDD;
+two_simplex = """Minimize
+1 x_1 + 2 x_2 + 1 x_3
++2 x_4 + 1 x_5 + 2 x_6
+Subject To
+x_1 + x_2 + x_3 + x_4 = 1
+x_4 + x_5 + x_6 = 2
+End"""
 
-const char * matching_3x3 = 
-R"(Minimize
+matching_3x3 = """Minimize
 -2 x_11 - 1 x_12 - 1 x_13
 -1 x_21 - 2 x_22 - 1 x_23
 -1 x_31 - 1 x_32 - 2 x_33
@@ -20,10 +23,9 @@ x_31 + x_32 + x_33 = 1
 x_11 + x_21 + x_31 = 1
 x_12 + x_22 + x_32 = 1
 x_13 + x_23 + x_33 = 1
-End)";
+End"""
 
-const char * short_chain_shuffled = 
-R"(Minimize
+short_chain_shuffled = """Minimize
 + 1 mu_2_1 + 1 mu_10 + 0 mu_1_1 + 0 mu_11
 -1 mu_1_0 + 1 mu_00 + 2 mu_01 + 2 mu_2_0
 Subject To
@@ -34,10 +36,9 @@ mu_1_0 - mu_00 - mu_01 = 0
 mu_1_1 - mu_10 - mu_11 = 0
 mu_2_0 - mu_00 - mu_10 = 0
 mu_2_1 - mu_01 - mu_11 = 0
-End)";
+End"""
 
-const char * long_chain = 
-R"(Minimize
+long_chain = """Minimize
 2 mu_0_0 - 1 mu_0_1 + 3 mu_1_0 - 1 mu_1_1
 + 3 mu_2_0 + 2 mu_2_1 - 1 mu_3_0 - 2 mu_3_1
 - 2 mu_4_0 - 1 mu_4_1 + 1 mu_5_0 - 1 mu_5_1
@@ -101,10 +102,9 @@ mu_7_0 - mu_78_00 - mu_78_01 = 0
 mu_7_1 - mu_78_10 - mu_78_11 = 0
 mu_8_0 - mu_78_00 - mu_78_10 = 0
 mu_8_1 - mu_78_01 - mu_78_11 = 0
-End)";
+End"""
 
-const char * grid_graph_3x3 = 
-R"(Minimize
+grid_graph_3x3 = """Minimize
 2 mu_0_0 - 1 mu_0_1 + 3 mu_1_0 - 1 mu_1_1
 + 3 mu_2_0 + 2 mu_2_1 - 1 mu_3_0 - 2 mu_3_1
 - 2 mu_4_0 - 1 mu_4_1 + 3 mu_5_0 - 1 mu_5_1
@@ -192,80 +192,54 @@ mu_8_0 - mu_58_00 - mu_58_10 = 0
 mu_8_1 - mu_58_01 - mu_58_11 = 0
 mu_8_0 - mu_78_00 - mu_78_10 = 0
 mu_8_1 - mu_78_01 - mu_78_11 = 0
-End)";
+End"""
 
-struct isotropic_dist_w_func {
-    const int* primal_index;
-    const int* num_bdds_var;
-    double* dist_weights;
-    const unsigned long num_vars;
-    __device__ void operator()(const int i)
-    {
-        const int primal_var = primal_index[i];
-        if (primal_var < num_vars) // ignores terminal nodes.
-            dist_weights[i] = 1.0 / num_bdds_var[primal_var];
-        else
-            dist_weights[i] = 0.0;
-    }
-};
+def project_dist_weights(solver, dist_weights):
+    primal_indices = torch.empty_like(dist_weights, dtype = torch.int32)
+    solver.primal_variable_index(primal_indices.data_ptr())
+    primal_indices = primal_indices.to(torch.int64)
+    dist_weights_sum = scatter_sum(dist_weights, primal_indices)[primal_indices]
+    return dist_weights / dist_weights_sum
 
-void test_problem(const char* instance, const double expected_lb, const double tol = 1e-12)
-{
-    ILP_input ilp = ILP_parser::parse_string(instance);
-    bdd_preprocessor bdd_pre(ilp);
-    bdd_collection bdd_col = bdd_pre.get_bdd_collection();
-    bdd_cuda_learned_mma<double> solver(bdd_col);
+def compute_expected_results(instance_string, device):
+    instance = BDD.ILP_instance_py.parse_ILP(instance_string)
+    solver = BDD.bdd_cuda_learned_mma_py.bdd_cuda_learned_mma(instance)
+    solver.non_learned_iterations(200, 0.5)
+    expected_mm_diff = torch.empty(solver.nr_layers(), device = device, dtype = torch.float32)
+    solver.all_min_marginal_differences(expected_mm_diff.data_ptr())
+    return expected_mm_diff, solver.lower_bound()
 
-    for(size_t i=0; i<solver.nr_variables(); ++i)
-        solver.set_cost(ilp.objective()[i], i);
+def run_instance(instance_string, num_solver_itr, num_learning_itr, omega, device):
+    expected_mm_diff, expected_lb = compute_expected_results(instance_string, device)
+    instance = BDD.ILP_instance_py.parse_ILP(instance_string)
+    solver = BDD.bdd_cuda_learned_mma_py.bdd_cuda_learned_mma(instance)
+    dist_weights = torch.ones(solver.nr_layers(), device = device, dtype = torch.float32)
+    orig_lo_costs = torch.empty_like(dist_weights)
+    orig_hi_costs = torch.empty_like(dist_weights)
+    orig_def_mm = torch.empty_like(dist_weights)
+    omega = torch.tensor([omega], device = device, dtype = torch.float32)
+    solver.get_solver_costs(orig_lo_costs.data_ptr(), orig_hi_costs.data_ptr(), orig_def_mm.data_ptr())
+    avg_loss_improvement_per_itr = 0
+    for i in range(num_learning_itr):
+        dist_weights = project_dist_weights(solver, dist_weights)
+        dist_weights_g = dist_weights.detach().clone()
+        dist_weights_g.requires_grad = True
+        lo_costs_out, hi_costs_out, def_mm_out = DualIterations.apply([solver], orig_lo_costs, orig_hi_costs, orig_def_mm, dist_weights_g, num_solver_itr, omega)
+        lo_costs_out, hi_costs_out = DistributeDeferredDelta.apply([solver], lo_costs_out, hi_costs_out, def_mm_out)
+        mm_diff = ComputeAllMinMarginalsDiff.apply([solver], lo_costs_out, hi_costs_out)
+        loss = torch.abs(expected_mm_diff - mm_diff).sum()
+        if i > 0:
+            avg_loss_improvement_per_itr += (prev_loss - loss.item())
+        prev_loss = loss.item()
+        print(f"Grad itr: {i}, Loss: {loss.item():.4f}, LB: {solver.lower_bound():.4f}, Max. possible LB: {expected_lb:.4f}")
+        loss.backward()
+        dist_weights = dist_weights - 2.5e-3 * dist_weights_g.grad
+    assert(avg_loss_improvement_per_itr > 0)
 
-    std::vector<double> cost_vector_before = solver.compute_primal_objective_vector();
-    for(size_t i=0; i<solver.nr_variables(); ++i)
-    {
-        const auto diff = std::abs(ilp.objective()[i] - cost_vector_before[i]);
-        std::stringstream buffer;
-        buffer<<i<<" "<<ilp.objective()[i]<<" "<<cost_vector_before[i]<<" "<<diff<<"\n";
-        test(diff <= tol, buffer.str());
-    }
+device = torch.device("cuda:0") 
 
-    const thrust::device_vector<int> primal_var_index = solver.get_primal_variable_index();
-    const thrust::device_vector<int> num_bdds_var = solver.get_num_bdds_per_var();
-
-    thrust::device_vector<double> dist_weights(primal_var_index.size());
-
-    isotropic_dist_w_func func({thrust::raw_pointer_cast(primal_var_index.data()), 
-                            thrust::raw_pointer_cast(num_bdds_var.data()), 
-                            thrust::raw_pointer_cast(dist_weights.data()),
-                            solver.nr_variables()});
-
-    thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + dist_weights.size(), func);
-    solver.iterations(dist_weights.data(), 200, 0.5);
-    
-    std::cout<<"Lower bound before distribute: "<<solver.lower_bound()<<", Expected: "<<expected_lb<<"\n";
-    solver.distribute_delta();
-
-    std::vector<double> cost_vector_after = solver.compute_primal_objective_vector();
-    for(size_t i=0; i<solver.nr_variables(); ++i)
-    {
-        const auto diff = std::abs(ilp.objective()[i] - cost_vector_after[i]);
-        std::stringstream buffer;
-        buffer<<i<<" "<<ilp.objective()[i]<<" "<<cost_vector_before[i]<<" "<<diff<<"\n";
-        test(diff <= tol, buffer.str());
-    }
-
-    std::cout<<"Final lower bound: "<<solver.lower_bound()<<", Expected: "<<expected_lb<<"\n";
-    test(std::abs(solver.lower_bound() - expected_lb) <= tol);
-}
-
-int main(int argc, char** argv)
-{
-    std::cout<<"matching_3x3"<<"\n";
-    test_problem(matching_3x3, -6.0);
-    std::cout<<"short_chain_shuffled"<<"\n";
-    test_problem(short_chain_shuffled, 1.0);
-    std::cout<<"long_chain"<<"\n";
-    test_problem(long_chain, -9.0);
-    std::cout<<"grid_graph_3x3"<<"\n";
-    test_problem(grid_graph_3x3, -8.0);
-}
-
+run_instance(two_simplex, 5, 25, 0.5, device)
+run_instance(matching_3x3, 5, 25, 0.5, device)
+run_instance(short_chain_shuffled, 5, 25, 0.5, device)
+run_instance(long_chain, 5, 25, 0.5, device)
+run_instance(grid_graph_3x3, 5, 25, 0.5, device)

@@ -334,8 +334,6 @@ void test_problem(const char* instance, const double expected_lb, double omega =
     thrust::device_vector<double> dist_weights(solver.nr_layers(), 1.0);
     const thrust::device_vector<int> primal_var_index = solver.get_primal_variable_index();
 
-    thrust::device_vector<double> mm_diff(solver.nr_layers(), 0.0);
-
     thrust::device_vector<double> final_mm_diff(solver.nr_layers());
     thrust::device_vector<double> loss_grad_mm(solver.nr_layers());
     thrust::device_vector<double> grad_lo_costs(solver.nr_layers());
@@ -353,9 +351,9 @@ void test_problem(const char* instance, const double expected_lb, double omega =
         solver.set_solver_costs(initial_costs); // reset to initial state.
 
         // Forward pass:
-        solver.iterations(dist_weights.data(), mm_diff.data(), num_solver_itr, omega);
+        solver.iterations(dist_weights.data(), num_solver_itr, omega);
         const auto costs_before_dist = solver.get_solver_costs();
-        solver.distribute_delta(mm_diff.data());
+        solver.distribute_delta();
         const auto mms = solver.min_marginals_cuda(false);
         const auto& mms_0 = std::get<1>(mms);
         const auto& mms_1 = std::get<2>(mms);
@@ -387,13 +385,12 @@ void test_problem(const char* instance, const double expected_lb, double omega =
         thrust::device_vector<double> grad_dist_weights(solver.nr_layers(), 0.0);
         thrust::device_vector<double> grad_def_mm(solver.nr_layers(), 0.0);
         thrust::device_vector<double> deferred_min_marginals(solver.nr_layers(), 0.0);
-        thrust::device_vector<double> grad_cost_from_terminal(solver.nr_bdd_nodes(), 0.0);
         thrust::device_vector<double> grad_omega(1, 0.0);
 
         solver.set_solver_costs(costs_before_dist);
         solver.grad_distribute_delta(grad_lo_costs.data(), grad_hi_costs.data(), grad_def_mm.data());
         solver.set_solver_costs(initial_costs); // reset to initial state.
-        solver.grad_iterations(dist_weights.data(), grad_lo_costs.data(), grad_hi_costs.data(), grad_cost_from_terminal.data(),
+        solver.grad_iterations(dist_weights.data(), grad_lo_costs.data(), grad_hi_costs.data(),
                                 grad_def_mm.data(), grad_dist_weights.data(), grad_omega.data(),
                                 omega, 0, num_solver_itr);
         
@@ -404,9 +401,8 @@ void test_problem(const char* instance, const double expected_lb, double omega =
     // test(avg_loss_improvement_per_itr > tol);
 
     solver.set_solver_costs(initial_costs); // reset to initial state.
-    thrust::fill(mm_diff.begin(), mm_diff.end(), 0.0);
-    solver.iterations(dist_weights.data(), mm_diff.data(), num_solver_itr, omega);
-    solver.distribute_delta(mm_diff.data());
+    solver.iterations(dist_weights.data(), num_solver_itr, omega);
+    solver.distribute_delta();
     std::cout<<"Final lower bound: "<<solver.lower_bound()<<", Max. possible:  "<<expected_lb<<"\n\n\n";
 
     // Check feasibility:

@@ -13,14 +13,13 @@ namespace LPMP {
 
             // dist_weights points to disribution weights and mm_diff_out_ptr will contain deferred min-marginal differences.
             // The size of underlying arrays should be corresponding to the size of hi_cost_ i.e. = this->nr_layers(). 
-            void iterations(const thrust::device_ptr<const REAL> dist_weights, thrust::device_ptr<REAL> mm_diff_ptr, const int num_itr, const REAL omega);
+            void iterations(const thrust::device_ptr<const REAL> dist_weights, const int num_itr, const REAL omega);
 
             // Assumes that deffered_mm_diff_ contains the mm's containing the values before iterations() was called.
             void grad_iterations(
                 const thrust::device_ptr<const REAL> dist_weights, // distribution weights used in the forward pass.
                 thrust::device_ptr<REAL> grad_lo_cost, // Input: incoming grad w.r.t lo_cost, Outputs in-place to compute grad. lo_cost before iterations.
                 thrust::device_ptr<REAL> grad_hi_cost, // Input: incoming grad w.r.t hi_cost, Outputs in-place to compute grad. hi_cost before iterations.
-                thrust::device_ptr<REAL> grad_cost_from_terminal, // Input: incoming grad w.r.t cost_from_terminal (size = nr_bdd_nodes()), Outputs in-place to compute grad before iterations.
                 thrust::device_ptr<REAL> grad_mm, // Input: incoming grad w.r.t min-marg. diff., Outputs in-place to compute grad. w.r.t deferred min-marginals used in iterations.
                 thrust::device_ptr<REAL> grad_dist_weights_out, // Output: contains grad w.r.t distribution weights, assumes the memory is already allocated (= nr_layers()).
                 thrust::device_ptr<REAL> grad_omega,    // Output: contains grad w.r.t omega (size = 1).

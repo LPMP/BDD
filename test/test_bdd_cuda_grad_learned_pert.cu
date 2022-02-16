@@ -144,7 +144,6 @@ void test_problem(const char* instance, const thrust::device_vector<double>& exp
     thrust::device_vector<double> pert_hi(solver.nr_variables(), 0.0);
     thrust::device_vector<double> grad_pert_lo(solver.nr_variables());
     thrust::device_vector<double> grad_pert_hi(solver.nr_variables());
-    thrust::device_vector<double> mm_diff(solver.nr_layers());
     thrust::device_vector<double> final_mm_diff(solver.nr_layers());
     thrust::device_vector<double> loss_grad_mm(solver.nr_layers());
     thrust::device_vector<double> grad_lo_costs(solver.nr_layers());
@@ -157,13 +156,12 @@ void test_problem(const char* instance, const thrust::device_vector<double>& exp
     double num_incorrect = solver.nr_layers();
     for(int learning_itr = 0; learning_itr < num_learning_itr; learning_itr++)
     {
-        thrust::fill(mm_diff.begin(), mm_diff.end(), 0.0);
         const auto orig_costs = solver.get_solver_costs();
         solver.update_costs(pert_lo, pert_hi); // Perturb costs.
-        solver.iterations(dist_weights.data(), mm_diff.data(), num_solver_itr, omega); // Dual iterations.
+        solver.iterations(dist_weights.data(), num_solver_itr, omega); // Dual iterations.
 
         const auto costs_before_dist = solver.get_solver_costs();
-        solver.distribute_delta(mm_diff.data());
+        solver.distribute_delta();
         const auto mms = solver.min_marginals_cuda(false);
         const auto& mms_0 = std::get<1>(mms);
         const auto& mms_1 = std::get<2>(mms);
@@ -199,7 +197,6 @@ void test_problem(const char* instance, const thrust::device_vector<double>& exp
 
         thrust::device_vector<double> grad_dist_weights(solver.nr_layers(), 0.0);
         thrust::device_vector<double> grad_def_mm(solver.nr_layers(), 0.0);
-        thrust::device_vector<double> grad_cost_from_terminal(solver.nr_bdd_nodes(), 0.0);
         thrust::device_vector<double> grad_omega(1, 0.0);
         
         solver.set_solver_costs(costs_before_dist);
@@ -208,7 +205,7 @@ void test_problem(const char* instance, const thrust::device_vector<double>& exp
 
         solver.set_solver_costs(orig_costs); // reset to orig state.
         solver.update_costs(pert_lo, pert_hi); // Perturb costs to backprop through iterations().
-        solver.grad_iterations(dist_weights.data(), grad_lo_costs.data(), grad_hi_costs.data(), grad_cost_from_terminal.data(),
+        solver.grad_iterations(dist_weights.data(), grad_lo_costs.data(), grad_hi_costs.data(),
                                 grad_def_mm.data(), grad_dist_weights.data(), grad_omega.data(),
                                 omega, 0, num_solver_itr);
         solver.set_solver_costs(orig_costs); // reset to orig state.

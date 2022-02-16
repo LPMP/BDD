@@ -22,6 +22,14 @@ bdd_type create_solver(const py::bytes& s)
     return solver;
 }
 
+struct set_primal_indices {
+    const unsigned long num_vars;
+    __host__ __device__ int operator()(const int i)
+    {
+        return min(i, (int) num_vars);
+    }
+};
+
 PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
     m.doc() = "Python binding for bdd-based solver using CUDA";
 
@@ -58,8 +66,9 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
         {
             int* ptr = reinterpret_cast<int*>(primal_variable_index_out_ptr); 
             const thrust::device_vector<int> primal_index_managed = solver.get_primal_variable_index();
-            thrust::copy(primal_index_managed.begin(), primal_index_managed.end(), ptr);
-        }, "Sets primal variables indices for all dual variables in the pre-allocated memory of size = nr_layers() pointed to by the input pointer in INT32 format.")
+            thrust::transform(primal_index_managed.begin(), primal_index_managed.end(), ptr, set_primal_indices({solver.nr_variables()}));
+        }, "Sets primal variables indices for all dual variables in the pre-allocated memory of size = nr_layers() pointed to by the input pointer in INT32 format.\n"
+        "Also contains entries for root/terminal nodes for which the values are equal to nr_variables().")
         
         .def("bdd_index", [](bdd_type& solver, const long bdd_index_out_ptr)
         {
@@ -91,23 +100,27 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
             solver.set_solver_costs(lo_cost_ptr_thrust, hi_cost_ptr_thrust, def_mm_ptr_thrust);
         },"Set the costs i.e., (lo_costs (size = nr_layers()), hi_costs (size = nr_layers()), def_mm_ptr (size = nr_layers()) to set solver state.")
 
+        .def("non_learned_iterations", [](bdd_type& solver, const int num_itr, const float omega) 
+        {
+            for (int itr = 0; itr < num_itr; itr++)
+                solver.iteration(omega);
+        }, "Runs parallel_mma solver for num_itr many iterations.")
+
         .def("iterations", [](bdd_type& solver, 
                             const long dist_weights_ptr, 
-                            const long mm_diff_out_ptr, 
                             const int num_itr, 
                             const float omega) 
         {
             thrust::device_ptr<float> distw_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(dist_weights_ptr));
-            thrust::device_ptr<float> mm_diff_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(mm_diff_out_ptr));
-            solver.iterations(distw_ptr_thrust, mm_diff_ptr_thrust, num_itr, omega);
-        }, "Runs solver for num_itr many iterations using distribution weights *dist_weights_ptr and sets the min-marginals to distribute in *mm_diff_out_ptr.\n"
-        "Both dist_weights_ptr and mm_diff_out_ptr should point to a memory containing nr_layers() many elements in FP32 format.")
+            solver.iterations(distw_ptr_thrust, num_itr, omega);
+        }, "Runs solver for num_itr many iterations using distribution weights *dist_weights_ptr and sets the min-marginals to distribute in *mm_diff_ptr.\n"
+        "Both dist_weights_ptr and mm_diff_ptr should point to a memory containing nr_layers() many elements in FP32 format.\n"
+        "First iteration used the deferred min-marginals in mm_diff_ptr to distribute.")
 
         .def("grad_iterations", [](bdd_type& solver, 
                                 const long dist_weights_ptr,
                                 const long grad_lo_cost_ptr,
                                 const long grad_hi_cost_ptr,
-                                const long cost_from_terminal_ptr,
                                 const long grad_mm_ptr,
                                 const long grad_dist_weights_out_ptr,
                                 const long grad_omega_out_ptr,
@@ -118,14 +131,12 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
             thrust::device_ptr<const float> dist_weights_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(dist_weights_ptr));
             thrust::device_ptr<float> grad_lo_cost_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(grad_lo_cost_ptr));
             thrust::device_ptr<float> grad_hi_cost_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(grad_hi_cost_ptr));
-            thrust::device_ptr<float> cost_from_terminal_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(cost_from_terminal_ptr));
             thrust::device_ptr<float> grad_mm_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(grad_mm_ptr));
             thrust::device_ptr<float> grad_dist_weights_out_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(grad_dist_weights_out_ptr));
             thrust::device_ptr<float> grad_omega_out_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(grad_omega_out_ptr));
             solver.grad_iterations(dist_weights_ptr_thrust, 
                                 grad_lo_cost_ptr_thrust, 
                                 grad_hi_cost_ptr_thrust,
-                                cost_from_terminal_ptr_thrust,
                                 grad_mm_ptr_thrust,
                                 grad_dist_weights_out_ptr_thrust,
                                 grad_omega_out_ptr_thrust,
@@ -137,8 +148,6 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
             "dist_weights: distribution weights used in the forward pass.\n"
             "grad_lo_cost: Input: incoming grad w.r.t lo_cost which were output from iterations and Outputs in-place to compute grad. lo_cost before iterations.\n"
             "grad_hi_cost: Input: incoming grad w.r.t hi_cost which were output from iterations and Outputs in-place to compute grad. hi_cost before iterations.\n"
-            "grad_cost_from_terminal: Input: incoming grad w.r.t costs_from_terminal which were output (not exposed to Python) from previous call to iterations().\n"
-                "\t The underlying array should have size nr_bdd_nodes(). If this function is used at the start of backward pass then initialize with 0's."
             "grad_mm: Input: incoming grad w.r.t min-marg. diff. which were output from iterations and Outputs in-place to compute grad. w.r.t deferred min-marginals used in iterations.\n"
             "grad_dist_weights_out: Output: contains grad w.r.t distribution weights, assumes the memory is already allocated (= nr_layers()).\n"
             "grad_omega_out_ptr:  Output: contains grad w.r.t omega (size = 1)."
@@ -146,12 +155,11 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
             "track_grad_after_itr: First runs the solver for track_grad_after_itr many iterations without tracking gradients and then backpropagates through only last track_grad_for_num_itr many itrs.\n"
             "track_grad_for_num_itr: See prev. argument")
 
-        .def("distribute_delta", [](bdd_type& solver, const long def_mm_ptr) 
+        .def("distribute_delta", [](bdd_type& solver) 
         {
-            thrust::device_ptr<float> def_mm_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(def_mm_ptr));
-            solver.distribute_delta(def_mm_ptr_thrust);
+            solver.distribute_delta();
         }, "Distributes the deferred min-marginals back to lo and hi costs such that dual constraint are satisfied with equality.\n"
-            "def_mm_ptr is zero-ed out after distributing.")
+            "deferred min-marginals are zero-ed out after distributing.")
 
         .def("grad_distribute_delta", [](bdd_type& solver, 
             const long grad_lo_cost_ptr,
