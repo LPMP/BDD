@@ -92,6 +92,9 @@ PYBIND11_MODULE(ILP_instance_py, m) {
                         variable_constraint_bounds(ilp)
                         );
                 })
+        .def("variable_constraint_bounds", [](const LPMP::ILP_input& ilp) { 
+                return variable_constraint_bounds(ilp);
+                })
         .def("add_new_variable_with_obj", [](LPMP::ILP_input& ilp, const std::string& var_name, const double coefficient) {
                 auto index = ilp.add_new_variable(var_name);
                 ilp.add_to_objective(coefficient, var_name);

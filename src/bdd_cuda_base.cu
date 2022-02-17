@@ -442,12 +442,18 @@ namespace LPMP {
     struct set_vars_costs_func {
         int* var_counts;
         const REAL2* primal_costs;
+        const size_t num_valid_vars;
         __host__ __device__ void operator()(const thrust::tuple<int, REAL&> t) const
         {
             const int cur_var_index = thrust::get<0>(t);
             if (cur_var_index == INT_MAX)
                 return; // terminal node.
             REAL& arc_cost = thrust::get<1>(t);
+            if (cur_var_index >= num_valid_vars)
+            {
+                arc_cost = 0.0; // New variables created due to coeff decomposition are at the end with 0 cost.
+                return;
+            }
             const int count = var_counts[cur_var_index];
             assert(count > 0);
             arc_cost += primal_costs[cur_var_index] / count;
@@ -463,7 +469,9 @@ namespace LPMP {
         auto populate_costs = [&](auto cost_begin, auto cost_end, auto bdd_cost_begin, auto bdd_cost_end) {
             thrust::device_vector<REAL> primal_costs(cost_begin, cost_end);
             
-            set_vars_costs_func<REAL, REAL> func({thrust::raw_pointer_cast(num_bdds_per_var_.data()), thrust::raw_pointer_cast(primal_costs.data())});
+            set_vars_costs_func<REAL, REAL> func({thrust::raw_pointer_cast(num_bdds_per_var_.data()), 
+                                                thrust::raw_pointer_cast(primal_costs.data()),
+                                                primal_costs.size()});
             auto first = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.begin(), bdd_cost_begin));
             auto last = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.end(), bdd_cost_end));
 
