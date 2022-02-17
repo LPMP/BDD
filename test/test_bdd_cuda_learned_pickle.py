@@ -1,5 +1,5 @@
-import bdd_cuda_parallel_mma_py
-import ILP_instance_py
+import BDD.bdd_cuda_learned_mma_py as bdd_cuda_learned_mma_py
+import BDD.ILP_instance_py as ILP_instance_py
 import pickle
 
 def test_pickle(solver):
@@ -46,33 +46,29 @@ x_13 + x_23 + x_33 = 1
 End''' 
 
 ilp_instance = ILP_instance_py.parse_ILP(one_simplex_problem)
-bdd_cuda_solver = bdd_cuda_parallel_mma_py.bdd_cuda_parallel_mma(ilp_instance)
-assert(bdd_cuda_solver.nr_variables() == 3)
+bdd_cuda_solver = bdd_cuda_learned_mma_py.bdd_cuda_learned_mma(ilp_instance)
+assert(bdd_cuda_solver.nr_primal_variables() == 3)
 assert(bdd_cuda_solver.nr_bdds() == 1)
-assert(bdd_cuda_solver.nr_variables(0) == 1)
 assert(bdd_cuda_solver.lower_bound() == -2)
 test_pickle(bdd_cuda_solver)
 
 ilp_instance = ILP_instance_py.parse_ILP(two_simplex_problem)
-bdd_cuda_solver = bdd_cuda_parallel_mma_py.bdd_cuda_parallel_mma(ilp_instance)
-assert(bdd_cuda_solver.nr_variables() == 6)
+bdd_cuda_solver = bdd_cuda_learned_mma_py.bdd_cuda_learned_mma(ilp_instance)
+assert(bdd_cuda_solver.nr_primal_variables() == 6)
 assert(bdd_cuda_solver.nr_bdds() == 2)
-assert(bdd_cuda_solver.nr_variables(0) == 2)
 assert(bdd_cuda_solver.lower_bound() == 1)
 test_pickle(bdd_cuda_solver)
 
 ilp_instance = ILP_instance_py.parse_ILP(two_simplex_diff_size_problem)
-bdd_cuda_solver = bdd_cuda_parallel_mma_py.bdd_cuda_parallel_mma(ilp_instance)
-assert(bdd_cuda_solver.nr_variables() == 6)
+bdd_cuda_solver = bdd_cuda_learned_mma_py.bdd_cuda_learned_mma(ilp_instance)
+assert(bdd_cuda_solver.nr_primal_variables() == 6)
 assert(bdd_cuda_solver.nr_bdds() == 2)
-assert(bdd_cuda_solver.nr_variables(0) == 2)
 assert(bdd_cuda_solver.lower_bound() == 4)
 test_pickle(bdd_cuda_solver)
 
 ilp_instance = ILP_instance_py.parse_ILP(matching_3x3)
-bdd_cuda_solver = bdd_cuda_parallel_mma_py.bdd_cuda_parallel_mma(ilp_instance)
-assert(bdd_cuda_solver.nr_variables() == 9)
+bdd_cuda_solver = bdd_cuda_learned_mma_py.bdd_cuda_learned_mma(ilp_instance)
+assert(bdd_cuda_solver.nr_primal_variables() == 9)
 assert(bdd_cuda_solver.nr_bdds() == 6)
-assert(bdd_cuda_solver.nr_variables(0) == 6)
 assert(bdd_cuda_solver.lower_bound() == -6)
 test_pickle(bdd_cuda_solver)

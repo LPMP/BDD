@@ -916,6 +916,51 @@ namespace LPMP {
         thrust::for_each(first, last, normalize_by_num_bdds<REAL>());
     }
 
+    template<typename REAL>
+    struct scale_grad_lb {
+        const int* primal_index;
+        const int* bdd_index;
+        const REAL* incoming_grad_lb;
+        REAL* grad_lo;
+        REAL* grad_hi;
+        const size_t nr_vars;
+        __host__ __device__ void operator()(const int layer_index)
+        {
+            const int primal = primal_index[layer_index];
+            if (primal >= nr_vars)
+            {
+                grad_hi[layer_index] = 0.0;
+                grad_lo[layer_index] = 0.0;
+            }
+            else
+            {
+                const int current_bdd_index = bdd_index[layer_index];
+                const REAL grad_lb = incoming_grad_lb[current_bdd_index];
+                const REAL current_grad_hi = grad_hi[layer_index];
+                grad_hi[layer_index] = current_grad_hi * grad_lb;
+                grad_lo[layer_index] = -current_grad_hi * grad_lb;
+            }
+        }
+    };
+
+    template<typename REAL>
+    void bdd_cuda_learned_mma<REAL>::grad_lower_bound_per_bdd(
+        thrust::device_ptr<REAL> grad_lb_per_bdd, // Input: incoming grad w.r.t lower bound per BDD.
+        thrust::device_ptr<REAL> grad_lo_cost_out, // Gradients w.r.t lo costs
+        thrust::device_ptr<REAL> grad_hi_cost_out // Gradients w.r.t hi costs
+    )
+    {
+        this->bdds_solution_cuda(grad_hi_cost_out);
+        // Now multiply each BDD solution by corresponding gradient dL / d lb_per_bdd.
+        scale_grad_lb<REAL> func({thrust::raw_pointer_cast(this->primal_variable_index_.data()),
+                                thrust::raw_pointer_cast(this->bdd_index_.data()), 
+                                thrust::raw_pointer_cast(grad_lb_per_bdd), 
+                                thrust::raw_pointer_cast(grad_lo_cost_out),
+                                thrust::raw_pointer_cast(grad_hi_cost_out),
+                                this->nr_variables()});
+        thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + this->nr_layers(), func);
+    }
+
     template class bdd_cuda_learned_mma<float>;
     template class bdd_cuda_learned_mma<double>;
 }

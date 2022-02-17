@@ -788,13 +788,13 @@ namespace LPMP {
 
     
     template<typename REAL>
-    thrust::device_vector<REAL> bdd_cuda_base<REAL>::bdds_solution_cuda()
+    void bdd_cuda_base<REAL>::bdds_solution_cuda(thrust::device_ptr<REAL> sol)
     {
         forward_run();
         thrust::device_vector<REAL> lo_path_cost, hi_path_cost; 
         std::tie(lo_path_cost, hi_path_cost) = backward_run(true);
 
-        thrust::device_vector<REAL> sol(primal_variable_index_.size(), 0.0);
+        thrust::fill(sol, sol + nr_layers(), 0.0);
         thrust::device_vector<int> next_path_nodes(primal_variable_index_.size(), -1);
 
         // Start from root nodes of all BDDs in parallel.
@@ -806,7 +806,7 @@ namespace LPMP {
                                         thrust::raw_pointer_cast(lo_path_cost.data()),
                                         thrust::raw_pointer_cast(hi_path_cost.data()),
                                         thrust::raw_pointer_cast(next_path_nodes.data()),
-                                        thrust::raw_pointer_cast(sol.data())});
+                                        thrust::raw_pointer_cast(sol)});
 
         const int num_steps = cum_nr_layers_per_hop_dist_.size();
         int start_offset = 0;
@@ -819,17 +819,17 @@ namespace LPMP {
             }
             else 
             {   // all terminal nodes, thus copy 0's.
-                thrust::fill(sol.begin() + start_offset, sol.end(), 0.0);
+                thrust::fill(sol + start_offset, sol + nr_layers(), 0.0);
             }
             start_offset = end_offset;
         }
-        return sol;
     }
 
     template<typename REAL>
     two_dim_variable_array<REAL> bdd_cuda_base<REAL>::bdds_solution()
     {
-        thrust::device_vector<REAL> sol = bdds_solution_cuda();
+        thrust::device_vector<REAL> sol(nr_layers());
+        bdds_solution_cuda(sol.data());
         thrust::device_vector<REAL> sol_sorted(sol.size());
         thrust::gather(primal_variable_sorting_order_.begin(), primal_variable_sorting_order_.end(), 
                         sol.begin(), sol_sorted.begin());
@@ -872,6 +872,14 @@ namespace LPMP {
         // Sum costs_from_terminal of all root nodes. Since root nodes are always at the start (unless one row contains > 1 BDD then have to change TODO.)
 
         return thrust::reduce(cost_from_terminal_.begin(), cost_from_terminal_.begin() + nr_bdds_, 0.0);
+    }
+
+    template<typename REAL>
+    void bdd_cuda_base<REAL>::lower_bound_per_bdd(thrust::device_ptr<REAL> lb_per_bdd)
+    {
+        backward_run(false);
+        // Take costs from terminal for root nodes and arrange lb's per bdd so that corresponding value for each BDD can be found at the BDD index.
+        thrust::scatter(cost_from_terminal_.begin(), cost_from_terminal_.begin() + nr_bdds_, this->bdd_index_.begin(), lb_per_bdd);
     }
 
     template<typename REAL>
@@ -933,6 +941,13 @@ namespace LPMP {
         std::vector<REAL> h_primal_obj_vec(primal_obj_vec.size());
         thrust::copy(primal_obj_vec.begin(), primal_obj_vec.end(), h_primal_obj_vec.begin());
         return h_primal_obj_vec;
+    }
+
+    template<typename REAL>
+    void bdd_cuda_base<REAL>::terminal_nodes_indices(thrust::device_ptr<int> indices) const
+    {
+        thrust::copy(top_sink_indices_.begin(), top_sink_indices_.end(), indices);
+        thrust::copy(bot_sink_indices_.begin(), bot_sink_indices_.end(), indices + top_sink_indices_.size());
     }
 
     template<typename REAL>

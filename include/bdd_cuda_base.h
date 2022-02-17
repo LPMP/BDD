@@ -46,6 +46,7 @@ namespace LPMP {
             void flush_backward_states();
 
             double lower_bound();
+            void lower_bound_per_bdd(thrust::device_ptr<REAL> lb_per_bdd);
 
             template<typename COST_ITERATOR>
                 void update_costs(COST_ITERATOR cost_lo_begin, COST_ITERATOR cost_lo_end, COST_ITERATOR cost_hi_begin, COST_ITERATOR cost_hi_end);
@@ -61,7 +62,7 @@ namespace LPMP {
             two_dim_variable_array<std::array<double,2>> min_marginals();
             std::tuple<thrust::device_vector<int>, thrust::device_vector<REAL>, thrust::device_vector<REAL>> min_marginals_cuda(bool get_sorted = true);
 
-            thrust::device_vector<REAL> bdds_solution_cuda(); // Computes argmin for each BDD separately. The output vector is of exactly same layout and size as of hi_cost_ and contains 0 values at terminal nodes.
+            void bdds_solution_cuda(thrust::device_ptr<REAL> sol); // Computes argmin for each BDD separately and sets in sol.
             two_dim_variable_array<REAL> bdds_solution(); // Returns the solution on CPU and laid out in similar way as the output of min_marginals()
 
             std::vector<REAL> compute_primal_objective_vector();
@@ -106,6 +107,8 @@ namespace LPMP {
 
             void distribute_delta(thrust::device_ptr<REAL> def_min_marg_diff_ptr);
             void distribute_delta();
+
+            void terminal_nodes_indices(thrust::device_ptr<int> indices) const; // indices should point to memory of size 2 * nr_bdds()
 
             // For serialization using cereal:
             template <class Archive>

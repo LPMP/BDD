@@ -7,6 +7,9 @@
 #include "bdd_preprocessor.h"
 #include <sstream>
 #include "cuda_utils.h"
+#include <thrust/sort.h>
+#include <thrust/device_vector.h>
+#include <thrust/execution_policy.h>
 
 namespace py=pybind11;
 
@@ -29,6 +32,83 @@ struct set_primal_indices {
         return min(i, (int) num_vars);
     }
 };
+
+template<typename T>
+std::vector<size_t> argsort(const std::vector<T> &array) {
+    std::vector<size_t> indices(array.size());
+    std::iota(indices.begin(), indices.end(), 0);
+    std::sort(indices.begin(), indices.end(),
+              [&array](int left, int right) -> bool {
+                  // sort indices according to corresponding array element
+                  return array[left] < array[right];
+              });
+
+    return indices;
+}
+
+std::vector<float> get_constraint_matrix_coeffs(const LPMP::ILP_input& ilp, const bdd_type& solver)
+{
+    const size_t num_elements = solver.nr_layers();
+    std::vector<int> var_indices_sorted(num_elements);
+    std::vector<int> con_indices_sorted(num_elements);
+    std::vector<int> cumm_num_vars_per_constraint(solver.nr_bdds() + 1);
+    std::vector<size_t> indices(num_elements);
+    { // Create COO representation for faster indexing later.
+        thrust::device_vector<int> dev_primal_index = solver.get_primal_variable_index();
+        thrust::device_vector<int> dev_bdd_index = solver.get_bdd_index();
+        thrust::device_vector<unsigned long> dev_indices(num_elements);
+        thrust::sequence(dev_indices.begin(), dev_indices.end());
+
+        auto first_key = thrust::make_zip_iterator(thrust::make_tuple(dev_bdd_index.begin(), dev_primal_index.begin()));
+        auto last_key = thrust::make_zip_iterator(thrust::make_tuple(dev_bdd_index.end(), dev_primal_index.end()));
+        thrust::sort_by_key(thrust::device, first_key, last_key, dev_indices.begin());
+
+        thrust::device_vector<int> dev_cumm_num_vars_per_constraint(num_elements);
+        auto new_last = thrust::reduce_by_key(dev_bdd_index.begin(), dev_bdd_index.end(), thrust::make_constant_iterator<int>(1), 
+                                thrust::make_discard_iterator(), dev_cumm_num_vars_per_constraint.begin());
+        const auto nr_con = std::distance(dev_cumm_num_vars_per_constraint.begin(), new_last.second);
+        if (nr_con != solver.nr_bdds())
+            throw std::runtime_error("con_indices reduced size mismatch.");
+        dev_cumm_num_vars_per_constraint.resize(nr_con);
+        thrust::inclusive_scan(dev_cumm_num_vars_per_constraint.begin(), dev_cumm_num_vars_per_constraint.end(), 
+                                dev_cumm_num_vars_per_constraint.begin());
+        thrust::copy(dev_bdd_index.begin(), dev_bdd_index.end(), con_indices_sorted.begin());
+        thrust::copy(dev_primal_index.begin(), dev_primal_index.end(), var_indices_sorted.begin());
+        thrust::copy(dev_indices.begin(), dev_indices.end(), indices.begin());
+        thrust::copy(dev_cumm_num_vars_per_constraint.begin(), dev_cumm_num_vars_per_constraint.end(), 
+                    cumm_num_vars_per_constraint.begin() + 1);
+        cumm_num_vars_per_constraint[0] = 0;
+    }
+
+    std::vector<float> coefficients(num_elements, 0.0);
+    int find_start_index = cumm_num_vars_per_constraint[0];
+    for(size_t c = 0; c < ilp.nr_constraints(); ++c)
+    {
+        const auto& constr = ilp.constraints()[c];
+        if(!constr.is_linear())
+            throw std::runtime_error("Only linear constraints supported");
+        assert(constr.monomials.size() == constr.coefficients.size());
+        int find_end_index = cumm_num_vars_per_constraint[c + 1];
+        for(size_t monomial_idx = 0; monomial_idx < constr.monomials.size(); ++monomial_idx)
+        {
+            const size_t var = constr.monomials(monomial_idx, 0);
+            const int coeff = constr.coefficients[monomial_idx];
+            // Find where does (c, var) occurs in solver variable and constraint indices:
+            const auto it = std::find(var_indices_sorted.begin() + find_start_index, 
+                                    var_indices_sorted.begin() + find_end_index, var);
+            if (it == var_indices_sorted.begin() + find_end_index)
+                throw std::runtime_error("ILP variable not found in BDD.");
+            else
+            {
+                const int index_to_place = indices[std::distance(var_indices_sorted.begin(), it)];
+                coefficients[index_to_place] = coeff;
+            }
+        }
+        find_start_index = find_end_index;
+    }
+
+    return coefficients;
+}
 
 PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
     m.doc() = "Python binding for bdd-based solver using CUDA";
@@ -56,12 +136,31 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
                 ", nr_bdds: "+ std::to_string(solver.nr_bdds()) +
                 ", nr_layers: "+ std::to_string(solver.nr_layers());
                 })
-        .def("nr_primal_variables", [](bdd_type& solver) { return solver.nr_variables(); })
-        .def("nr_layers", [](bdd_type& solver) { return solver.nr_layers(); })
-        .def("nr_layers", [](bdd_type& solver, const int hop_index) { return solver.nr_layers(hop_index); })
+        .def("nr_primal_variables", [](const bdd_type& solver) { return solver.nr_variables(); })
+        .def("nr_layers", [](const bdd_type& solver) { return solver.nr_layers(); })
+        .def("nr_layers", [](const bdd_type& solver, const int hop_index) { return solver.nr_layers(hop_index); })
         .def("nr_bdds", &bdd_type::nr_bdds)
+        .def("constraint_matrix_coefficients", [](const bdd_type& solver, const LPMP::ILP_input& ilp)
+        {
+            return get_constraint_matrix_coeffs(ilp, solver);
+        }, "Computes the coefficients for each variable appearing in constraint."
+        "\nAssumes that each BDD correspond to a linear constraint present in original ILP.")
         .def("lower_bound", &bdd_type::lower_bound)
-        
+        .def("lower_bound_per_bdd", [](bdd_type& solver, const long lb_out_ptr)
+        {
+            thrust::device_ptr<float> lb_out_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(lb_out_ptr));
+            solver.lower_bound_per_bdd(lb_out_ptr_thrust);
+        }, "Computes LB for each constraint and copies in the provided pointer to FP32 memory (size = nr_bdds()).")
+        .def("solution_per_bdd", [](bdd_type& solver, const long sol_out_ptr)
+        {
+            thrust::device_ptr<float> sol_out_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(sol_out_ptr));
+            solver.bdds_solution_cuda(sol_out_ptr_thrust);
+        }, "Computes argmin for each constraint and copies in the provided pointer to FP32 memory (size = nr_layers()).")
+        .def("terminal_nodes_indices", [](bdd_type& solver, const long indices_out_ptr)
+        {
+            thrust::device_ptr<int> indices_out_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<int*>(indices_out_ptr));
+            solver.terminal_nodes_indices(indices_out_ptr_thrust);
+        }, "Computes indices of dual variables which are actually just terminal nodes. Input argument to point to a INT32 memory of size = 2 * nr_bdds().")
         .def("primal_variable_index", [](bdd_type& solver, const long primal_variable_index_out_ptr)
         {
             int* ptr = reinterpret_cast<int*>(primal_variable_index_out_ptr); 
@@ -77,7 +176,7 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
             thrust::copy(bdd_index_managed.begin(), bdd_index_managed.end(), ptr);
         }, "Sets BDD indices for all dual variables in the pre-allocated memory of size = nr_layers() pointed to by the input pointer in INT32 format.")
 
-        .def("get_solver_costs", [](bdd_type& solver, 
+        .def("get_solver_costs", [](const bdd_type& solver, 
                                 const long lo_cost_out_ptr,
                                 const long hi_cost_out_ptr,
                                 const long deferred_mm_out_ptr)
@@ -171,7 +270,13 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
             thrust::device_ptr<float> grad_def_mm_out_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(grad_def_mm_out_ptr));
             solver.grad_distribute_delta(grad_lo_cost_ptr_thrust, grad_hi_cost_ptr_thrust, grad_def_mm_out_ptr_thrust);
         }, "Backprop. through distribute_delta.")
-
+        .def("grad_lower_bound_per_bdd", [](bdd_type& solver, const long grad_lb_per_bdd, const long grad_lo_cost_ptr, const long grad_hi_cost_ptr)
+        {
+            thrust::device_ptr<float> grad_lb_per_bdd_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(grad_lb_per_bdd));
+            thrust::device_ptr<float> grad_lo_cost_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(grad_lo_cost_ptr));
+            thrust::device_ptr<float> grad_hi_cost_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(grad_hi_cost_ptr));
+            solver.grad_lower_bound_per_bdd(grad_lb_per_bdd_thrust, grad_lo_cost_ptr_thrust, grad_hi_cost_ptr_thrust);
+        }, "Backprop. through lower bound per BDD.")
         .def("all_min_marginal_differences", [](bdd_type& solver, const long mm_diff_out_ptr)
         {
             thrust::device_ptr<float> mm_diff_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(mm_diff_out_ptr));

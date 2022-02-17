@@ -51,6 +51,12 @@ namespace LPMP {
                 thrust::device_ptr<REAL> grad_hi_pert_out // Output: contains grad w.r.t pertubation in hi costs, assumes the memory is already allocated (= nr_variables()).
             );
 
+            void grad_lower_bound_per_bdd(
+                thrust::device_ptr<REAL> grad_lb_per_bdd, // Input: incoming grad w.r.t lower bound per BDD.
+                thrust::device_ptr<REAL> grad_lo_cost_out, // Gradients w.r.t lo costs
+                thrust::device_ptr<REAL> grad_hi_cost_out // Gradients w.r.t hi costs
+            );
+
         private:
             // last_hop should be equal to nr_hops() - 1 for complete forward pass.
             void forward_iteration_learned_mm_dist(const thrust::device_ptr<const REAL> dist_weights, thrust::device_ptr<REAL> mm_diff_ptr, const REAL omega);
