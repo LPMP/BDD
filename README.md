@@ -14,7 +14,7 @@ Then continue with creating a build folder and use cmake:
 
 `mkdir build && cd build && cmake ..`
 
-If CUDA-solvers are to be built, set `WITH_CUDA=ON` in cmake.
+If CUDA-solvers are to be built, set `WITH_CUDA=ON` in cmake and ensure CUDA is available (tested on CUDA 11.2, later versions should also work).
 
 ## Command Line Usage
 
