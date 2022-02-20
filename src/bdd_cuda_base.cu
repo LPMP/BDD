@@ -518,7 +518,9 @@ namespace LPMP {
         assert(delta_1_size == 0 || delta_1_size == nr_variables());
 
         auto populate_costs = [&](const thrust::device_ptr<const REAL_arg> cost_delta, auto base_cost_begin, auto base_cost_end) {
-            set_vars_costs_func<REAL, REAL_arg> func({thrust::raw_pointer_cast(num_bdds_per_var_.data()), thrust::raw_pointer_cast(cost_delta)});
+            set_vars_costs_func<REAL, REAL_arg> func({thrust::raw_pointer_cast(num_bdds_per_var_.data()), 
+                                                    thrust::raw_pointer_cast(cost_delta),
+                                                    nr_variables()});
 
             auto first = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.begin(), base_cost_begin));
             auto last = thrust::make_zip_iterator(thrust::make_tuple(primal_variable_index_.end(), base_cost_end));
