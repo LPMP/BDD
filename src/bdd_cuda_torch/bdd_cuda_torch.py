@@ -4,19 +4,20 @@ from torch.autograd.function import once_differentiable
 
 def ComputePerBDDSolutions(solvers, lo_costs_batch, hi_costs_batch):
     per_bdd_solution_hi = torch.zeros_like(lo_costs_batch) # Initialize by 0's to also copy to deferred min-marginals.
-    per_bdd_solution_lo = torch.empty_like(lo_costs_batch)
+    # per_bdd_solution_lo = torch.empty_like(lo_costs_batch)
     layer_start = 0
     for (b, solver) in enumerate(solvers):
         solver.set_solver_costs(lo_costs_batch[layer_start].data_ptr(), hi_costs_batch[layer_start].data_ptr(), per_bdd_solution_hi[layer_start].data_ptr())
         solver.solution_per_bdd(per_bdd_solution_hi[layer_start].data_ptr())
-        current_sol_lo = 1.0 - per_bdd_solution_hi[layer_start: layer_start + solver.nr_layers()]
-        terminal_indices = torch.empty((2 * solver.nr_bdds()), device = hi_costs_batch.device, dtype = torch.int32)
-        solver.terminal_nodes_indices(terminal_indices.data_ptr())
-        current_sol_lo[terminal_indices] = 0.0 # Terminal nodes should have no gradients.
-        per_bdd_solution_lo[layer_start: layer_start + solver.nr_layers()] = current_sol_lo
+        # current_sol_lo = 1.0 - per_bdd_solution_hi[layer_start: layer_start + solver.nr_layers()]
+        # terminal_indices = torch.empty((2 * solver.nr_bdds()), device = hi_costs_batch.device, dtype = torch.int32)
+        # solver.terminal_nodes_indices(terminal_indices.data_ptr())
+        # current_sol_lo[terminal_indices] = 0.0 # Terminal nodes.
+        # per_bdd_solution_lo[layer_start: layer_start + solver.nr_layers()] = current_sol_lo
         layer_start += solver.nr_layers()
     
-    return per_bdd_solution_lo, per_bdd_solution_hi
+    return per_bdd_solution_hi
+    #return per_bdd_solution_lo, per_bdd_solution_hi
 
 class DualIterations(torch.autograd.Function):
     @staticmethod
@@ -31,6 +32,7 @@ class DualIterations(torch.autograd.Function):
         assert(lo_costs_batch.shape == hi_costs_batch.shape)
         assert(lo_costs_batch.shape == dist_weights_batch.shape)
         assert(lo_costs_batch.shape == def_mm_batch.shape)
+        assert(torch.numel(omega) == 1)
         ctx.set_materialize_grads(False)
         ctx.save_for_backward(lo_costs_batch, hi_costs_batch, def_mm_batch, dist_weights_batch, omega)
         ctx.solvers = solvers
@@ -242,7 +244,7 @@ class ComputeLowerBoundperBDD(torch.autograd.Function):
             solver.set_solver_costs(lo_costs_batch[layer_start].data_ptr(), hi_costs_batch[layer_start].data_ptr(), mm_diff_batch[layer_start].data_ptr())
             lb_per_bdd = torch.empty((solver.nr_bdds()), device = lo_costs_batch.device, dtype = torch.float32)
             solver.lower_bound_per_bdd(lb_per_bdd.data_ptr())
-            lb_per_bdd_batch.append(lb_per_bdd_batch)
+            lb_per_bdd_batch.append(lb_per_bdd)
             layer_start += solver.nr_layers()
         assert(layer_start == lo_costs_batch.shape[0])
         lb_per_bdd_batch = torch.cat(lb_per_bdd_batch)

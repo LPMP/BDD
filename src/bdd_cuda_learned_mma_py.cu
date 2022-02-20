@@ -97,7 +97,10 @@ std::vector<float> get_constraint_matrix_coeffs(const LPMP::ILP_input& ilp, cons
             const auto it = std::find(var_indices_sorted.begin() + find_start_index, 
                                     var_indices_sorted.begin() + find_end_index, var);
             if (it == var_indices_sorted.begin() + find_end_index)
-                throw std::runtime_error("ILP variable not found in BDD.");
+            {
+                std::cout<<"ILP variable not found in BDD. Var: " + std::to_string(var)<<", Con: "<<c<<"\n";
+                throw std::runtime_error("error");
+            }
             else
             {
                 const int index_to_place = indices[std::distance(var_indices_sorted.begin(), it)];
@@ -199,11 +202,23 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
             solver.set_solver_costs(lo_cost_ptr_thrust, hi_cost_ptr_thrust, def_mm_ptr_thrust);
         },"Set the costs i.e., (lo_costs (size = nr_layers()), hi_costs (size = nr_layers()), def_mm_ptr (size = nr_layers()) to set solver state.")
 
-        .def("non_learned_iterations", [](bdd_type& solver, const int num_itr, const float omega) 
+        .def("non_learned_iterations", [](bdd_type& solver, const float omega, const int max_num_itr, const float improvement_slope) 
         {
-            for (int itr = 0; itr < num_itr; itr++)
+            const double lb_initial = solver.lower_bound();
+            double lb_first_iter = std::numeric_limits<double>::max();
+            double lb_prev = lb_initial;
+            double lb_post = lb_prev;
+            for (int itr = 0; itr < max_num_itr; itr++)
+            {
                 solver.iteration(omega);
-        }, "Runs parallel_mma solver for num_itr many iterations.")
+                lb_prev = lb_post;
+                lb_post = solver.lower_bound();
+                if(itr == 0)
+                    lb_first_iter = lb_post;
+                if (std::abs(lb_prev - lb_post) < improvement_slope * std::abs(lb_initial - lb_first_iter))
+                    break;
+            }
+        }, "Runs parallel_mma solver for a maximum of max_num_itr iterations and stops earlier if rel. improvement is less than improvement_slop .")
 
         .def("iterations", [](bdd_type& solver, 
                             const long dist_weights_ptr, 
