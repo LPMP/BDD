@@ -48,6 +48,11 @@ std::vector<size_t> argsort(const std::vector<T> &array) {
 
 std::vector<float> get_constraint_matrix_coeffs(const LPMP::ILP_input& ilp, const bdd_type& solver)
 {
+    if (ilp.nr_constraints() != solver.nr_bdds())
+    {
+        std::cout<<"Number of constraints: "<<ilp.nr_constraints()<<", not equal to number of BDDs: "<<solver.nr_bdds()<<"\n";
+        throw std::runtime_error("error");
+    }
     const size_t num_elements = solver.nr_layers();
     std::vector<int> var_indices_sorted(num_elements);
     std::vector<int> con_indices_sorted(num_elements);
@@ -223,10 +228,11 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
         .def("iterations", [](bdd_type& solver, 
                             const long dist_weights_ptr, 
                             const int num_itr, 
-                            const float omega) 
+                            const float omega,
+                            const double improvement_slope) 
         {
             thrust::device_ptr<float> distw_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(dist_weights_ptr));
-            solver.iterations(distw_ptr_thrust, num_itr, omega);
+            solver.iterations(distw_ptr_thrust, num_itr, omega, improvement_slope);
         }, "Runs solver for num_itr many iterations using distribution weights *dist_weights_ptr and sets the min-marginals to distribute in *mm_diff_ptr.\n"
         "Both dist_weights_ptr and mm_diff_ptr should point to a memory containing nr_layers() many elements in FP32 format.\n"
         "First iteration used the deferred min-marginals in mm_diff_ptr to distribute.")

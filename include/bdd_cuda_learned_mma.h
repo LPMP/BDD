@@ -13,7 +13,8 @@ namespace LPMP {
 
             // dist_weights points to disribution weights and mm_diff_out_ptr will contain deferred min-marginal differences.
             // The size of underlying arrays should be corresponding to the size of hi_cost_ i.e. = this->nr_layers(). 
-            void iterations(const thrust::device_ptr<const REAL> dist_weights, const int num_itr, const REAL omega);
+            // Returns the number of iterations solver actually due to improvement_slope > 0.
+            int iterations(const thrust::device_ptr<const REAL> dist_weights, const int num_itr, const REAL omega, const double improvement_slope = 1e-6);
 
             // Assumes that deffered_mm_diff_ contains the mm's containing the values before iterations() was called.
             void grad_iterations(

@@ -167,13 +167,25 @@ namespace LPMP {
     }
 
     template<typename REAL>
-    void bdd_cuda_learned_mma<REAL>::iterations(const thrust::device_ptr<const REAL> dist_weights, const int num_itr, const REAL omega)
+    int bdd_cuda_learned_mma<REAL>::iterations(const thrust::device_ptr<const REAL> dist_weights, const int num_itr, const REAL omega, const double improvement_slope)
     {
-        for(int itr = 0; itr < num_itr; itr++)
+        const double lb_initial = this->lower_bound();
+        double lb_first_iter = std::numeric_limits<double>::max();
+        double lb_prev = lb_initial;
+        double lb_post = lb_prev;
+        int itr = 0;
+        for(itr = 0; itr < num_itr; itr++)
         {
             forward_iteration_learned_mm_dist(dist_weights, this->deffered_mm_diff_.data(), omega);
             backward_iteration_learned_mm_dist(dist_weights, this->deffered_mm_diff_.data(), omega);
+            lb_prev = lb_post;
+            lb_post = this->lower_bound();
+            if(itr == 0)
+                lb_first_iter = lb_post;
+            if (std::abs(lb_prev - lb_post) < improvement_slope * std::abs(lb_initial - lb_first_iter))
+                break;
         }
+        return itr;
     }
 
     template<typename REAL>
