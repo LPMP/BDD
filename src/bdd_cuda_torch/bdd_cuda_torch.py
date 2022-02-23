@@ -3,6 +3,8 @@ from BDD.bdd_cuda_learned_mma_py import bdd_cuda_learned_mma
 from torch.autograd.function import once_differentiable
 
 def ComputePerBDDSolutions(solvers, lo_costs_batch, hi_costs_batch):
+    assert(lo_costs_batch.is_contiguous())
+    assert(hi_costs_batch.is_contiguous())
     per_bdd_solution_hi = torch.zeros_like(lo_costs_batch) # Initialize by 0's to also copy to deferred min-marginals.
     # per_bdd_solution_lo = torch.empty_like(lo_costs_batch)
     layer_start = 0
@@ -82,7 +84,7 @@ class DualIterations(torch.autograd.Function):
             assert(num_iterations_b > track_grad_after_itr)
             solver.grad_iterations(dist_weights_batch[layer_start].data_ptr(), grad_lo_costs_in[layer_start].data_ptr(), grad_hi_costs_in[layer_start].data_ptr(),
                                     grad_deff_mm_diff_in[layer_start].data_ptr(), grad_dist_weights_batch_in[layer_start].data_ptr(), grad_omega_local.data_ptr(),
-                                    omega, track_grad_after_itr, num_iterations_b)
+                                    omega.item(), track_grad_after_itr, num_iterations_b)
             grad_omega += grad_omega_local
             layer_start += solver.nr_layers()
         return None, grad_lo_costs_in, grad_hi_costs_in, grad_deff_mm_diff_in, grad_dist_weights_batch_in, None, grad_omega, None, None

@@ -780,12 +780,16 @@ namespace LPMP {
         __host__ __device__ void operator()(const int layer_index)
         {
             const int node_index = next_path_nodes[layer_index]; // which node to select in current bdd layer.
+            assert(node_index >= 0); // terminal node.
+            const int next_lo_node = lo_bdd_node_index[node_index];
+            if (next_lo_node < 0)
+                return; // current node is a terminal node and thus does not correspond to a variable.
+
             const REAL cost_diff = hi_path_cost[node_index] - lo_path_cost[node_index]; // see if lo arc has lower solution cost or higher.
             if (cost_diff > 0) // high arc has more cost so assign 0.
             {
                 sol[layer_index] = 0.0;
-                const int next_bdd_node = lo_bdd_node_index[node_index];
-                next_path_nodes[bdd_node_to_layer_map[next_bdd_node]] = next_bdd_node;
+                next_path_nodes[bdd_node_to_layer_map[next_lo_node]] = next_lo_node;
             }
             else
             {
@@ -825,7 +829,7 @@ namespace LPMP {
             const int end_offset = cum_nr_layers_per_hop_dist_[s];
             if (s < num_steps - 1)
             {
-                thrust::for_each(thrust::make_counting_iterator<int>(start_offset), thrust::make_counting_iterator<int>(end_offset), func);
+                thrust::for_each(thrust::make_counting_iterator<int>(0) + start_offset, thrust::make_counting_iterator<int>(0) + end_offset, func);
             }
             else 
             {   // all terminal nodes, thus copy 0's.
@@ -953,11 +957,25 @@ namespace LPMP {
         return h_primal_obj_vec;
     }
 
+    struct map_terminal_layer_indices {
+        const int* terminal_node_indices;
+        const int* bdd_node_to_layer_map;
+        int* indices;
+        __host__ __device__ void operator()(const int n)
+        {
+            indices[n] = bdd_node_to_layer_map[terminal_node_indices[n]];
+        }
+    };
+
     template<typename REAL>
-    void bdd_cuda_base<REAL>::terminal_nodes_indices(thrust::device_ptr<int> indices) const
+    void bdd_cuda_base<REAL>::terminal_layer_indices(thrust::device_ptr<int> indices) const
     {
-        thrust::copy(top_sink_indices_.begin(), top_sink_indices_.end(), indices);
-        thrust::copy(bot_sink_indices_.begin(), bot_sink_indices_.end(), indices + top_sink_indices_.size());
+        // bot sinks have same layer index as top sink, thus finding top sink indices is sufficient.
+        map_terminal_layer_indices map_top_sink_func({
+            thrust::raw_pointer_cast(top_sink_indices_.data()),
+            thrust::raw_pointer_cast(bdd_node_to_layer_map_.data()),
+            thrust::raw_pointer_cast(indices)});
+        thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + top_sink_indices_.size(), map_top_sink_func);
     }
 
     template<typename REAL>
@@ -1042,6 +1060,7 @@ namespace LPMP {
             cum_nr_bdd_nodes_per_hop_dist_,
             cum_nr_layers_per_hop_dist_,
             nr_variables_per_hop_dist_,
+            layer_offsets_,
             nr_vars_, nr_bdds_, nr_bdd_nodes_, num_dual_variables_
         );
     }
@@ -1069,6 +1088,7 @@ namespace LPMP {
             cum_nr_bdd_nodes_per_hop_dist_,
             cum_nr_layers_per_hop_dist_,
             nr_variables_per_hop_dist_,
+            layer_offsets_,
             nr_vars_, nr_bdds_, nr_bdd_nodes_, num_dual_variables_
         );
         cost_from_root_ = thrust::device_vector<REAL>(nr_bdd_nodes_);

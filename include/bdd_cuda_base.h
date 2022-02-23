@@ -108,7 +108,7 @@ namespace LPMP {
             void distribute_delta(thrust::device_ptr<REAL> def_min_marg_diff_ptr);
             void distribute_delta();
 
-            void terminal_nodes_indices(thrust::device_ptr<int> indices) const; // indices should point to memory of size 2 * nr_bdds()
+            void terminal_layer_indices(thrust::device_ptr<int> indices) const; // indices should point to memory of size nr_bdds()
 
             // For serialization using cereal:
             template <class Archive>
