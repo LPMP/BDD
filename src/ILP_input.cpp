@@ -76,6 +76,20 @@ namespace LPMP {
         return true;
     }
 
+    bool ILP_input::constraint::is_simplex() const
+    {
+        if(ineq != inequality_type::equal)
+            return false;
+        if(right_hand_side == 0)
+            return false;
+        if(!is_linear())
+            return false;
+        for(const int c : coefficients)
+            if(c != right_hand_side)
+                return false;
+        return true;
+    }
+
     bool ILP_input::constraint::distinct_variables() const
     {
         std::unordered_set<size_t> vars;

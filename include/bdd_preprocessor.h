@@ -13,8 +13,13 @@ namespace LPMP {
     
     class bdd_preprocessor {
         public:
-            bdd_preprocessor(const ILP_input& ilp, const bool constraint_groups = true, const bool normalize = false);
+            bdd_preprocessor() {};
+            bdd_preprocessor(const ILP_input& ilp, const bool constraint_groups = true, const bool normalize = false)
+            {
+                add_ilp(ilp, constraint_groups, normalize);
+            }
 
+            two_dim_variable_array<size_t> add_ilp(const ILP_input& ilp, const bool constraint_groups = true, const bool normalize = false);
             template<typename VARIABLE_ITERATOR>
                 void add_bdd(BDD::node_ref bdd, VARIABLE_ITERATOR var_begin, VARIABLE_ITERATOR var_end);
 
@@ -32,11 +37,8 @@ namespace LPMP {
             void set_coalesce_partial_contiguous_overlap() { coalesce_partial_contiguous_overlap_ = true; }
             void set_coalesce_cliques() { coalesce_cliques_ = true; }
 
-            void rebase_bdds();
-            void construct_bdd_collection();
             void coalesce();
             void coalesce_bdd_collection();
-            const auto get_bdd_indices() { return indices; };
             //BDD::bdd_mgr& get_bdd_manager() { return bdd_mgr; }
             //std::vector<BDD::node_ref> get_bdds() { return bdds; }
 
@@ -78,7 +80,6 @@ namespace LPMP {
 
             BDD::bdd_mgr bdd_mgr;
             BDD::bdd_collection bdd_collection;
-            two_dim_variable_array<size_t> indices;
             std::vector<BDD::node_ref> bdds;
             size_t nr_variables = 0;
 
@@ -94,7 +95,6 @@ namespace LPMP {
         void bdd_preprocessor::add_bdd(BDD::node_ref bdd, VARIABLE_ITERATOR var_begin, VARIABLE_ITERATOR var_end)
         {
             bdds.push_back(bdd);
-            indices.push_back(var_begin, var_end);
             nr_variables = std::max(nr_variables, *(var_end-1)+1);
         }
 

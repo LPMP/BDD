@@ -73,7 +73,7 @@ namespace LPMP {
             //bdd_solver(const std::vector<std::string>& args);
 
             void solve();
-            void round();
+            double round();
             void tighten();
             double lower_bound();
             void fix_variable(const size_t var, const bool value);

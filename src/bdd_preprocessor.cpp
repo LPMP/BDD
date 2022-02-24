@@ -14,7 +14,7 @@
 
 namespace LPMP {
 
-    bdd_preprocessor::bdd_preprocessor(const ILP_input& input, const bool constraint_groups, const bool normalize)
+    two_dim_variable_array<size_t> bdd_preprocessor::add_ilp(const ILP_input& input, const bool constraint_groups, const bool normalize)
     {
         MEASURE_FUNCTION_EXECUTION_TIME;
         assert(bdd_collection.nr_bdds() == 0);
@@ -23,7 +23,9 @@ namespace LPMP {
         if(normalize)
             std::cout << "[bdd preprocessor] normalize constraints\n";
 
-        std::vector<size_t> ineq_to_bdd_nr(input.constraints().size(), std::numeric_limits<size_t>::max());
+        two_dim_variable_array<size_t> ineq_to_bdd_nr;
+        ineq_to_bdd_nr.clear();
+        //std::vector<size_t> ineq_to_bdd_nr(input.constraints().size(), std::numeric_limits<size_t>::max());
 
         if(constraint_groups == true)
         {
@@ -45,11 +47,13 @@ namespace LPMP {
         // for variable copies when using coefficient decomposition transformation to BDDs
         std::atomic<size_t> extra_var_counter = input.nr_variables();
 
+        size_t tid_for_merging = std::numeric_limits<size_t>::max();
 #pragma omp parallel for ordered schedule(static) num_threads(nr_threads)
         for(size_t tid=0; tid<nr_threads; ++tid)
         {
             std::vector<int> coefficients;
             std::vector<std::size_t> variables;
+            two_dim_variable_array<size_t> ineq_nrs;
             BDD::bdd_mgr bdd_mgr;
             bdd_converter converter(bdd_mgr);
             BDD::bdd_collection cur_bdd_collection;
@@ -65,7 +69,21 @@ namespace LPMP {
                 if(normalize && !constraint.is_normalized())
                     constraint.normalize();
                 variables.clear();
-                if(constraint.is_linear())
+                if(constraint.is_simplex())
+                {
+                    const size_t bdd_nr = cur_bdd_collection.simplex_constraint(constraint.coefficients.size());
+                    std::vector<size_t> variables;
+                    for(size_t monomial_idx=0; monomial_idx<constraint.monomials.size(); ++monomial_idx)
+                    {
+                        const size_t var = constraint.monomials(monomial_idx, 0);
+                        variables.push_back(var);
+                    }
+                    cur_bdd_collection.rebase(bdd_nr, variables.begin(), variables.end());
+
+                    std::array<size_t,1> ineq_nr = {bdd_nr};
+                    ineq_nrs.push_back(ineq_nr.begin(), ineq_nr.end());
+                }
+                else if(constraint.is_linear())
                 {
                     assert(constraint.monomials.size() == constraint.coefficients.size());
                     for(size_t monomial_idx=0; monomial_idx<constraint.monomials.size(); ++monomial_idx)
@@ -92,6 +110,8 @@ namespace LPMP {
                         cur_bdd_collection.reorder(bdd_nr);
                         assert(cur_bdd_collection.is_reordered(bdd_nr));
                         cur_bdd_collection.rebase(bdd_nr, variables.begin(), variables.end());
+                        std::array<size_t,1> ineq_nr = {bdd_nr};
+                        ineq_nrs.push_back(ineq_nr.begin(), ineq_nr.end());
                     }
                     else // use coefficient decomposition
                     {
@@ -152,6 +172,11 @@ namespace LPMP {
                             assert(copy_variables[i] != std::numeric_limits<size_t>::max());
 
                         cur_bdd_collection.rebase(bdd_nr, copy_variables.begin(), copy_variables.end());
+
+                        std::vector<size_t> new_ineq_nrs;
+                        for(size_t i=0; i<cur_bdd_collection.nr_bdds(); ++i)
+                            new_ineq_nrs.push_back(bdd_nr + i);
+                        ineq_nrs.push_back(new_ineq_nrs.begin(), new_ineq_nrs.end());
                     }
                 }
                 else if(constraint.distinct_variables())
@@ -179,6 +204,9 @@ namespace LPMP {
                     }
 
                     cur_bdd_collection.rebase(bdd_nr, variables.begin(), variables.end());
+
+                    std::array<size_t,2> ineq_nr = {bdd_nr};
+                    ineq_nrs.push_back(ineq_nr.begin(), ineq_nr.end());
                 }
                 else
                 {
@@ -187,9 +215,16 @@ namespace LPMP {
             }
 #pragma omp ordered
             {
+                assert(++tid_for_merging == tid);
                 bdd_collection.append(cur_bdd_collection);
+
+                // record inequality numbers of each
+                for(size_t c=0; c<ineq_nrs.size(); ++c)
+                    ineq_to_bdd_nr.push_back(ineq_nrs.begin(c), ineq_nrs.end(c));
             }
         }
+
+        assert(ineq_to_bdd_nr.size() == input.constraints().size());
 
         if(constraint_groups == true) // coalesce BDDs 
         {
@@ -284,71 +319,20 @@ namespace LPMP {
                 add_bdd(bdd_pre.get_bdd_collection()[bdd_nr]);
         }
         */
+
+        return ineq_to_bdd_nr;
     }
 
     void bdd_preprocessor::add_bdd(BDD::node_ref bdd)
     {
         bdds.push_back(bdd);
         std::vector<size_t> empty;
-        indices.push_back(empty.begin(), empty.end());
         nr_variables = std::max(nr_variables, bdd.variables().back()+1);
     }
 
     void bdd_preprocessor::add_bdd(BDD::bdd_collection_entry bdd)
     {
         //throw std::runtime_error("bdd_add in bdd_preprocessor not implemted");
-    }
-
-    void bdd_preprocessor::construct_bdd_collection()
-    {
-        return; // TODO: remove
-        assert(bdd_collection.nr_bdds() == 0);
-        for(size_t i=0; i<bdds.size(); ++i)
-        {
-            const size_t bdd_nr = bdd_collection.add_bdd(bdds[i]);
-            if(indices[i].size() > 0)
-            {
-                bdd_collection.rebase(bdd_nr, indices[i].begin(), indices[i].end());
-            } 
-        }
-        std::cout << "initialized bdd collection\n";
-        assert(bdd_collection.nr_bdds() == bdds.size()); 
-    }
-
-    void bdd_preprocessor::rebase_bdds()
-    {
-        assert(bdd_collection.nr_bdds() == 0);
-        for(size_t i=0; i<bdds.size(); ++i)
-        {
-            const size_t bdd_nr = bdd_collection.add_bdd(bdds[i]);
-            if(indices[i].size() > 0)
-            {
-                bdd_collection.rebase(bdd_nr, indices[i].begin(), indices[i].end());
-            } 
-        }
-        std::cout << "initialized bdd collection\n";
-        assert(bdd_collection.nr_bdds() == bdds.size());
-        //bdd_mgr.collect_garbage();
-
-        /*
-        for(size_t i=0; i<bdds.size(); ++i)
-        {
-            if(indices[i].size() > 0)
-            {
-                assert(indices[i].size() == bdds[i].variables().size());
-                bdds[i] = bdd_mgr.rebase(bdds[i], indices[i].begin(), indices[i].end()); 
-            } 
-        }
-        std::cout << "rebased bdd base\n";
-
-        indices.clear();
-        for(size_t i=0; i<bdds.size(); ++i)
-        {
-            std::vector<size_t> empty;
-            indices.push_back(empty.begin(), empty.end());
-        }
-        */
-
     }
 
     template<typename ITERATOR_1, typename ITERATOR_2>

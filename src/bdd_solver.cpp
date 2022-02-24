@@ -4,6 +4,7 @@
 #include "min_marginal_utils.h"
 #include "incremental_mm_agreement_rounding_cuda.h"
 #include "incremental_mm_agreement_rounding.hxx"
+#include <limits>
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -281,26 +282,26 @@ namespace LPMP {
         return permute_min_marginals(mms, options.ilp.get_variable_permutation());
     }
 
-    void bdd_solver::round()
+    double bdd_solver::round()
     {
         if(options.diving_primal_rounding)
         {
             assert(options.diving_primal_rounding == bool(primal_heuristic));
             if(!options.diving_primal_rounding)
-                return;
+                return std::numeric_limits<double>::infinity();
 
             MEASURE_FUNCTION_EXECUTION_TIME;
 
             if(options.time_limit < 0)
             {
                 std::cout << "Time limit exceeded, aborting rounding." << std::endl;
-                return;
+                return std::numeric_limits<double>::infinity();
             }
 
             if(!primal_heuristic)
             {
                 std::cout << "no primal heuristic intialized\n";
-                return;
+                return std::numeric_limits<double>::infinity();
             }
 
             std::cout << "Retrieving total min-marginals..." << std::endl;
@@ -309,13 +310,14 @@ namespace LPMP {
             bool success = primal_heuristic->round(total_min_marginals);
 
             if (!success)
-                return;
+                return std::numeric_limits<double>::infinity();
 
             std::vector<char> primal_solution = primal_heuristic->primal_solution();
             assert(std::all_of(primal_solution.begin(), primal_solution.end(), [](char x){ return (x >= 0) && (x <= 1);}));
             assert(primal_solution.size() == costs.size());
             double upper_bound = std::inner_product(primal_solution.begin(), primal_solution.end(), costs.begin(), 0.0);
             std::cout << "Primal solution value: " << upper_bound << std::endl;
+            return upper_bound;
         }
         else if(options.incremental_primal_rounding)
         {
@@ -348,6 +350,11 @@ namespace LPMP {
 
             const double obj = options.ilp.evaluate(sol.begin(), sol.end());
             std::cout << "[incremental primal rounding] solution objective = " << obj << "\n";
+            return obj;
+        }
+        else // no rounding
+        {
+            return std::numeric_limits<double>::infinity();
         }
     } 
 
