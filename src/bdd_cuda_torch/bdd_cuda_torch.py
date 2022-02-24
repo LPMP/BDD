@@ -23,7 +23,7 @@ def ComputePerBDDSolutions(solvers, lo_costs_batch, hi_costs_batch):
 
 class DualIterations(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, solvers, lo_costs_batch, hi_costs_batch, def_mm_batch, dist_weights_batch, num_iterations, omega, track_grad_after_itr, improvement_slope):
+    def forward(ctx, solvers, lo_costs_batch, hi_costs_batch, def_mm_batch, dist_weights_batch, num_iterations, omega, grad_dual_itr_max_itr, improvement_slope):
         assert(lo_costs_batch.is_contiguous())
         assert(hi_costs_batch.is_contiguous())
         assert(def_mm_batch.is_contiguous())
@@ -39,7 +39,7 @@ class DualIterations(torch.autograd.Function):
         ctx.save_for_backward(lo_costs_batch, hi_costs_batch, def_mm_batch, dist_weights_batch, omega)
         ctx.solvers = solvers
         ctx.num_iterations = num_iterations
-        ctx.track_grad_after_itr = track_grad_after_itr
+        ctx.grad_dual_itr_max_itr = grad_dual_itr_max_itr
         lo_costs_out = torch.empty_like(lo_costs_batch)
         hi_costs_out = torch.empty_like(hi_costs_batch)
         def_mm_out = torch.empty_like(def_mm_batch)
@@ -70,7 +70,6 @@ class DualIterations(torch.autograd.Function):
         grad_hi_costs_in = grad_hi_costs_out.detach().clone()
         grad_deff_mm_diff_in = grad_def_mm_out.detach().clone()
         solvers = ctx.solvers
-        track_grad_after_itr = ctx.track_grad_after_itr
 
         lo_costs_batch, hi_costs_batch, def_mm_batch, dist_weights_batch, omega = ctx.saved_tensors
         grad_dist_weights_batch_in = torch.empty_like(dist_weights_batch)
@@ -81,10 +80,11 @@ class DualIterations(torch.autograd.Function):
             grad_omega_local = torch.empty((1), dtype = torch.float32, device = grad_lo_costs_out.device)
             solver.set_solver_costs(lo_costs_batch[layer_start].data_ptr(), hi_costs_batch[layer_start].data_ptr(), def_mm_batch[layer_start].data_ptr())
             num_iterations_b = ctx.actual_num_itr[b]
-            assert(num_iterations_b > track_grad_after_itr)
+            track_grad_for_num_itr = min(num_iterations_b, ctx.grad_dual_itr_max_itr)
+            track_grad_after_itr = num_iterations_b - track_grad_for_num_itr
             solver.grad_iterations(dist_weights_batch[layer_start].data_ptr(), grad_lo_costs_in[layer_start].data_ptr(), grad_hi_costs_in[layer_start].data_ptr(),
                                     grad_deff_mm_diff_in[layer_start].data_ptr(), grad_dist_weights_batch_in[layer_start].data_ptr(), grad_omega_local.data_ptr(),
-                                    omega.item(), track_grad_after_itr, num_iterations_b)
+                                    omega.item(), track_grad_after_itr, track_grad_for_num_itr)
             grad_omega += grad_omega_local
             layer_start += solver.nr_layers()
         return None, grad_lo_costs_in, grad_hi_costs_in, grad_deff_mm_diff_in, grad_dist_weights_batch_in, None, grad_omega, None, None
