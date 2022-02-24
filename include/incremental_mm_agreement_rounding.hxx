@@ -200,7 +200,8 @@ namespace LPMP {
                             }
                             return s;
                         }();
-                        const double r = 5.0*dis(gen);
+                        //const double r = 5.0*dis(gen);
+                        const double r = dis(gen);
                         if(mm_sum[0] < mm_sum[1])
                         {
                             cost_lo_updates[i] = 0.0;

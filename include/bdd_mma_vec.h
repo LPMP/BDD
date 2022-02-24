@@ -62,7 +62,6 @@ namespace LPMP {
             for(size_t var=0; var<std::max(std::distance(cost_lo_begin, cost_lo_end), std::distance(cost_hi_begin, cost_hi_end)); ++var)
             {
                 update_cost(get_cost(var, cost_lo_begin, cost_lo_end), get_cost(var, cost_hi_begin, cost_hi_end), var);
-
             }
         }
 

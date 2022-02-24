@@ -24,6 +24,10 @@ add_test(test_ILP_input test_ILP_input)
 #target_link_libraries(test_two_bdd_inference ILP_parser LPMP bdd)
 #add_test(test_two_bdd_inference test_two_bdd_inference)
 
+add_executable(test_bdd_min_marginals test_bdd_min_marginals.cpp)
+target_link_libraries(test_bdd_min_marginals LPMP-BDD)
+add_test(test_bdd_min_marginals test_bdd_min_marginals)
+
 add_executable(test_bdd_bipartite_matching_problem test_bdd_bipartite_matching_problem.cpp)
 target_link_libraries(test_bdd_bipartite_matching_problem LPMP-BDD)
 add_test(test_bdd_bipartite_matching_problem test_bdd_bipartite_matching_problem)

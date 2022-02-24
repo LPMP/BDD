@@ -128,7 +128,6 @@ namespace LPMP {
             bdd_bases[interval_nr].read_in_Lagrange_multipliers(bdd_bases[interval_nr].backward_queue);
             bdd_bases[interval_nr].read_in_Lagrange_multipliers(bdd_bases[interval_nr].forward_queue);
             bdd_bases[interval_nr].base.backward_run();
-            bdd_bases[interval_nr].base.compute_lower_bound();
         }
     }
 
@@ -153,11 +152,6 @@ namespace LPMP {
             for(size_t t=0; t<intervals.nr_intervals(); ++t)
             {
                 min_marginal_averaging_backward(t);
-            }
-#pragma omp parallel for
-            for(size_t t=0; t<intervals.nr_intervals(); ++t)
-            {
-                bdd_bases[t].base.compute_lower_bound();
             }
             lb_prev = lb_post;
             lb_post = this->lower_bound();
@@ -199,11 +193,6 @@ namespace LPMP {
             for(size_t t=0; t<intervals.nr_intervals(); ++t)
             {
                 min_marginal_averaging_backward(t);
-            }
-#pragma omp parallel for
-            for(size_t t=0; t<intervals.nr_intervals(); ++t)
-            {
-                bdd_bases[t].base.compute_lower_bound();
             }
     }
 

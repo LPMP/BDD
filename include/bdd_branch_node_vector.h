@@ -52,13 +52,12 @@ namespace LPMP {
                 void backward_run();
                 void forward_run();
 
-                void compute_lower_bound(); 
                 void compute_lower_bound_after_forward_pass(); 
                 void compute_lower_bound_after_backward_pass(); 
 
                 two_dim_variable_array<std::array<double,2>> min_marginals();
                 void solve(const size_t max_iter, const double tolerance, const double time_limit); 
-                double lower_bound() const { return lower_bound_; }
+                double lower_bound();
                 void update_cost(const double lo_cost, const double hi_cost, const size_t var);
                 void fix_variable(const size_t var, const bool value);
 
@@ -66,11 +65,11 @@ namespace LPMP {
                 std::vector<value_type> get_costs(const size_t bdd_nr);
                 // add costs from cost iterator to costs of bdd. Assume that variables given are subset of variables of bdd
                 template<typename COST_ITERATOR, typename VARIABLE_ITERATOR>
-                    void update_costs(const size_t bdd_nr,
+                    void update_bdd_costs(const size_t bdd_nr,
                             COST_ITERATOR cost_begin, COST_ITERATOR cost_end,
                             VARIABLE_ITERATOR variable_begin, VARIABLE_ITERATOR variable_end);
-                template<typename COST_ITERATOR>
-                    void update_costs(COST_ITERATOR cost_begin, COST_ITERATOR cost_end);
+                //template<typename COST_ITERATOR>
+                //    void update_costs(COST_ITERATOR cost_begin, COST_ITERATOR cost_end);
 
                 template<typename ITERATOR>
                     void update_arc_costs(const size_t first_node, ITERATOR begin, ITERATOR end);
@@ -95,6 +94,10 @@ namespace LPMP {
                 two_dim_variable_array<size_t> first_bdd_node_indices_;  // used for computing lower bound
                 two_dim_variable_array<size_t> last_bdd_node_indices_;  // used for computing lower bound
                 double lower_bound_ = -std::numeric_limits<double>::infinity();
+                enum class lower_bound_state {
+                    valid,
+                    invalid
+                } lower_bound_state_ = lower_bound_state::invalid;
 
                 enum class message_passing_state {
                     after_forward_pass,
@@ -245,6 +248,7 @@ namespace LPMP {
         if(message_passing_state_ != message_passing_state::after_backward_pass)
             backward_run();
         message_passing_state_ = message_passing_state::none;
+        lower_bound_state_ = lower_bound_state::invalid;
         //MEASURE_FUNCTION_EXECUTION_TIME;
         for(size_t bdd_index=0; bdd_index<first_bdd_node_indices_.size(); ++bdd_index)
             for(size_t j=0; j<first_bdd_node_indices_.size(bdd_index); ++j)
@@ -261,6 +265,7 @@ namespace LPMP {
         if(message_passing_state_ != message_passing_state::after_forward_pass)
             forward_run();
         message_passing_state_ = message_passing_state::none;
+        lower_bound_state_ = lower_bound_state::invalid;
         //MEASURE_FUNCTION_EXECUTION_TIME;
         for(std::ptrdiff_t i=nr_variables()-1; i>=0; --i)
             min_marginal_averaging_step_backward(i);
@@ -271,9 +276,7 @@ namespace LPMP {
     void bdd_mma_base<BDD_BRANCH_NODE>::iteration()
     {
         min_marginal_averaging_forward();
-        compute_lower_bound();
         min_marginal_averaging_backward();
-        compute_lower_bound();
     }
 
     template<typename BDD_BRANCH_NODE>
@@ -285,7 +288,6 @@ namespace LPMP {
         for(std::ptrdiff_t i=bdd_branch_nodes_.size()-1; i>=0; --i)
             bdd_branch_nodes_[i].backward_step();
         message_passing_state_ = message_passing_state::after_backward_pass;
-        compute_lower_bound();
     }
 
     template<typename BDD_BRANCH_NODE>
@@ -303,24 +305,30 @@ namespace LPMP {
         for(size_t i=0; i<nr_variables(); ++i)
             forward_step(i);
         message_passing_state_ = message_passing_state::after_forward_pass;
-        compute_lower_bound();
     }
 
     template<typename BDD_BRANCH_NODE>
-    void bdd_mma_base<BDD_BRANCH_NODE>::compute_lower_bound()
+    double bdd_mma_base<BDD_BRANCH_NODE>::lower_bound()
     {
+        if(lower_bound_state_ == lower_bound_state::valid)
+            return lower_bound_;
         if(message_passing_state_ == message_passing_state::after_forward_pass)
             compute_lower_bound_after_forward_pass();
         else if(message_passing_state_ == message_passing_state::after_backward_pass)
             compute_lower_bound_after_backward_pass();
         else
-            throw std::runtime_error("Cannot compute valid lower bound");
+        {
+            backward_run();
+            compute_lower_bound_after_backward_pass();
+        }
+        lower_bound_state_ = lower_bound_state::valid;
+        return lower_bound_;
     }
 
     template<typename BDD_BRANCH_NODE>
     void bdd_mma_base<BDD_BRANCH_NODE>::compute_lower_bound_after_backward_pass()
     {
-        //tkahan<double> lb;
+        assert(message_passing_state_ == message_passing_state::after_backward_pass);
         double lb = 0.0;
         for(size_t i=0; i<first_bdd_node_indices_.size(); ++i)
         {
@@ -333,12 +341,13 @@ namespace LPMP {
         //assert(lb.value() >= lower_bound_ - 1e-6);
         //lower_bound_ = lb.value();
         lower_bound_ = lb;
+        lower_bound_state_ = lower_bound_state::valid;
     }
 
     template<typename BDD_BRANCH_NODE>
     void bdd_mma_base<BDD_BRANCH_NODE>::compute_lower_bound_after_forward_pass()
     {
-        //tkahan<double> lb;
+        assert(message_passing_state_ == message_passing_state::after_forward_pass);
         double lb = 0.0;
         for(size_t i=0; i<last_bdd_node_indices_.size(); ++i)
         {
@@ -358,6 +367,7 @@ namespace LPMP {
         //assert(lb.value() >= lower_bound_ - 1e-6);
         //lower_bound_ = lb.value();
         lower_bound_ = lb;
+        lower_bound_state_ = lower_bound_state::valid;
     }
 
     template<typename BDD_BRANCH_NODE>
@@ -366,7 +376,7 @@ namespace LPMP {
             assert(nr_bdds(var) > 0);
             assert(std::isfinite(std::min(lo_cost, hi_cost)));
 
-            lower_bound_ = -std::numeric_limits<double>::infinity();
+            lower_bound_state_ = lower_bound_state::invalid;
             message_passing_state_ = message_passing_state::none;
 
             for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
@@ -381,7 +391,7 @@ namespace LPMP {
     {
         assert(nr_bdds(var) > 0);
 
-        //lower_bound_ = -std::numeric_limits<double>::infinity();
+        lower_bound_state_ = lower_bound_state::invalid;
         message_passing_state_ = message_passing_state::none;
 
         for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
@@ -480,7 +490,7 @@ namespace LPMP {
 
     template<typename BDD_BRANCH_NODE>
     template<typename COST_ITERATOR, typename VARIABLE_ITERATOR>
-        void bdd_mma_base<BDD_BRANCH_NODE>::update_costs(const size_t bdd_nr,
+        void bdd_mma_base<BDD_BRANCH_NODE>::update_bdd_costs(const size_t bdd_nr,
                 COST_ITERATOR cost_begin, COST_ITERATOR cost_end,
                 VARIABLE_ITERATOR variable_begin, VARIABLE_ITERATOR variable_end)
         {
@@ -488,6 +498,7 @@ namespace LPMP {
             assert(std::is_sorted(variable_begin, variable_end));
 
             lower_bound_ = -std::numeric_limits<double>::infinity();
+            lower_bound_state_ = lower_bound_state::invalid;
             message_passing_state_ = message_passing_state::none;
 
             auto cost_it = cost_begin;
@@ -507,6 +518,7 @@ namespace LPMP {
                     });
         }
 
+    /*
     template<typename BDD_BRANCH_NODE>
     template<typename COST_ITERATOR>
         void bdd_mma_base<BDD_BRANCH_NODE>::update_costs(COST_ITERATOR cost_begin, COST_ITERATOR cost_end)
@@ -516,6 +528,8 @@ namespace LPMP {
                 for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
                     bdd_branch_nodes_[i].high_cost += *(cost_begin+i) / value_type(nr_bdds(var));
         }
+        */
+
 
     template<typename BDD_BRANCH_NODE>
     void bdd_mma_base<BDD_BRANCH_NODE>::get_arc_marginals(const size_t first_node, const size_t last_node, std::vector<double>& arc_marginals)

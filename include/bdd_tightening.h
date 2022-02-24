@@ -258,13 +258,13 @@ namespace LPMP {
                     const size_t solver_bdd_nr = solver_bdd_nrs[bdd_group_idx(g,idx)];
                     auto costs = s.get_costs(solver_bdd_nr);
                     const auto vars = s.variables(solver_bdd_nr);
-                    s.update_costs(solver_intersect_bdd_nr,
+                    s.update_bdd_costs(solver_intersect_bdd_nr,
                             costs.begin(), costs.end(),
                             vars.begin(), vars.end());
 
                     for(auto& x : costs)
                         x *= -1.0;
-                    s.update_costs(solver_bdd_nr,
+                    s.update_bdd_costs(solver_bdd_nr,
                             costs.begin(), costs.end(),
                             vars.begin(), vars.end()); 
                 } 
