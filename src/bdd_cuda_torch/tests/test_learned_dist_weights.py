@@ -204,7 +204,7 @@ def project_dist_weights(solver, dist_weights):
 def compute_expected_results(instance_string, device):
     instance = BDD.ILP_instance_py.parse_ILP(instance_string)
     solver = BDD.bdd_cuda_learned_mma_py.bdd_cuda_learned_mma(instance)
-    solver.non_learned_iterations(200, 0.5)
+    solver.non_learned_iterations(0.5, 200, 1e-6)
     expected_mm_diff = torch.empty(solver.nr_layers(), device = device, dtype = torch.float32)
     solver.all_min_marginal_differences(expected_mm_diff.data_ptr())
     return expected_mm_diff, solver.lower_bound()
@@ -224,7 +224,7 @@ def run_instance(instance_string, num_solver_itr, num_learning_itr, omega, devic
         dist_weights = project_dist_weights(solver, dist_weights)
         dist_weights_g = dist_weights.detach().clone()
         dist_weights_g.requires_grad = True
-        lo_costs_out, hi_costs_out, def_mm_out = DualIterations.apply([solver], orig_lo_costs, orig_hi_costs, orig_def_mm, dist_weights_g, num_solver_itr, omega, 0, 1e-6)
+        lo_costs_out, hi_costs_out, def_mm_out = DualIterations.apply([solver], orig_lo_costs, orig_hi_costs, orig_def_mm, dist_weights_g, num_solver_itr, omega, num_solver_itr, 1e-6)
         lo_costs_out, hi_costs_out = DistributeDeferredDelta.apply([solver], lo_costs_out, hi_costs_out, def_mm_out)
         mm_diff = ComputeAllMinMarginalsDiff.apply([solver], lo_costs_out, hi_costs_out)
         loss = torch.abs(expected_mm_diff - mm_diff).sum()
