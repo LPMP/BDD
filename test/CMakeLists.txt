@@ -12,6 +12,10 @@ add_executable(test_ILP_input_to_bdd test_ILP_input_to_bdd.cpp)
 target_link_libraries(test_ILP_input_to_bdd ILP_parser LPMP-BDD)
 add_test(test_ILP_input_to_bdd test_ILP_input_to_bdd)
 
+add_executable(test_ILP_input test_ILP_input.cpp)
+target_link_libraries(test_ILP_input LPMP-BDD)
+add_test(test_ILP_input test_ILP_input)
+
 #add_executable(test_single_bdd_inference test_single_bdd_inference.cpp)
 #target_link_libraries(test_single_bdd_inference ILP_parser LPMP-BDD)
 #add_test(test_single_bdd_inference test_single_bdd_inference)
@@ -123,4 +127,33 @@ add_executable(test_bdd_infeasible_problem test_bdd_infeasible_problem.cpp)
 target_link_libraries(test_bdd_infeasible_problem LPMP-BDD)
 add_test(test_bdd_infeasible_problem test_bdd_infeasible_problem)
 
+add_executable(test_bdd_preprocessor test_bdd_preprocessor.cpp)
+target_link_libraries(test_bdd_preprocessor LPMP-BDD)
+add_test(test_bdd_preprocessor test_bdd_preprocessor)
+
 add_subdirectory(specialized_solvers)
+
+# regression test
+# download instances
+set(BDD_REGRESSION_TEST_ARCHIVE "${CMAKE_CURRENT_SOURCE_DIR}/test/bdd-solver-regression-test-instances.zip")
+if(NOT EXISTS ${BDD_REGRESSION_TEST_ARCHIVE})
+    message("Download regression test instances for bdd solver to ${BDD_REGRESSION_TEST_ARCHIVE}")
+    file(DOWNLOAD https://keeper.mpdl.mpg.de/f/0f01761d59a745e0a893/?dl=1 ${BDD_REGRESSION_TEST_ARCHIVE} SHOW_PROGRESS)
+else()
+    message("bdd regression test instances already downloaded to ${BDD_REGRESSION_TEST_ARCHIVE}")
+endif()
+
+# unpack instance archive
+set(BDD_REGRESSION_TEST_INSTANCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test/bdd-regression-test-instances/)
+if(NOT EXISTS ${BDD_REGRESSION_TEST_INSTANCE_DIR})
+    message("Unpack regression test instances to ${BDD_REGRESSION_TEST_INSTANCE_DIR}")
+    file(ARCHIVE_EXTRACT INPUT ${BDD_REGRESSION_TEST_ARCHIVE} DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/test/ VERBOSE)
+else()
+    message("bdd regression test instances already unpacked to ${BDD_REGRESSION_TEST_INSTANCE_DIR}")
+endif()
+
+add_executable(bdd_solver_regression_test bdd_solver_regression_test.cpp)
+target_compile_definitions(bdd_solver_regression_test PUBLIC BDD_SOLVER_REGRESSION_TEXT_DIR="${BDD_REGRESSION_TEST_INSTANCE_DIR}")
+target_link_libraries(bdd_solver_regression_test LPMP-BDD)
+add_test(bdd_solver_regression_test bdd_solver_regression_test)
+

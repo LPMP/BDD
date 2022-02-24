@@ -320,8 +320,8 @@ namespace LPMP {
     template<typename BDD_BRANCH_NODE>
     void bdd_mma_base<BDD_BRANCH_NODE>::compute_lower_bound_after_backward_pass()
     {
-        tkahan<double> lb;
-        //double lb = 0.0;
+        //tkahan<double> lb;
+        double lb = 0.0;
         for(size_t i=0; i<first_bdd_node_indices_.size(); ++i)
         {
             value_type bdd_lb = std::numeric_limits<value_type>::infinity();
@@ -330,15 +330,16 @@ namespace LPMP {
             lb += bdd_lb;
         }
 
-        assert(lb.value() >= lower_bound_ - 1e-6);
-        lower_bound_ = lb.value();
+        //assert(lb.value() >= lower_bound_ - 1e-6);
+        //lower_bound_ = lb.value();
+        lower_bound_ = lb;
     }
 
     template<typename BDD_BRANCH_NODE>
     void bdd_mma_base<BDD_BRANCH_NODE>::compute_lower_bound_after_forward_pass()
     {
-        tkahan<double> lb;
-        //double lb = 0.0;
+        //tkahan<double> lb;
+        double lb = 0.0;
         for(size_t i=0; i<last_bdd_node_indices_.size(); ++i)
         {
             value_type bdd_lb = std::numeric_limits<value_type>::infinity();
@@ -354,8 +355,9 @@ namespace LPMP {
             lb += bdd_lb;
         }
 
-        assert(lb.value() >= lower_bound_ - 1e-6);
-        lower_bound_ = lb.value();
+        //assert(lb.value() >= lower_bound_ - 1e-6);
+        //lower_bound_ = lb.value();
+        lower_bound_ = lb;
     }
 
     template<typename BDD_BRANCH_NODE>
@@ -379,7 +381,7 @@ namespace LPMP {
     {
         assert(nr_bdds(var) > 0);
 
-        lower_bound_ = -std::numeric_limits<double>::infinity();
+        //lower_bound_ = -std::numeric_limits<double>::infinity();
         message_passing_state_ = message_passing_state::none;
 
         for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)

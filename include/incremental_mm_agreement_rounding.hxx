@@ -113,9 +113,9 @@ namespace LPMP {
             //std::mt19937 gen(rd);
             std::default_random_engine gen{static_cast<long unsigned int>(0)}; // deterministic seed for repeatable experiments
 
-            for(size_t round=0; round<10000; ++round)
+            for(size_t round=0; round<500; ++round)
             {
-                cur_delta = cur_delta*delta_growth_rate;
+                cur_delta = std::min(cur_delta*delta_growth_rate, 1e6);
                 const auto time = std::chrono::steady_clock::now();
                 const double time_elapsed = (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000;
                 std::cout << "[incremental primal rounding] round " << round << ", cost delta " << cur_delta << ", time elapsed = " << time_elapsed << "\n";

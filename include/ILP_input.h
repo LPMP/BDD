@@ -27,6 +27,7 @@ namespace LPMP {
             void normalize();
             bool is_normalized() const;
             bool is_linear() const;
+            bool is_simplex() const;
             // if constraint is non-linear check if all variables appear at most once
             bool distinct_variables() const;
             static bool monomials_cmp(const two_dim_variable_array<size_t>& monomials, const size_t idx1, const size_t idx2);
