@@ -12,7 +12,7 @@
 
 #define TOP_SINK_INDICATOR_CUDA -1
 #define BOT_SINK_INDICATOR_CUDA -2
-#define NUM_THREADS 256
+#define NUM_THREADS_CUDA 256
 
 namespace cereal {
     template<class Archive, class T>

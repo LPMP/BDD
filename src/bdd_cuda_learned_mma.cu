@@ -65,9 +65,9 @@ namespace LPMP {
 
             const int num_nodes_processed = s > 0 ? this->cum_nr_bdd_nodes_per_hop_dist_[s - 1] : 0;
             const int cur_num_bdd_nodes = this->nr_bdd_nodes(s);
-            const int blockCount = ceil(cur_num_bdd_nodes / (float) NUM_THREADS);
+            const int blockCount = ceil(cur_num_bdd_nodes / (float) NUM_THREADS_CUDA);
 
-            forward_step_learned_mm_dist<<<blockCount, NUM_THREADS>>>(cur_num_bdd_nodes, num_nodes_processed,
+            forward_step_learned_mm_dist<<<blockCount, NUM_THREADS_CUDA>>>(cur_num_bdd_nodes, num_nodes_processed,
                                                             thrust::raw_pointer_cast(this->lo_bdd_node_index_.data()),
                                                             thrust::raw_pointer_cast(this->hi_bdd_node_index_.data()),
                                                             thrust::raw_pointer_cast(this->bdd_node_to_layer_map_.data()),
@@ -143,9 +143,9 @@ namespace LPMP {
 
             const int start_offset = s > 0 ? this->cum_nr_bdd_nodes_per_hop_dist_[s - 1] : 0;
             const int cur_num_bdd_nodes = this->nr_bdd_nodes(s);
-            const int blockCount = ceil(cur_num_bdd_nodes / (REAL) NUM_THREADS);
+            const int blockCount = ceil(cur_num_bdd_nodes / (REAL) NUM_THREADS_CUDA);
 
-            backward_step_learned_mm_dist<<<blockCount, NUM_THREADS>>>(cur_num_bdd_nodes, start_offset,
+            backward_step_learned_mm_dist<<<blockCount, NUM_THREADS_CUDA>>>(cur_num_bdd_nodes, start_offset,
                                                             thrust::raw_pointer_cast(this->lo_bdd_node_index_.data()),
                                                             thrust::raw_pointer_cast(this->hi_bdd_node_index_.data()),
                                                             thrust::raw_pointer_cast(this->bdd_node_to_layer_map_.data()),
@@ -571,9 +571,9 @@ namespace LPMP {
             const int start_offset = hop_index > 0 ? this->cum_nr_bdd_nodes_per_hop_dist_[hop_index - 1] : 0;
             const int start_offset_next_hop = this->cum_nr_bdd_nodes_per_hop_dist_[hop_index];
             const int cur_num_bdd_nodes = this->nr_bdd_nodes(hop_index);
-            const int blockCount = ceil(cur_num_bdd_nodes / (float) NUM_THREADS);
+            const int blockCount = ceil(cur_num_bdd_nodes / (float) NUM_THREADS_CUDA);
 
-            argmin_cost_from_root_cuda<<<blockCount, NUM_THREADS>>>(cur_num_bdd_nodes, start_offset, start_offset_next_hop,
+            argmin_cost_from_root_cuda<<<blockCount, NUM_THREADS_CUDA>>>(cur_num_bdd_nodes, start_offset, start_offset_next_hop,
                                                             thrust::raw_pointer_cast(this->lo_bdd_node_index_.data()),
                                                             thrust::raw_pointer_cast(this->hi_bdd_node_index_.data()),
                                                             thrust::raw_pointer_cast(this->bdd_node_to_layer_map_.data()),
@@ -588,8 +588,8 @@ namespace LPMP {
         {
             const int start_offset = this->cum_nr_bdd_nodes_per_hop_dist_[hop_index];
             const int cur_num_bdd_nodes = this->nr_bdd_nodes(hop_index + 1);
-            const int blockCount = ceil(cur_num_bdd_nodes / (float) NUM_THREADS);
-            propagate_grad_cost_from_root_cuda<<<blockCount, NUM_THREADS>>>(cur_num_bdd_nodes, start_offset,
+            const int blockCount = ceil(cur_num_bdd_nodes / (float) NUM_THREADS_CUDA);
+            propagate_grad_cost_from_root_cuda<<<blockCount, NUM_THREADS_CUDA>>>(cur_num_bdd_nodes, start_offset,
                                                             thrust::raw_pointer_cast(this->lo_bdd_node_index_.data()),
                                                             thrust::raw_pointer_cast(this->hi_bdd_node_index_.data()),
                                                             thrust::raw_pointer_cast(this->bdd_node_to_layer_map_.data()),
@@ -650,8 +650,8 @@ namespace LPMP {
         assert(hop_index < this->nr_hops());
         const int start_offset = hop_index > 0 ? this->cum_nr_bdd_nodes_per_hop_dist_[hop_index - 1] : 0;
         const int cur_num_bdd_nodes = this->nr_bdd_nodes(hop_index);
-        const int blockCount = ceil(cur_num_bdd_nodes / (float) NUM_THREADS);
-        grad_cost_from_terminal_cuda<<<blockCount, NUM_THREADS>>>(cur_num_bdd_nodes, start_offset,
+        const int blockCount = ceil(cur_num_bdd_nodes / (float) NUM_THREADS_CUDA);
+        grad_cost_from_terminal_cuda<<<blockCount, NUM_THREADS_CUDA>>>(cur_num_bdd_nodes, start_offset,
                                                         thrust::raw_pointer_cast(this->lo_bdd_node_index_.data()),
                                                         thrust::raw_pointer_cast(this->hi_bdd_node_index_.data()),
                                                         thrust::raw_pointer_cast(this->bdd_node_to_layer_map_.data()),
@@ -815,9 +815,9 @@ namespace LPMP {
         const int start_offset_layer = hop_index > 0 ? this->cum_nr_layers_per_hop_dist_[hop_index - 1]: 0;
         const int end_offset_layer = this->cum_nr_layers_per_hop_dist_[hop_index];
         const int cur_num_layers = end_offset_layer - start_offset_layer;
-        const int blockCount_layer = ceil(cur_num_layers / (REAL) NUM_THREADS);
+        const int blockCount_layer = ceil(cur_num_layers / (REAL) NUM_THREADS_CUDA);
 
-        grad_min_marginals_cuda_layer<<<blockCount_layer, NUM_THREADS>>>(cur_num_layers, start_offset_layer, omega,
+        grad_min_marginals_cuda_layer<<<blockCount_layer, NUM_THREADS_CUDA>>>(cur_num_layers, start_offset_layer, omega,
                                                 thrust::raw_pointer_cast(this->lo_bdd_node_index_.data()),
                                                 thrust::raw_pointer_cast(this->hi_bdd_node_index_.data()),
                                                 thrust::raw_pointer_cast(this->bdd_node_to_layer_map_.data()),

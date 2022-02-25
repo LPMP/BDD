@@ -74,13 +74,13 @@ namespace LPMP {
         const int num_nodes_processed = hop_index > 0 ? this->cum_nr_bdd_nodes_per_hop_dist_[hop_index - 1] : 0;
         const int end_node = this->cum_nr_bdd_nodes_per_hop_dist_[hop_index];
         const int cur_num_bdd_nodes = this->cum_nr_bdd_nodes_per_hop_dist_[hop_index] - num_nodes_processed;
-        const int blockCount = ceil(cur_num_bdd_nodes / (REAL) NUM_THREADS);
+        const int blockCount = ceil(cur_num_bdd_nodes / (REAL) NUM_THREADS_CUDA);
 
         const int start_offset_layer = hop_index > 0 ? this->cum_nr_layers_per_hop_dist_[hop_index - 1]: 0;
         const int end_offset_layer = this->cum_nr_layers_per_hop_dist_[hop_index];
         const int cur_num_layers = end_offset_layer - start_offset_layer;
 
-        min_marginals_from_directional_costs_cuda<<<blockCount, NUM_THREADS>>>(cur_num_bdd_nodes, num_nodes_processed, start_offset_layer,
+        min_marginals_from_directional_costs_cuda<<<blockCount, NUM_THREADS_CUDA>>>(cur_num_bdd_nodes, num_nodes_processed, start_offset_layer,
                                                 thrust::raw_pointer_cast(this->lo_bdd_node_index_.data()),
                                                 thrust::raw_pointer_cast(this->hi_bdd_node_index_.data()),
                                                 thrust::raw_pointer_cast(this->bdd_node_to_layer_map_.data()),
@@ -181,10 +181,10 @@ namespace LPMP {
 
             const int num_nodes_processed = s > 0 ? this->cum_nr_bdd_nodes_per_hop_dist_[s - 1] : 0;
             const int cur_num_bdd_nodes = this->cum_nr_bdd_nodes_per_hop_dist_[s] - num_nodes_processed;
-            const int blockCount = ceil(cur_num_bdd_nodes / (float) NUM_THREADS);
+            const int blockCount = ceil(cur_num_bdd_nodes / (float) NUM_THREADS_CUDA);
 
             // 2. Subtract from hi_costs, update costs from root.
-            forward_step_with_solve<<<blockCount, NUM_THREADS>>>(cur_num_bdd_nodes, num_nodes_processed,
+            forward_step_with_solve<<<blockCount, NUM_THREADS_CUDA>>>(cur_num_bdd_nodes, num_nodes_processed,
                                                                 thrust::raw_pointer_cast(this->lo_bdd_node_index_.data()),
                                                                 thrust::raw_pointer_cast(this->hi_bdd_node_index_.data()),
                                                                 thrust::raw_pointer_cast(this->bdd_node_to_layer_map_.data()),
@@ -267,10 +267,10 @@ namespace LPMP {
             const int start_offset = s > 0 ? this->cum_nr_bdd_nodes_per_hop_dist_[s - 1] : 0;
 
             const int cur_num_bdd_nodes = this->nr_bdd_nodes(s);
-            const int blockCount = ceil(cur_num_bdd_nodes / (REAL) NUM_THREADS);
+            const int blockCount = ceil(cur_num_bdd_nodes / (REAL) NUM_THREADS_CUDA);
 
             // 2. Subtract from hi_costs, update costs from terminal.
-            backward_step_with_solve<<<blockCount, NUM_THREADS>>>(cur_num_bdd_nodes, start_offset,
+            backward_step_with_solve<<<blockCount, NUM_THREADS_CUDA>>>(cur_num_bdd_nodes, start_offset,
                                                                 thrust::raw_pointer_cast(this->lo_bdd_node_index_.data()),
                                                                 thrust::raw_pointer_cast(this->hi_bdd_node_index_.data()),
                                                                 thrust::raw_pointer_cast(this->bdd_node_to_layer_map_.data()),

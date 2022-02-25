@@ -578,8 +578,8 @@ namespace LPMP {
         for (int s = 0; s < nr_hops(); s++)
         {
             int cur_num_bdd_nodes = cum_nr_bdd_nodes_per_hop_dist_[s] - num_nodes_processed;
-            int blockCount = ceil(cur_num_bdd_nodes / (REAL) NUM_THREADS);
-            forward_step<<<blockCount, NUM_THREADS>>>(cur_num_bdd_nodes, num_nodes_processed,
+            int blockCount = ceil(cur_num_bdd_nodes / (REAL) NUM_THREADS_CUDA);
+            forward_step<<<blockCount, NUM_THREADS_CUDA>>>(cur_num_bdd_nodes, num_nodes_processed,
                                                     thrust::raw_pointer_cast(lo_bdd_node_index_.data()),
                                                     thrust::raw_pointer_cast(hi_bdd_node_index_.data()),
                                                     thrust::raw_pointer_cast(bdd_node_to_layer_map_.data()),
@@ -667,9 +667,9 @@ namespace LPMP {
             const int start_offset = s > 0 ? this->cum_nr_bdd_nodes_per_hop_dist_[s - 1]: 0;
 
             int cur_num_bdd_nodes = cum_nr_bdd_nodes_per_hop_dist_[s] - start_offset;
-            int blockCount = ceil(cur_num_bdd_nodes / (REAL) NUM_THREADS);
+            int blockCount = ceil(cur_num_bdd_nodes / (REAL) NUM_THREADS_CUDA);
             if (compute_path_costs)
-                backward_step_with_path_costs<<<blockCount, NUM_THREADS>>>(cur_num_bdd_nodes, start_offset,
+                backward_step_with_path_costs<<<blockCount, NUM_THREADS_CUDA>>>(cur_num_bdd_nodes, start_offset,
                                                         thrust::raw_pointer_cast(lo_bdd_node_index_.data()),
                                                         thrust::raw_pointer_cast(hi_bdd_node_index_.data()),
                                                         thrust::raw_pointer_cast(bdd_node_to_layer_map_.data()),
@@ -680,7 +680,7 @@ namespace LPMP {
                                                         thrust::raw_pointer_cast(lo_path_cost.data()),
                                                         thrust::raw_pointer_cast(hi_path_cost.data()));
             else
-                backward_step<<<blockCount, NUM_THREADS>>>(cur_num_bdd_nodes, start_offset,
+                backward_step<<<blockCount, NUM_THREADS_CUDA>>>(cur_num_bdd_nodes, start_offset,
                                                         thrust::raw_pointer_cast(lo_bdd_node_index_.data()),
                                                         thrust::raw_pointer_cast(hi_bdd_node_index_.data()),
                                                         thrust::raw_pointer_cast(bdd_node_to_layer_map_.data()),

@@ -2,9 +2,11 @@
 
 #include <cuda_runtime.h>
 #include <math_constants.h>
+#include <thrust/count.h>
 #include <thrust/copy.h>
 #include <thrust/device_vector.h>
 #include <thrust/gather.h>
+#include <thrust/remove.h>
 #include <thrust/sort.h>
 #include <thrust/unique.h>
 #include <thrust/adjacent_difference.h>
