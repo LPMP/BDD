@@ -3,6 +3,7 @@ project(LPMP-BDD LANGUAGES CXX)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(WITH_CUDA "Compile with CUDA support" OFF)
+option(WITH_REGRESSION_TEST "Regression tests on additional downloaded instances" OFF)
 
 if(WITH_CUDA)
     message(STATUS "Compiling with CUDA support")
