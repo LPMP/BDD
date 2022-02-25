@@ -2,7 +2,7 @@
 
 # BDD
 
-An integer linear program solver using a Lagrange decomposition into binary decision diagrams. Lagrange multipliers are updated through min-marginal averaging (a form of dual block coordinate ascent).
+An integer linear program solver using a Lagrange decomposition into binary decision diagrams. Lagrange multipliers are updated through min-marginal averaging (a form of dual block coordinate ascent). Sequential and parallel CPU solvers are provided as well as a massively parallel GPU implementation.
 
 ## Installation
 
