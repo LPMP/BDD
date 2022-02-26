@@ -17,20 +17,20 @@ struct test_instance {
 
 std::vector<test_instance> test_instances = {
     // from hotel
-    //test_instance({"energy_hotel_frame15frame99.lp", -3.860424e+03, -3.860424367000e+03, 1.01 * -3.860424e+03, 0.99 * -3.860424367000e+03}),
+    test_instance({"energy_hotel_frame15frame99.lp", -3.860424e+03, -3.860424367000e+03, 1.01 * -3.860424e+03, 0.99 * -3.860424367000e+03}),
     // from house
-    //test_instance({"energy_house_frame15frame105.lp", -3.745160e+03, -3.745159569000e+03, 1.02 * -3.745159569000e+03, 0.99 * -3.745159569000e+03}),
+    test_instance({"energy_house_frame15frame105.lp", -3.745160e+03, -3.745159569000e+03, 1.02 * -3.745159569000e+03, 0.99 * -3.745159569000e+03}),
     // from cell tracking AISTATS
-    //test_instance({"drosophila.lp", -1.297201e+07, -1.297200572591e+07, 1.01 * -1.297201e+07, 0.99 * -1.297200572591e+07}),
-    // from protein-folding
-    //test_instance({"1CKK.lp", 1.284017e+04, -1.271240947404e+04, 0.98 * 1.284017e+04, 1.05 * 12712.41}),
+    test_instance({"drosophila.lp", -1.297201e+07, -1.297200572591e+07, 1.01 * -1.297201e+07, 0.99 * -1.297200572591e+07}),
     // from shape matching TOSCA, gurobi could not find optimal solution
-    // gurobi could not verify optimality of solution
-    test_instance({"000000880800_241600_cat0_200_cat6_200_.lp", 3.07763340e+02, 0, 0.95 * 3.07763340e+02, 0}),
+    // gurobi could not verify optimality of solution, I use best lb obtained instead
+    test_instance({"000000880800_241600_cat0_200_cat6_200_.lp", 3.07763340e+02, 3.07763340e+02, 0.92 * 3.07763340e+02, 1.2 * 3.07763340e+02}),
     // from color-seg-n4
-    //test_instance({"pfau-small.lp", 2.25273057e+04, 2.423444787696e+04, 0,0}),
+    test_instance({"pfau-small.lp", 2.25273057e+04, 2.423444787696e+04, 0.95 * 2.25273057e+04, 1.2 * 2.423444787696e+04}),
     // from worms graph matching Kainmueller et al
-    //test_instance({"worm01-16-03-11-1745.lp", -4.632114e+04, -4.631054884800e+04, 0,0})
+    test_instance({"worm01-16-03-11-1745.lp", -4.632114e+04, -4.631054884800e+04, 1.1 * -4.632114e+04, 0.95 * -4.631054884800e+04}),
+    // from protein-folding
+    test_instance({"1CKK.lp", 1.284017e+04, -1.271240947404e+04, 0.98 * 1.284017e+04, 1.05 * 12712.41})
 };
 
 void test_solver(const test_instance& instance, std::vector<std::string> opts_vec)
@@ -84,11 +84,27 @@ void test_parallel_mma(const test_instance& instance)
     test_solver(instance, opts);
 }
 
+void test_cuda_mma(const test_instance& instance)
+{
+    std::cout << "solving " << instance.filename << " with cuda mma\n";
+    std::vector<std::string> opts = {
+            "-s", "cuda_mma",
+            "--incremental_primal",
+            "--incremental_initial_perturbation", "1.0",
+            "--incremental_perturbation_growth_rate", "1.05",
+            "--precision", "double"
+            };
+    test_solver(instance, opts);
+}
+
 int main(int argc, char** argv)
 {
     for(const auto& instance : test_instances) 
     {
         test_mma(instance);
-        //test_parallel_mma(instance);
+        test_parallel_mma(instance);
+#ifdef WITH_CUDA
+        test_cuda_mma(instance);
+#endif
     }
 }

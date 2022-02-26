@@ -2,6 +2,8 @@
 #include "../test.h"
 #include <vector>
 #include <array>
+#include <random>
+#include <algorithm>
 
 using namespace BDD;
 using namespace LPMP;
@@ -44,6 +46,23 @@ int main(int argc, char** argv)
         std::reverse(var_indices.begin(), var_indices.end());;
         bdd_col.rebase(bdd_nr, var_indices.begin(), var_indices.end());
         test(!bdd_col.variables_sorted(bdd_nr));
+        test(bdd_col.variables(bdd_nr) == var_indices);
+    }
+
+    // test for random variables
+    {
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<size_t> distrib(1, 42);
+
+        std::vector<size_t> var_indices = {distrib(gen)};
+        for(size_t i=0; i<41; ++i)
+            var_indices.push_back(var_indices.back() + distrib(gen));
+        std::shuffle(var_indices.begin(), var_indices.end(), gen);
+
+        const size_t bdd_nr = bdd_col.simplex_constraint(var_indices.size());
+        test(bdd_col.variables_sorted(bdd_nr));
+        bdd_col.rebase(bdd_nr, var_indices.begin(), var_indices.end());
         test(bdd_col.variables(bdd_nr) == var_indices);
     }
 }

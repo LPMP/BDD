@@ -161,5 +161,10 @@ if(WITH_REGRESSION_TEST)
     target_compile_definitions(bdd_solver_regression_test PUBLIC BDD_SOLVER_REGRESSION_TEXT_DIR="${BDD_REGRESSION_TEST_INSTANCE_DIR}")
     target_link_libraries(bdd_solver_regression_test LPMP-BDD)
     add_test(bdd_solver_regression_test bdd_solver_regression_test)
+
+    add_executable(bdd_preprocessor_regression_test bdd_preprocessor_regression_test.cpp)
+    target_compile_definitions(bdd_preprocessor_regression_test PUBLIC BDD_SOLVER_REGRESSION_TEXT_DIR="${BDD_REGRESSION_TEST_INSTANCE_DIR}")
+    target_link_libraries(bdd_preprocessor_regression_test LPMP-BDD)
+    add_test(bdd_preprocessor_regression_test bdd_preprocessor_regression_test)
 endif()
 

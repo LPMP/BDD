@@ -335,6 +335,59 @@ namespace BDD {
 
             assert(*(bdd_it_begin+nr_bdds_remove-1) < nr_bdds());
 
+            const size_t first_bdd_to_remove = *bdd_it_begin;
+            auto bdd_it = bdd_it_begin;
+            size_t bdd_idx_to = bdd_delimiters[first_bdd_to_remove];
+            size_t bdd_nr_counter = first_bdd_to_remove;
+            size_t cur_bdd_delimiter = bdd_delimiters[first_bdd_to_remove];
+
+            for(size_t bdd_nr=*bdd_it_begin; bdd_nr<nr_bdds(); ++bdd_nr)
+            {
+                if(bdd_it != bdd_it_end && bdd_nr == *bdd_it)
+                {
+                    ++bdd_it;
+                }
+                else // move bdd
+                {
+                    for(size_t bdd_idx_from=bdd_delimiters[bdd_nr]; bdd_idx_from<bdd_delimiters[bdd_nr+1]; ++bdd_idx_from, ++bdd_idx_to)
+                    {
+                        bdd_instructions[bdd_idx_to] = bdd_instructions[bdd_idx_from];
+                        if(!bdd_instructions[bdd_idx_to].is_terminal())
+                        {
+                            bdd_instructions[bdd_idx_to].lo -= bdd_idx_from - bdd_idx_to;
+                            bdd_instructions[bdd_idx_to].hi -= bdd_idx_from - bdd_idx_to;
+                        }
+                    }
+                    ++bdd_nr_counter;
+                    bdd_delimiters[bdd_nr_counter] = bdd_idx_to;
+                }
+            }
+
+            bdd_delimiters.resize(bdd_delimiters.size() - nr_bdds_remove);
+            bdd_instructions.resize(bdd_delimiters.back());
+
+            return;
+            for(size_t i=0; i<nr_bdds(); ++i)
+            {
+                assert(is_bdd(i) || is_qbdd(i));
+            }
+        }
+
+    /*
+     // old remove with copying vectors around
+    template<typename ITERATOR>
+        void bdd_collection::remove(ITERATOR bdd_it_begin, ITERATOR bdd_it_end)
+        {
+            const size_t nr_bdds_remove = std::distance(bdd_it_begin, bdd_it_end);
+            assert(std::distance(bdd_it_begin, bdd_it_end) <= nr_bdds());
+            assert(std::is_sorted(bdd_it_begin, bdd_it_end));
+            assert(std::unique(bdd_it_begin, bdd_it_end) == bdd_it_end);
+
+            if(nr_bdds_remove == 0)
+                return;
+
+            assert(*(bdd_it_begin+nr_bdds_remove-1) < nr_bdds());
+
             std::vector<size_t> new_bdd_delimiters;
             new_bdd_delimiters.reserve(bdd_delimiters.size() - nr_bdds_remove);
             for(size_t i=0; i<=*bdd_it_begin; ++i)
@@ -381,6 +434,7 @@ namespace BDD {
                 assert(is_bdd(i) || is_qbdd(i));
             }
         }
+        */
 
     template<size_t N, typename ITERATOR>
         std::array<size_t,N> construct_array(ITERATOR begin, ITERATOR end)

@@ -14,7 +14,12 @@ namespace LPMP {
 
         std::vector<int> coefficients;
         for(std::size_t i=0; i<nr_vars; ++i)
-            coefficients.push_back( d(gen) );
+        {
+            int coeff = d(gen);
+            if(coeff == 0)
+                coeff = 1;
+            coefficients.push_back( coeff );
+        }
 
         ILP_input::inequality_type ineq = ILP_input::inequality_type::smaller_equal;
         // otherwise we cannot guarantee that every variable can take both values. Note: this can be reverted once we have bdd preprocessor filtering out fixed variables

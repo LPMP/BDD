@@ -3,7 +3,6 @@
 #include <cassert>
 #include <unordered_set>
 #include <unordered_map>
-#include <iostream> // TODO: remove
 
 namespace BDD {
 
