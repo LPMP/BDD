@@ -47,7 +47,7 @@ namespace LPMP {
         std::atomic<size_t> extra_var_counter = input.nr_variables();
 
         // TODO: tid based construction not needed anymore, do directly through openmp for loop sharing
-#pragma omp parallel for schedule(static) num_threads(nr_threads)
+#pragma omp parallel for ordered schedule(static) num_threads(nr_threads)
         for(size_t tid=0; tid<nr_threads; ++tid)
         {
             std::vector<int> coefficients;
@@ -242,10 +242,11 @@ namespace LPMP {
                 }
             }
             // add everything to one bdd collection, store mapping from inequalities to bdd numbers
-#pragma omp critical
+#pragma omp ordered 
             {
                 const size_t bdd_nr_offset = bdd_collection.nr_bdds();
                 bdd_collection.append(cur_bdd_collection);
+                assert(bdd_collection.nr_bdds() == cur_bdd_collection.nr_bdds() + bdd_nr_offset);
 
                 assert(cur_ineq_nrs.size() == cur_bdd_nrs.size());
 
@@ -253,10 +254,14 @@ namespace LPMP {
                 for(size_t c=0; c<cur_bdd_nrs.size(); ++c)
                 {
                     for(size_t j=0; j<cur_bdd_nrs.size(c); ++j)
+                    {
                         cur_bdd_nrs(c,j) += bdd_nr_offset;
+                        assert(cur_bdd_nrs(c,j) >= bdd_nr_offset);
+                    }
                     bdd_nrs.push_back(cur_bdd_nrs.begin(c), cur_bdd_nrs.end(c));
                 }
                 ineq_nrs.insert(ineq_nrs.end(), cur_ineq_nrs.begin(), cur_ineq_nrs.end());
+                assert(ineq_nrs.size() == bdd_nrs.size());
             }
         }
 
@@ -295,46 +300,12 @@ namespace LPMP {
             bdd_collection.remove(unused_bdd_nrs.begin(), unused_bdd_nrs.end());
         }
 
-        /*
-        // transform all BDDs to qbdds
-        std::cout << "[bdd preprocessor] Transform BDDs into QBDDs\n";
-        std::vector<size_t> bdds_to_remove;
-        const size_t orig_nr_bdds = bdd_collection.nr_bdds();
-#pragma omp parallel
-        {
-            BDD::bdd_collection cur_bdd_collection;
-            std::vector<size_t> cur_bdds_to_remove;
-#pragma omp for schedule(static,256)
-            for(size_t bdd_nr = 0; bdd_nr<orig_nr_bdds; ++bdd_nr)
-            {
-                if(!bdd_collection.is_qbdd(bdd_nr))
-                {
-                    bdd_collection.make_qbdd(bdd_nr, cur_bdd_collection);
-                    cur_bdds_to_remove.push_back(bdd_nr);
-                }
-            }
-#pragma omp critical
-            {
-                for(const size_t nr : cur_bdds_to_remove)
-                    bdds_to_remove.push_back(nr);
-                bdd_collection.append(cur_bdd_collection);
-            }
-        }
-        {
-            std::sort(bdds_to_remove.begin(), bdds_to_remove.end());
-            std::cout << "[bdd preprocessor] " << bdds_to_remove.size() << " BDDs had to be transformed\n";
-            bdd_collection.remove(bdds_to_remove.begin(), bdds_to_remove.end()); 
-
-        }
-        */
-
         // reorder bdd nrs to make them consecutive w.r.t. inequality numbers
         two_dim_variable_array<size_t> ineq_to_bdd_nrs;
         std::vector<size_t> inv_ineq_nrs(ineq_nrs.size());
         for(size_t c=0; c<ineq_nrs.size(); ++c)
             inv_ineq_nrs[ineq_nrs[c]] = c;
 
-        assert(ineq_nrs.size() == bdd_nrs.size());
         for(size_t c=0; c<ineq_nrs.size(); ++c)
             ineq_to_bdd_nrs.push_back(bdd_nrs.begin(inv_ineq_nrs[c]), bdd_nrs.end(inv_ineq_nrs[c]));
 
