@@ -10,10 +10,6 @@
 #include <cereal/types/vector.hpp>
 #include <cereal/archives/binary.hpp>
 
-#define TOP_SINK_INDICATOR_CUDA -1
-#define BOT_SINK_INDICATOR_CUDA -2
-#define NUM_THREADS_CUDA 256
-
 namespace cereal {
     template<class Archive, class T>
     void save(Archive& ar, const thrust::device_vector<T>& dev_vector)
@@ -33,6 +29,9 @@ namespace cereal {
 }
 
 namespace LPMP {
+    static constexpr int TOP_SINK_INDICATOR_CUDA = -1;
+    static constexpr int BOT_SINK_INDICATOR_CUDA = -2;
+    static constexpr int NUM_THREADS_CUDA = 256;
 
     template<typename REAL>
     class bdd_cuda_base {
@@ -110,6 +109,9 @@ namespace LPMP {
 
             void terminal_layer_indices(thrust::device_ptr<int> indices) const; // indices should point to memory of size nr_bdds()
 
+            void compute_bdd_to_constraint_map(const two_dim_variable_array<size_t>& constraint_to_bdd_map);
+            const std::vector<size_t> bdd_to_constraint_map() const {return bdd_to_constraint_map_; }
+
             // For serialization using cereal:
             template <class Archive>
             void save(Archive& archive) const;
@@ -150,6 +152,8 @@ namespace LPMP {
             size_t num_dual_variables_ = 0;
             bool forward_state_valid_ = false; // true means cost from root valid.
             bool backward_state_valid_ = false; // true means cost from terminal are valid.
+
+            std::vector<size_t> bdd_to_constraint_map_;
 
         private:
             bool path_costs_valid_ = false; // here valid means lo, hi path paths are valid.

@@ -29,7 +29,10 @@ namespace LPMP {
         {
             REAL& mm_hi = thrust::get<0>(t);
             REAL& mm_lo = thrust::get<1>(t);
-            mm_hi = omega * (mm_hi - mm_lo);
+            if (!isfinite(mm_hi) || !isfinite(mm_lo))
+                mm_hi = 0.0; // Set mm_difference to zero to not create NaNs in costs.
+            else
+                mm_hi = omega * (mm_hi - mm_lo);
             mm_lo = CUDART_INF_F;
         }
     };
@@ -143,6 +146,7 @@ namespace LPMP {
             
             const int layer_idx = bdd_node_to_layer_map[bdd_node_idx];
             const REAL cur_mm_diff_hi_lo = mm_diff[layer_idx]; 
+            assert(isfinite(cur_mm_diff_hi_lo));
             const int cur_primal_idx = primal_variable_index[layer_idx];
 
             const REAL cur_lo_cost = lo_cost_in[layer_idx] + min(cur_mm_diff_hi_lo, 0.0f) + delta_lo[cur_primal_idx];
@@ -154,6 +158,8 @@ namespace LPMP {
             const int next_hi_node = hi_bdd_node_index[bdd_node_idx];
             atomicMin(&cost_from_root[next_hi_node], cur_c_from_root + cur_hi_cost);
 
+            assert(isfinite(cur_lo_cost));
+            assert(isfinite(cur_hi_cost));
             lo_cost_out[layer_idx] = cur_lo_cost;
             hi_cost_out[layer_idx] = cur_hi_cost;
         }
@@ -234,6 +240,7 @@ namespace LPMP {
             
             const int layer_idx = bdd_node_to_layer_map[bdd_node_idx];
             const REAL cur_mm_diff_hi_lo = mm_diff[layer_idx]; 
+            assert(isfinite(cur_mm_diff_hi_lo));
             const int cur_primal_idx = primal_variable_index[layer_idx];
 
             const REAL cur_hi_cost = hi_cost_in[layer_idx] + (min(-cur_mm_diff_hi_lo, 0.0f)) + (delta_hi[cur_primal_idx]);
@@ -243,6 +250,8 @@ namespace LPMP {
 
             // Update costs from terminal:
             cost_from_terminal[bdd_node_idx] = min(cur_hi_cost + cost_from_terminal[next_hi_node], cur_lo_cost + cost_from_terminal[next_lo_node]);
+            assert(isfinite(cur_lo_cost));
+            assert(isfinite(cur_hi_cost));
 
             lo_cost_out[layer_idx] = cur_lo_cost;
             hi_cost_out[layer_idx] = cur_hi_cost;
