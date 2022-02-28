@@ -1028,6 +1028,21 @@ namespace LPMP {
                         this->root_indices_.begin(), this->cost_from_root_.begin());
     }
 
+    template<typename REAL>
+    void bdd_cuda_base<REAL>::compute_bdd_to_constraint_map(const two_dim_variable_array<size_t>& constraint_to_bdd_map)
+    {
+        assert(constraint_to_bdd_map.size() == nr_bdds_);
+        bdd_to_constraint_map_.resize(constraint_to_bdd_map.size());
+        std::fill(bdd_to_constraint_map_.begin(), bdd_to_constraint_map_.end(), nr_bdds_);
+        for (int c = 0; c != constraint_to_bdd_map.size(); ++c)
+        {
+            if (constraint_to_bdd_map.size(c) != 1)
+                throw std::runtime_error("Constraint " + std::to_string(c) + " is mapped to " + std::to_string(constraint_to_bdd_map.size(c)) + "BDDs.");
+            bdd_to_constraint_map_[constraint_to_bdd_map(c, 0)] = c;
+        }
+        assert(*std::max_element(bdd_to_constraint_map_.begin(), bdd_to_constraint_map_.end()) == nr_bdds_ - 1);
+    }
+
     template void bdd_cuda_base<float>::update_costs(const thrust::device_vector<double>&, const thrust::device_vector<double>&);
     template void bdd_cuda_base<float>::update_costs(const thrust::device_vector<float>&, const thrust::device_vector<float>&);
     template void bdd_cuda_base<double>::update_costs(const thrust::device_vector<double>&, const thrust::device_vector<double>&);
@@ -1061,6 +1076,7 @@ namespace LPMP {
             cum_nr_layers_per_hop_dist_,
             nr_variables_per_hop_dist_,
             layer_offsets_,
+            bdd_to_constraint_map_,
             nr_vars_, nr_bdds_, nr_bdd_nodes_, num_dual_variables_
         );
     }
@@ -1089,6 +1105,7 @@ namespace LPMP {
             cum_nr_layers_per_hop_dist_,
             nr_variables_per_hop_dist_,
             layer_offsets_,
+            bdd_to_constraint_map_,
             nr_vars_, nr_bdds_, nr_bdd_nodes_, num_dual_variables_
         );
         cost_from_root_ = thrust::device_vector<REAL>(nr_bdd_nodes_);

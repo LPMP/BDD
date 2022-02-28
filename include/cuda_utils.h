@@ -105,6 +105,18 @@ inline void print_gpu_memory_stats()
     std::cout<<"Total memory(MB): "<<total / (1024 * 1024)<<", Free(MB): "<<free / (1024 * 1024)<<std::endl;
 }
 
+inline void checkCudaStatus(std::string add_info = "")
+{
+    cudaDeviceSynchronize();
+    cudaError error = cudaGetLastError();
+    if(error != cudaSuccess)
+    {
+        // print the CUDA error message and exit
+        printf("CUDA error: %s\n at: %s \n", cudaGetErrorString(error), add_info.c_str());
+        exit(-1);
+    }
+}
+
 inline void checkCudaError(cudaError_t status, std::string errorMsg)
 {
     if (status != cudaSuccess) {
