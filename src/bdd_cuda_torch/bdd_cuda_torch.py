@@ -2,9 +2,13 @@ import torch
 from BDD.bdd_cuda_learned_mma_py import bdd_cuda_learned_mma
 from torch.autograd.function import once_differentiable
 
+def valid_input_format(*args):
+    for arg in args:
+        assert arg.dtype == torch.float32, 'argument not in FP32 format'
+        assert arg.is_contiguous(), 'argument not contiguous'
+
 def ComputePerBDDSolutions(solvers, lo_costs_batch, hi_costs_batch):
-    assert(lo_costs_batch.is_contiguous())
-    assert(hi_costs_batch.is_contiguous())
+    valid_input_format(lo_costs_batch, hi_costs_batch)
     per_bdd_solution_hi = torch.zeros_like(lo_costs_batch) # Initialize by 0's to also copy to deferred min-marginals.
     # per_bdd_solution_lo = torch.empty_like(lo_costs_batch)
     layer_start = 0
@@ -24,13 +28,10 @@ def ComputePerBDDSolutions(solvers, lo_costs_batch, hi_costs_batch):
 class DualIterations(torch.autograd.Function):
     @staticmethod
     def forward(ctx, solvers, lo_costs_batch, hi_costs_batch, def_mm_batch, dist_weights_batch, num_iterations, omega, grad_dual_itr_max_itr, improvement_slope):
-        assert(lo_costs_batch.is_contiguous())
-        assert(hi_costs_batch.is_contiguous())
-        assert(def_mm_batch.is_contiguous())
+        valid_input_format(lo_costs_batch, hi_costs_batch, def_mm_batch, dist_weights_batch)
         assert(lo_costs_batch.dim() == 1)
         assert(def_mm_batch.dim() == 1)
         assert(dist_weights_batch.dim() == 1)
-        assert(dist_weights_batch.is_contiguous())
         assert(lo_costs_batch.shape == hi_costs_batch.shape)
         assert(lo_costs_batch.shape == dist_weights_batch.shape)
         assert(lo_costs_batch.shape == def_mm_batch.shape)
@@ -59,9 +60,7 @@ class DualIterations(torch.autograd.Function):
     @staticmethod
     @once_differentiable
     def backward(ctx, grad_lo_costs_out, grad_hi_costs_out, grad_def_mm_out):
-        assert(grad_lo_costs_out.is_contiguous())
-        assert(grad_hi_costs_out.is_contiguous())
-        assert(grad_def_mm_out.is_contiguous())
+        valid_input_format(grad_lo_costs_out, grad_hi_costs_out, grad_def_mm_out)
         assert(grad_lo_costs_out.dim() == 1)
         assert(grad_lo_costs_out.shape == grad_hi_costs_out.shape)
         assert(grad_lo_costs_out.shape == grad_def_mm_out.shape)
@@ -95,9 +94,7 @@ class DualIterations(torch.autograd.Function):
 class DistributeDeferredDelta(torch.autograd.Function):
     @staticmethod
     def forward(ctx, solvers, lo_costs_batch, hi_costs_batch, def_mm_batch):
-        assert(lo_costs_batch.is_contiguous())
-        assert(hi_costs_batch.is_contiguous())
-        assert(def_mm_batch.is_contiguous())
+        valid_input_format(lo_costs_batch, hi_costs_batch, def_mm_batch)
         assert(lo_costs_batch.dim() == 1)
         assert(def_mm_batch.dim() == 1)
         assert(lo_costs_batch.shape == hi_costs_batch.shape)
@@ -123,8 +120,7 @@ class DistributeDeferredDelta(torch.autograd.Function):
     @staticmethod
     @once_differentiable
     def backward(ctx, grad_lo_costs_out, grad_hi_costs_out):
-        assert(grad_lo_costs_out.is_contiguous())
-        assert(grad_hi_costs_out.is_contiguous())
+        valid_input_format(grad_lo_costs_out, grad_hi_costs_out)
         assert(grad_lo_costs_out.dim() == 1)
         assert(grad_lo_costs_out.shape == grad_hi_costs_out.shape)
 
@@ -147,8 +143,7 @@ class ComputeAllMinMarginalsDiff(torch.autograd.Function):
     # Make sure deferred min-marginals are zero.
     @staticmethod
     def forward(ctx, solvers, lo_costs_batch, hi_costs_batch):
-        assert(lo_costs_batch.is_contiguous())
-        assert(hi_costs_batch.is_contiguous())
+        valid_input_format(lo_costs_batch, hi_costs_batch)
         assert(lo_costs_batch.dim() == 1)
         assert(lo_costs_batch.shape == hi_costs_batch.shape)
 
@@ -167,7 +162,7 @@ class ComputeAllMinMarginalsDiff(torch.autograd.Function):
     @staticmethod
     @once_differentiable
     def backward(ctx, grad_mm_diff_batch):
-        assert(grad_mm_diff_batch.is_contiguous())
+        valid_input_format(grad_mm_diff_batch)
         assert(grad_mm_diff_batch.dim() == 1)
 
         lo_costs_batch, hi_costs_batch = ctx.saved_tensors
@@ -191,12 +186,9 @@ class PerturbPrimalCosts(torch.autograd.Function):
     @staticmethod
     # Make sure deferred min-marginals are zero.
     def forward(ctx, solvers, lo_costs_pert_batch, hi_costs_pert_batch, lo_costs_batch, hi_costs_batch):
-        assert(lo_costs_batch.is_contiguous())
-        assert(hi_costs_batch.is_contiguous())
+        valid_input_format(lo_costs_pert_batch, hi_costs_pert_batch, lo_costs_batch, hi_costs_batch)
         assert(lo_costs_batch.dim() == 1)
         assert(lo_costs_batch.shape == hi_costs_batch.shape)
-        assert(lo_costs_pert_batch.is_contiguous())
-        assert(hi_costs_pert_batch.is_contiguous())
         assert(lo_costs_pert_batch.dim() == 1)
         assert(lo_costs_pert_batch.shape == hi_costs_pert_batch.shape)
 
@@ -214,7 +206,7 @@ class PerturbPrimalCosts(torch.autograd.Function):
             solver.perturb_costs(lo_costs_pert_batch[var_start].data_ptr(), hi_costs_pert_batch[var_start].data_ptr())
             solver.get_solver_costs(lo_costs_out[layer_start].data_ptr(), hi_costs_out[layer_start].data_ptr(), mm_diff_batch[layer_start].data_ptr()) 
             layer_start += solver.nr_layers()
-            var_start += solver.nr_primal_variables()
+            var_start += solver.nr_primal_variables() + 1
         assert(var_start == lo_costs_pert_batch.shape[0])
         assert(layer_start == lo_costs_batch.shape[0])
         return lo_costs_out, hi_costs_out
@@ -222,8 +214,7 @@ class PerturbPrimalCosts(torch.autograd.Function):
     @staticmethod
     @once_differentiable
     def backward(ctx, grad_lo_costs_out, grad_hi_costs_out):
-        assert(grad_lo_costs_out.is_contiguous())
-        assert(grad_hi_costs_out.is_contiguous())
+        valid_input_format(grad_lo_costs_out, grad_hi_costs_out)
         assert(grad_lo_costs_out.dim() == 1)
         assert(grad_lo_costs_out.shape == grad_hi_costs_out.shape)
 
@@ -233,6 +224,7 @@ class PerturbPrimalCosts(torch.autograd.Function):
         grad_hi_costs_pert_in = torch.empty_like(hi_costs_pert_batch)
         def_mm_batch = torch.zeros_like(grad_lo_costs_out) # At this point deferred min-marginals were zero.
         solvers = ctx.solvers
+        var_start = 0
         layer_start = 0
         for (b, solver) in enumerate(solvers):
             solver.set_solver_costs(lo_costs_batch[layer_start].data_ptr(), hi_costs_batch[layer_start].data_ptr(), def_mm_batch[layer_start].data_ptr())
@@ -242,7 +234,7 @@ class PerturbPrimalCosts(torch.autograd.Function):
             except:
                 print(f'Error in grad_cost_perturbation.')
 
-            var_start += solver.nr_primal_variables()
+            var_start += solver.nr_primal_variables() + 1
             layer_start += solver.nr_layers()
         assert(var_start == lo_costs_pert_batch.shape[0])
         assert(layer_start == lo_costs_batch.shape[0])
@@ -251,8 +243,7 @@ class PerturbPrimalCosts(torch.autograd.Function):
 class ComputeLowerBoundperBDD(torch.autograd.Function):
     @staticmethod
     def forward(ctx, solvers, lo_costs_batch, hi_costs_batch):
-        assert(lo_costs_batch.is_contiguous())
-        assert(hi_costs_batch.is_contiguous())
+        valid_input_format(lo_costs_batch, hi_costs_batch)
         assert(lo_costs_batch.dim() == 1)
         assert(lo_costs_batch.shape == hi_costs_batch.shape)
 
@@ -275,7 +266,7 @@ class ComputeLowerBoundperBDD(torch.autograd.Function):
     @staticmethod
     @once_differentiable
     def backward(ctx, grad_lb_per_bdd_batch):
-        assert(grad_lb_per_bdd_batch.is_contiguous())
+        valid_input_format(grad_lb_per_bdd_batch)
         assert(grad_lb_per_bdd_batch.dim() == 1)
 
         lo_costs_batch, hi_costs_batch = ctx.saved_tensors
