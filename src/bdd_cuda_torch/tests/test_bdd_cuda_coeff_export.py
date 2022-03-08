@@ -16,6 +16,7 @@ instance = BDD.ILP_instance_py.parse_ILP(instance_lp)
 solver = BDD.bdd_cuda_learned_mma_py.bdd_cuda_learned_mma(instance)
 
 coeffs = solver.constraint_matrix_coefficients(instance)
+bdd_to_constraint_map = solver.bdd_to_constraint_map()
 
 primal_indices = torch.empty(solver.nr_layers(), dtype = torch.int32, device = 'cuda')
 solver.primal_variable_index(primal_indices.data_ptr())
@@ -24,7 +25,6 @@ bdd_indices = torch.empty(solver.nr_layers(), dtype = torch.int32, device = 'cud
 solver.bdd_index(bdd_indices.data_ptr())
 
 num_vars = solver.nr_primal_variables()
-breakpoint()
 
 for l in range(solver.nr_layers()):
     v = primal_indices[l]

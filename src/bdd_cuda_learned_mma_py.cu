@@ -4,6 +4,7 @@
 #include "bdd_cuda_learned_mma.h"
 #include "bdd_branch_instruction.h"
 #include "ILP_input.h"
+#include "two_dimensional_variable_array.hxx"
 #include "bdd_preprocessor.h"
 #include <sstream>
 #include "cuda_utils.h"
@@ -60,16 +61,23 @@ std::vector<float> get_constraint_matrix_coeffs(const LPMP::ILP_input& ilp, cons
     std::vector<size_t> indices(num_elements);
     { // Create COO representation for faster indexing later.
         thrust::device_vector<int> dev_primal_index = solver.get_primal_variable_index();
-        thrust::device_vector<int> dev_bdd_index = solver.get_bdd_index();
+        const thrust::device_vector<int> dev_bdd_index = solver.get_bdd_index();
         thrust::device_vector<unsigned long> dev_indices(num_elements);
         thrust::sequence(dev_indices.begin(), dev_indices.end());
 
-        auto first_key = thrust::make_zip_iterator(thrust::make_tuple(dev_bdd_index.begin(), dev_primal_index.begin()));
-        auto last_key = thrust::make_zip_iterator(thrust::make_tuple(dev_bdd_index.end(), dev_primal_index.end()));
+        const std::vector<size_t> bdd_to_constraint_map = solver.bdd_to_constraint_map();
+        thrust::device_vector<size_t> dev_bdd_to_constraint_map(bdd_to_constraint_map.begin(), bdd_to_constraint_map.end());
+        thrust::device_vector<int> dev_con_index(dev_bdd_index.size());
+
+        // Map bdd_index to constraint index:
+        thrust::gather(dev_bdd_index.begin(), dev_bdd_index.end(), dev_bdd_to_constraint_map.begin(), dev_con_index.begin());
+
+        auto first_key = thrust::make_zip_iterator(thrust::make_tuple(dev_con_index.begin(), dev_primal_index.begin()));
+        auto last_key = thrust::make_zip_iterator(thrust::make_tuple(dev_con_index.end(), dev_primal_index.end()));
         thrust::sort_by_key(thrust::device, first_key, last_key, dev_indices.begin());
 
         thrust::device_vector<int> dev_cumm_num_vars_per_constraint(num_elements);
-        auto new_last = thrust::reduce_by_key(dev_bdd_index.begin(), dev_bdd_index.end(), thrust::make_constant_iterator<int>(1), 
+        auto new_last = thrust::reduce_by_key(dev_con_index.begin(), dev_con_index.end(), thrust::make_constant_iterator<int>(1), 
                                 thrust::make_discard_iterator(), dev_cumm_num_vars_per_constraint.begin());
         const auto nr_con = std::distance(dev_cumm_num_vars_per_constraint.begin(), new_last.second);
         if (nr_con != solver.nr_bdds())
@@ -77,7 +85,7 @@ std::vector<float> get_constraint_matrix_coeffs(const LPMP::ILP_input& ilp, cons
         dev_cumm_num_vars_per_constraint.resize(nr_con);
         thrust::inclusive_scan(dev_cumm_num_vars_per_constraint.begin(), dev_cumm_num_vars_per_constraint.end(), 
                                 dev_cumm_num_vars_per_constraint.begin());
-        thrust::copy(dev_bdd_index.begin(), dev_bdd_index.end(), con_indices_sorted.begin());
+        thrust::copy(dev_con_index.begin(), dev_con_index.end(), con_indices_sorted.begin());
         thrust::copy(dev_primal_index.begin(), dev_primal_index.end(), var_indices_sorted.begin());
         thrust::copy(dev_indices.begin(), dev_indices.end(), indices.begin());
         thrust::copy(dev_cumm_num_vars_per_constraint.begin(), dev_cumm_num_vars_per_constraint.end(), 
@@ -118,6 +126,168 @@ std::vector<float> get_constraint_matrix_coeffs(const LPMP::ILP_input& ilp, cons
     return coefficients;
 }
 
+
+// std::tuple<std::vector<float>, Eigen::MatrixXi> get_constraint_matrix_coeffs_and_bounds(const LPMP::ILP_input& ilp, const bdd_type& solver)
+// {
+//     if (ilp.nr_constraints() != solver.nr_bdds())
+//     {
+//         std::cout<<"Number of constraints: "<<ilp.nr_constraints()<<", not equal to number of BDDs: "<<solver.nr_bdds()<<"\n";
+//         throw std::runtime_error("error");
+//     }
+//     const size_t num_elements = solver.nr_layers();
+//     const std::vector<size_t> bdd_to_constraint_map = solver.bdd_to_constraint_map();
+//     std::vector<int> var_indices_sorted(num_elements);
+//     std::vector<int> bdd_indices_sorted(num_elements);
+//     std::vector<int> cumm_num_vars_per_constraint(solver.nr_bdds() + 1);
+//     std::vector<size_t> indices(num_elements);
+//     { // Create COO representation for faster indexing later.
+//         thrust::device_vector<int> dev_primal_index = solver.get_primal_variable_index();
+//         // const thrust::device_vector<int> dev_bdd_index = solver.get_bdd_index();
+//         // thrust::device_vector<size_t> dev_bdd_to_constraint_map(bdd_to_constraint_map.begin(), bdd_to_constraint_map.end());
+//         // thrust::device_vector<int> dev_bdd_index(dev_bdd_index.size());
+
+//         // thrust::device_vector<size_t> dev_bdd_to_constraint_map(bdd_to_constraint_map.begin(), bdd_to_constraint_map.end());
+//         // thrust::device_vector<int> dev_bdd_index(dev_bdd_index.size());
+
+//         // Map bdd_index to constraint index:
+//         // thrust::gather(dev_bdd_index.begin(), dev_bdd_index.end(), dev_bdd_to_constraint_map.begin(), dev_bdd_index.begin());
+        
+//         thrust::device_vector<int> dev_bdd_index = solver.get_bdd_index();
+
+//         // Sort by (constraints, variables) and store the sorting order in dev_indices.
+//         thrust::device_vector<unsigned long> dev_indices(num_elements);
+//         thrust::sequence(dev_indices.begin(), dev_indices.end());
+
+//         auto first_key = thrust::make_zip_iterator(thrust::make_tuple(dev_bdd_index.begin(), dev_primal_index.begin()));
+//         auto last_key = thrust::make_zip_iterator(thrust::make_tuple(dev_bdd_index.end(), dev_primal_index.end()));
+//         thrust::sort_by_key(thrust::device, first_key, last_key, dev_indices.begin());
+
+//         thrust::device_vector<int> dev_cumm_num_vars_per_constraint(num_elements);
+//         auto new_last = thrust::reduce_by_key(dev_bdd_index.begin(), dev_bdd_index.end(), thrust::make_constant_iterator<int>(1), 
+//                                 thrust::make_discard_iterator(), dev_cumm_num_vars_per_constraint.begin());
+//         const auto nr_con = std::distance(dev_cumm_num_vars_per_constraint.begin(), new_last.second);
+//         if (nr_con != solver.nr_bdds())
+//             throw std::runtime_error("con_indices reduced size mismatch.");
+//         dev_cumm_num_vars_per_constraint.resize(nr_con);
+//         thrust::inclusive_scan(dev_cumm_num_vars_per_constraint.begin(), dev_cumm_num_vars_per_constraint.end(), 
+//                                 dev_cumm_num_vars_per_constraint.begin());
+//         thrust::copy(dev_bdd_index.begin(), dev_bdd_index.end(), bdd_indices_sorted.begin());
+//         thrust::copy(dev_primal_index.begin(), dev_primal_index.end(), var_indices_sorted.begin());
+//         thrust::copy(dev_indices.begin(), dev_indices.end(), indices.begin());
+//         thrust::copy(dev_cumm_num_vars_per_constraint.begin(), dev_cumm_num_vars_per_constraint.end(), 
+//                     cumm_num_vars_per_constraint.begin() + 1);
+//         cumm_num_vars_per_constraint[0] = 0;
+//     }
+
+//     std::vector<float> coefficients(num_elements, 0.0);
+//     int find_start_index = cumm_num_vars_per_constraint[0];
+//     std::vector<int> constraints_to_bdd_temp(ilp.nr_constraints(), -1);
+//     std::vector<char> bdd_mapped(solver.nr_bdds(), 0);
+//     for(size_t c = 0; c < ilp.nr_constraints(); ++c)
+//     {
+//         const auto& constr = ilp.constraints()[c];
+//         assert(constr.monomials.size() == constr.coefficients.size());
+//         std::set<int> vars_in_con;
+//         for(size_t monomial_idx = 0; monomial_idx < constr.monomials.size(); ++monomial_idx)
+//             vars_in_con.insert(constr.monomials(monomial_idx, 0));
+
+//         for(int bdd_index = 0; bdd_index != solver.nr_bdds(); ++bdd_index)
+//         {
+//             if (bdd_mapped[bdd_index])
+//                 continue;
+
+//             const int var_start_index = cumm_num_vars_per_constraint[bdd_index];
+//             const int var_end_index = cumm_num_vars_per_constraint[bdd_index + 1];
+//             // const int current_num_vars = var_end_index - var_start_index;
+//             // if (current_num_vars != vars_in_con.size())
+//             //     continue;
+//             int num_found = 0;
+//             for (int v = var_start_index; v != var_end_index; ++v)
+//             {
+//                 assert(bdd_indices_sorted[v] == bdd_index);
+//                 if (v == INT_MAX)
+//                     continue;
+//                 if(vars_in_con.find(var_indices_sorted[v]) != vars_in_con.end())
+//                     num_found++;
+//                 else
+//                     break;
+//             }
+//             if (num_found == vars_in_con.size())
+//             {
+//                 bdd_mapped[bdd_index] = 1;
+//                 constraints_to_bdd_temp[c] = bdd_index;
+//                 // std::cout<<"Mapping constraint: "<<c<<" to BDD:"<<bdd_index<<"\n";
+//                 break;
+//             }
+//         }
+//     }
+//     assert(*std::min_element(bdd_mapped.begin(), bdd_mapped.end()) == 1);
+//     assert(*std::max_element(constraints_to_bdd_temp.begin(), constraints_to_bdd_temp.end()) >= 0);
+
+//     Eigen::MatrixXi D(ilp.nr_variables() + ilp.nr_constraints(), 2);
+//     for(size_t i=0; i<ilp.nr_variables(); ++i)
+//     {
+//         D(i,0) = 0;
+//         D(i,1) = 1;
+//     }
+
+//     for(size_t c = 0; c < ilp.nr_constraints(); ++c)
+//     {
+//         const auto& constr = ilp.constraints()[c];
+
+//         if(constr.ineq == LPMP::ILP_input::inequality_type::equal)
+//         {
+//             D(ilp.nr_variables() + c, 0) = constr.right_hand_side;
+//             D(ilp.nr_variables() + c, 1) = constr.right_hand_side;
+//         }
+//         else if(constr.ineq == LPMP::ILP_input::inequality_type::smaller_equal)
+//         {
+//             D(ilp.nr_variables() + c, 0) = std::numeric_limits<int>::min();
+//             D(ilp.nr_variables() + c, 1) = constr.right_hand_side; 
+//         }
+//         else if(constr.ineq == LPMP::ILP_input::inequality_type::greater_equal)
+//         {
+//             D(ilp.nr_variables() + c, 0) = constr.right_hand_side; 
+//             D(ilp.nr_variables() + c, 1) = std::numeric_limits<int>::max();
+//         } 
+
+//         if(!constr.is_linear())
+//             throw std::runtime_error("Only linear constraints supported");
+//         assert(constr.monomials.size() == constr.coefficients.size());
+
+//         const int bdd_index = constraints_to_bdd_temp[c];
+
+//         const int find_start_index = cumm_num_vars_per_constraint[bdd_index];
+//         const int find_end_index = cumm_num_vars_per_constraint[bdd_index + 1];
+//         for(size_t monomial_idx = 0; monomial_idx < constr.monomials.size(); ++monomial_idx)
+//         {
+//             const size_t var = constr.monomials(monomial_idx, 0);
+//             const int coeff = constr.coefficients[monomial_idx];
+//             // Find where does (c, var) occurs in solver variable and constraint indices:
+//             const auto it = std::find(var_indices_sorted.begin() + find_start_index, 
+//                                     var_indices_sorted.begin() + find_end_index, var);
+//             if (it == var_indices_sorted.begin() + find_end_index)
+//             {
+//                 std::cout<<"CONs: \n";
+//                 std::copy(bdd_indices_sorted.begin() + find_start_index, bdd_indices_sorted.begin() + find_end_index, 
+//                             std::ostream_iterator<int>(std::cout, " "));
+//                 std::cout<<"VARs: \n";
+//                 std::copy(var_indices_sorted.begin() + find_start_index, var_indices_sorted.begin() + find_end_index, 
+//                             std::ostream_iterator<int>(std::cout, " "));
+//                 std::cout<<"ILP variable not found in BDD. Var: " + std::to_string(var)<<", Con: "<<c<<"\n";
+//                 throw std::runtime_error("error");
+//             }
+//             else
+//             {
+//                 const int index_to_place = indices[std::distance(var_indices_sorted.begin(), it)];
+//                 coefficients[index_to_place] = coeff;
+//             }
+//         }
+//     }
+
+//     return std::make_tuple(coefficients, D);
+// }
+
 PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
     m.doc() = "Python binding for bdd-based solver using CUDA";
 
@@ -133,9 +303,11 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
                         return create_solver(s);
                 }))
         .def(py::init([](const LPMP::ILP_input& ilp) {
-                    LPMP::bdd_preprocessor bdd_pre(ilp);
-                    auto* base = new bdd_type(bdd_pre.get_bdd_collection());  //TODO: New?
+                    LPMP::bdd_preprocessor bdd_pre;
+                    const auto constraint_to_bdd_map = bdd_pre.add_ilp(ilp);
+                    auto* base = new bdd_type(bdd_pre.get_bdd_collection());
                     base->update_costs(ilp.objective().begin(), ilp.objective().begin(), ilp.objective().begin(), ilp.objective().end());
+                    base->compute_bdd_to_constraint_map(constraint_to_bdd_map);
                     return base;
                 }))
         .def("__repr__", [](const bdd_type &solver) {
@@ -148,11 +320,12 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
         .def("nr_layers", [](const bdd_type& solver) { return solver.nr_layers(); })
         .def("nr_layers", [](const bdd_type& solver, const int hop_index) { return solver.nr_layers(hop_index); })
         .def("nr_bdds", &bdd_type::nr_bdds)
-        .def("constraint_matrix_coefficients", [](const bdd_type& solver, const LPMP::ILP_input& ilp)
+        .def("constraint_matrix_coeffs", [](const bdd_type& solver, const LPMP::ILP_input& ilp)
         {
             return get_constraint_matrix_coeffs(ilp, solver);
         }, "Computes the coefficients for each variable appearing in constraint."
         "\nAssumes that each BDD correspond to a linear constraint present in original ILP.")
+        .def("bdd_to_constraint_map", &bdd_type::bdd_to_constraint_map)
         .def("lower_bound", &bdd_type::lower_bound)
         .def("lower_bound_per_bdd", [](bdd_type& solver, const long lb_out_ptr)
         {

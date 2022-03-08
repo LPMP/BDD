@@ -526,7 +526,6 @@ namespace LPMP {
                                                 const int* const __restrict__ lo_bdd_node_index, 
                                                 const int* const __restrict__ hi_bdd_node_index, 
                                                 const int* const __restrict__ bdd_node_to_layer_map, 
-                                                const int* const __restrict__ primal_index, 
                                                 const int* const __restrict__ prev_best_node,
                                                 REAL* __restrict__ grad_cost_from_root,
                                                 REAL* __restrict__ grad_lo_cost,
@@ -536,7 +535,7 @@ namespace LPMP {
         const int num_threads = blockDim.x * gridDim.x;
         for (int bdd_node_idx = start_index + start_offset; bdd_node_idx < cur_num_bdd_nodes + start_offset; bdd_node_idx += num_threads) 
         {
-            if (primal_index[bdd_node_idx] == INT_MAX)
+            if (lo_bdd_node_index[bdd_node_idx] == BOT_SINK_INDICATOR_CUDA)
                 continue;
 
             const int prev_hop_best_node = prev_best_node[bdd_node_idx - start_offset];
@@ -547,9 +546,10 @@ namespace LPMP {
             else
                 assert(bdd_node_idx == hi_bdd_node_index[prev_hop_best_node]);
 
-            const int prev_layer_idx = bdd_node_to_layer_map[prev_hop_best_node];
             const REAL incoming_grad = grad_cost_from_root[bdd_node_idx];
-            grad_cost_from_root[prev_hop_best_node] += incoming_grad;
+            atomicAdd(&grad_cost_from_root[prev_hop_best_node], incoming_grad);
+
+            const int prev_layer_idx = bdd_node_to_layer_map[prev_hop_best_node];
             if (!is_on_hi_arc)
                 atomicAdd(&grad_lo_cost[prev_layer_idx], incoming_grad);
             else
@@ -593,7 +593,6 @@ namespace LPMP {
                                                             thrust::raw_pointer_cast(this->lo_bdd_node_index_.data()),
                                                             thrust::raw_pointer_cast(this->hi_bdd_node_index_.data()),
                                                             thrust::raw_pointer_cast(this->bdd_node_to_layer_map_.data()),
-                                                            thrust::raw_pointer_cast(this->primal_variable_index_.data()),
                                                             thrust::raw_pointer_cast(next_hop_prev_best_nodes.data()),
                                                             thrust::raw_pointer_cast(grad_cost_from_root),
                                                             thrust::raw_pointer_cast(grad_lo_cost),
@@ -745,9 +744,11 @@ namespace LPMP {
             const REAL cur_lo_cost = lo_cost[layer_index];
             const REAL cur_hi_cost = hi_cost[layer_index];
             REAL min_lo_path = CUDART_INF_F;
-            int best_lo_node, best_lo_next_node;
+            int best_lo_node = -1;
+            int best_lo_next_node;
             REAL min_hi_path = CUDART_INF_F;
-            int best_hi_node, best_hi_next_node;
+            int best_hi_node = -1;
+            int best_hi_next_node;
             for (int bdd_node_idx = start_bdd_node; bdd_node_idx < end_bdd_node; bdd_node_idx++) // TODO: for loop might be slow for wide BDDs?
             {
                 const int next_lo_node = lo_bdd_node_index[bdd_node_idx];
@@ -755,7 +756,7 @@ namespace LPMP {
                 const REAL cur_c_from_root = cost_from_root[bdd_node_idx];
                 
                 const REAL current_lo_path_cost = cur_c_from_root + cur_lo_cost + cost_from_terminal[next_lo_node];
-                if (current_lo_path_cost < min_lo_path)
+                if (current_lo_path_cost < min_lo_path || best_lo_node == -1)
                 {
                     min_lo_path = current_lo_path_cost;
                     best_lo_node = bdd_node_idx;
@@ -763,7 +764,7 @@ namespace LPMP {
                 }
                 const REAL current_hi_path_cost = cur_c_from_root + cur_hi_cost + cost_from_terminal[next_hi_node];
 
-                if (current_hi_path_cost < min_hi_path)
+                if (current_hi_path_cost < min_hi_path || best_hi_node == -1)
                 {
                     min_hi_path = current_hi_path_cost;
                     best_hi_node = bdd_node_idx;
