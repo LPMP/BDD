@@ -56,3 +56,8 @@ For computing BDDs for representing constraints and for sequentially visiting va
 ## References
 If you use this work please cite
 * [`J. H. Lange and P. Swoboda. Efficient Message Passing for 0–1 ILPs with Binary Decision Diagrams. In ICML 2021.`](http://proceedings.mlr.press/v139/lange21a.html)
+
+and
+* [`A. Abbas and P. Swoboda. FastDOG: Fast Discrete Optimization on GPU. In CVPR 2022.`](https://arxiv.org/abs/2111.10270)
+
+for the parallel solvers.

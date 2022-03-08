@@ -1483,4 +1483,152 @@ namespace BDD {
         return *this;
     }
 
+    size_t bdd_collection::simplex_constraint(const size_t n)
+    {
+        assert(n > 0);
+
+        if(n == 1)
+        {
+            bdd_instruction root;
+            root.index = 0;
+            root.lo = bdd_instructions.size()+1;
+            root.hi = bdd_instructions.size()+2;
+            bdd_instructions.push_back(root);
+
+            bdd_instructions.push_back(bdd_instruction::botsink());
+            bdd_instructions.push_back(bdd_instruction::topsink());
+
+            bdd_delimiters.push_back(bdd_instructions.size());
+
+            return nr_bdds()-1;
+        }
+
+        const size_t nr_bdd_nodes = 2*n-1;
+        const size_t terminal_0_index = bdd_instructions.size() + nr_bdd_nodes;
+        const size_t terminal_1_index = bdd_instructions.size() + nr_bdd_nodes + 1;
+        const size_t offset = bdd_instructions.size();
+
+        bdd_instruction root;
+        root.index = 0;
+        root.lo = offset+1;
+        root.hi = offset+2;
+        bdd_instructions.push_back(root);
+
+        for(size_t i=1; i<n-1; ++i)
+        {
+            bdd_instruction instr_0;
+            instr_0.index = i;
+            instr_0.lo = offset + 2*i + 1;
+            instr_0.hi = offset + 2*i + 2;
+            bdd_instructions.push_back(instr_0);
+
+            bdd_instruction instr_1;
+            instr_1.index = i;
+            instr_1.lo = offset + 2*i + 2;
+            instr_1.hi = terminal_0_index;
+            bdd_instructions.push_back(instr_1);
+        }
+
+        bdd_instruction instr_0;
+        instr_0.index = n-1;
+        instr_0.lo = terminal_0_index;
+        instr_0.hi = terminal_1_index;
+        bdd_instructions.push_back(instr_0);
+
+        bdd_instruction instr_1;
+        instr_1.index = n-1;
+        instr_1.lo = terminal_1_index;
+        instr_1.hi = terminal_0_index;
+        bdd_instructions.push_back(instr_1);
+
+        bdd_instructions.push_back(bdd_instruction::botsink());
+        bdd_instructions.push_back(bdd_instruction::topsink());
+
+        bdd_delimiters.push_back(bdd_instructions.size());
+
+        return nr_bdds()-1;
+    }
+
+    size_t bdd_collection::not_all_false_constraint(const size_t n)
+    {
+        assert(n > 0);
+
+        const size_t nr_bdd_nodes = n;
+        const size_t terminal_0_index = bdd_instructions.size() + nr_bdd_nodes;
+        const size_t terminal_1_index = bdd_instructions.size() + nr_bdd_nodes + 1;
+        const size_t offset = bdd_instructions.size();
+
+        for(size_t i=0; i<n-1; ++i)
+        {
+            bdd_instruction instr;
+            instr.index = i;
+            instr.lo = offset + i + 1;
+            instr.hi = terminal_1_index;
+            bdd_instructions.push_back(instr);
+        }
+
+        bdd_instruction instr;
+        instr.index = n-1;
+        instr.lo = terminal_0_index;
+        instr.hi = terminal_1_index;
+        bdd_instructions.push_back(instr);
+
+        bdd_instructions.push_back(bdd_instruction::botsink());
+        bdd_instructions.push_back(bdd_instruction::topsink());
+
+        bdd_delimiters.push_back(bdd_instructions.size());
+        return nr_bdds()-1;
+    }
+
+    size_t bdd_collection::all_equal_constraint(const size_t n)
+    {
+        // if n == 1 then this is just topsink
+        assert(n > 1);
+
+        const size_t nr_bdd_nodes = 2*n - 1;
+        const size_t terminal_0_index = bdd_instructions.size() + nr_bdd_nodes;
+        const size_t terminal_1_index = bdd_instructions.size() + nr_bdd_nodes + 1;
+        const size_t offset = bdd_instructions.size();
+
+        bdd_instruction first_instr;
+        first_instr.index = 0;
+        first_instr.lo = offset + 1;
+        first_instr.hi = offset + 2;
+        bdd_instructions.push_back(first_instr);
+
+        for(size_t i=1; i+1<n; ++i)
+        {
+            bdd_instruction lo_instr;
+            lo_instr.index = i;
+            lo_instr.lo = offset + i*2 + 1;
+            lo_instr.hi = terminal_0_index;
+            bdd_instructions.push_back(lo_instr);
+
+            bdd_instruction hi_instr;
+            hi_instr.index = i;
+            hi_instr.lo = terminal_0_index;
+            hi_instr.hi = offset + i*2 + 2;
+            bdd_instructions.push_back(hi_instr);
+        }
+
+        bdd_instruction last_lo_instr;
+        last_lo_instr.index = n-1;
+        last_lo_instr.lo = terminal_1_index;
+        last_lo_instr.hi = terminal_0_index;
+        bdd_instructions.push_back(last_lo_instr);
+
+        bdd_instruction last_hi_instr;
+        last_hi_instr.index = n-1;
+        last_hi_instr.lo = terminal_0_index;
+        last_hi_instr.hi = terminal_1_index;
+        bdd_instructions.push_back(last_hi_instr);
+        
+        bdd_instructions.push_back(bdd_instruction::botsink());
+        bdd_instructions.push_back(bdd_instruction::topsink());
+
+        bdd_delimiters.push_back(bdd_instructions.size());
+        assert(is_bdd(nr_bdds()-1));
+        return nr_bdds()-1;
+    }
+
 }

@@ -14,7 +14,7 @@ int main(int argc, char** argv)
         bdd_mgr_vars.push_back(bdd_mgr.projection(i));
 
     // simplex
-    for(size_t i=2; i<10; ++i)
+    for(size_t i=1; i<10; ++i)
     {
         BDD::node_ref bdd_mgr_simplex = bdd_mgr.simplex(bdd_mgr_vars.begin(), bdd_mgr_vars.begin()+i);
         const size_t bdd_nr = bdd_col.simplex_constraint(i);
@@ -23,7 +23,7 @@ int main(int argc, char** argv)
     }
 
     // not all false
-    for(size_t i=2; i<10; ++i)
+    for(size_t i=1; i<10; ++i)
     {
         BDD::node_ref bdd_mgr_not_all_false = bdd_mgr.negate(bdd_mgr.all_false(bdd_mgr_vars.begin(), bdd_mgr_vars.begin()+i));
         const size_t bdd_nr = bdd_col.not_all_false_constraint(i);
