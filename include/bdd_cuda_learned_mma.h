@@ -14,7 +14,12 @@ namespace LPMP {
             // dist_weights points to disribution weights and mm_diff_out_ptr will contain deferred min-marginal differences.
             // The size of underlying arrays should be corresponding to the size of hi_cost_ i.e. = this->nr_layers(). 
             // Returns the number of iterations solver actually due to improvement_slope > 0.
-            int iterations(const thrust::device_ptr<const REAL> dist_weights, const int num_itr, const REAL omega, const double improvement_slope = 1e-6);
+            // Uses omega_vec instead of omega_scalar if given. 
+            int iterations(const thrust::device_ptr<const REAL> dist_weights, 
+                            const int num_itr, 
+                            const REAL omega_scalar, // will not be used if omega_vec != nullptr
+                            const double improvement_slope = 1e-6,
+                            const thrust::device_ptr<const REAL> omega_vec = nullptr);
 
             // Assumes that deffered_mm_diff_ contains the mm's containing the values before iterations() was called.
             void grad_iterations(
@@ -23,10 +28,11 @@ namespace LPMP {
                 thrust::device_ptr<REAL> grad_hi_cost, // Input: incoming grad w.r.t hi_cost, Outputs in-place to compute grad. hi_cost before iterations.
                 thrust::device_ptr<REAL> grad_mm, // Input: incoming grad w.r.t min-marg. diff., Outputs in-place to compute grad. w.r.t deferred min-marginals used in iterations.
                 thrust::device_ptr<REAL> grad_dist_weights_out, // Output: contains grad w.r.t distribution weights, assumes the memory is already allocated (= nr_layers()).
-                thrust::device_ptr<REAL> grad_omega,    // Output: contains grad w.r.t omega (size = 1).
-                const REAL omega,
+                thrust::device_ptr<REAL> grad_omega,    // Output: contains grad w.r.t omega. Should be of size 1 if omega_vec is nullptr otherwise size of omega_vec.
+                const REAL omega_scalar, // will not be used if omega_vec != nullptr
                 const int track_grad_after_itr,      // First runs the solver for track_grad_after_itr many iterations without tracking gradients and then backpropagates through only last track_grad_for_num_itr many itrs.
-                const int track_grad_for_num_itr     // See prev. argument.
+                const int track_grad_for_num_itr,     // See prev. argument.
+                const thrust::device_ptr<const REAL> omega_vec = nullptr
             );
 
             // Assumes that deffered_mm_diff_ contains the mm's which were distributed in distribute_delta().
@@ -38,7 +44,7 @@ namespace LPMP {
 
             // Useful for cases when min_marginals_cuda() was called during forward pass to compute all min marginals (e.g. to compute loss).
             void grad_mm_diff_all_hops(
-                const thrust::device_ptr<const REAL> incoming_grad_mm,
+                thrust::device_ptr<REAL> incoming_grad_mm,
                 thrust::device_ptr<REAL> grad_lo_cost_out, // Outputs in-place to compute grad. lo_cost before all min-marginal difference computation.
                 thrust::device_ptr<REAL> grad_hi_cost_out // Outputs in-place to compute grad. hi_cost before all min-marginal difference computation.
                 );
@@ -60,10 +66,10 @@ namespace LPMP {
 
         private:
             // last_hop should be equal to nr_hops() - 1 for complete forward pass.
-            void forward_iteration_learned_mm_dist(const thrust::device_ptr<const REAL> dist_weights, thrust::device_ptr<REAL> mm_diff_ptr, const REAL omega);
+            void forward_iteration_learned_mm_dist(const thrust::device_ptr<const REAL> dist_weights, thrust::device_ptr<REAL> mm_diff_ptr, const REAL omega_scalar, const thrust::device_ptr<const REAL> omega_vec = nullptr);
 
             // similar to above except that last_hop should be equal to 0 for complete backward pass.
-            void backward_iteration_learned_mm_dist(const thrust::device_ptr<const REAL> dist_weights, thrust::device_ptr<REAL> mm_diff_ptr, const REAL omega); 
+            void backward_iteration_learned_mm_dist(const thrust::device_ptr<const REAL> dist_weights, thrust::device_ptr<REAL> mm_diff_ptr, const REAL omega_scalar, const thrust::device_ptr<const REAL> omega_vec = nullptr); 
 
             // Compute gradient of forward_iteration_learned_mm_dist.
             // Assumes solver state is set to state before forward_iteration_learned_mm_dist was called. 
@@ -76,8 +82,9 @@ namespace LPMP {
                 thrust::device_ptr<REAL> grad_cost_from_terminal, // Input: incoming grad w.r.t cost_from_terminal (size = nr_bdd_nodes()), Outputs in-place to compute grad before iteration.
                 thrust::device_ptr<REAL> grad_mm, // Input: incoming grad w.r.t min-marg. diff. current iteration and Outputs in-place to compute grad. w.r.t deferred min-marginals used in iteration.
                 thrust::device_ptr<REAL> grad_dist_weights_out, // Output: contains grad w.r.t distribution weights, assumes the memory is already allocated (= nr_layers()).
-                const REAL omega,
-                thrust::device_ptr<REAL> grad_omega    // Output: contains grad w.r.t omega (size = 1).
+                const REAL omega_scalar, // will not be used if omega_vec != nullptr
+                thrust::device_ptr<REAL> grad_omega,    // Output: contains grad w.r.t omega (size = 1) if omega_vec = nullptr otherwise size should be same size of omega_vec.
+                const thrust::device_ptr<const REAL> omega_vec = nullptr
                 );
 
             // Compute gradient of backward_iteration_learned_mm_dist.
@@ -91,8 +98,9 @@ namespace LPMP {
                 thrust::device_ptr<REAL> grad_cost_from_terminal, // Input: incoming grad w.r.t cost_from_terminal (size = nr_bdd_nodes()) iteration and Outputs in-place to compute grad before iteration.
                 thrust::device_ptr<REAL> grad_mm, // Input: incoming grad w.r.t min-marg. diff. current iteration and Outputs in-place to compute grad. w.r.t deferred min-marginals used in iteration.
                 thrust::device_ptr<REAL> grad_dist_weights_out, // Output: contains grad w.r.t distribution weights, assumes the memory is already allocated (= nr_layers()).
-                const REAL omega,
-                thrust::device_ptr<REAL> grad_omega    // Output: contains grad w.r.t omega (size = 1).
+                const REAL omega_scalar, // will not be used if omega_vec != nullptr
+                thrust::device_ptr<REAL> grad_omega,    // Output: contains grad w.r.t omega (size = 1) if omega_vec = nullptr otherwise size should be same size of omega_vec.
+                const thrust::device_ptr<const REAL> omega_vec = nullptr
                 );
 
             // Compute gradient for dual update of a hop and min-marginal calculation.
@@ -112,8 +120,10 @@ namespace LPMP {
                 thrust::device_ptr<REAL> grad_delta_lo, // To accumulate gradients w.r.t delta lo (should be intialized by zero for first hop)
                 thrust::device_ptr<REAL> grad_delta_hi, // To accumulate gradients w.r.t delta hi (should be intialized by zero for first hop)
                 const thrust::device_ptr<const REAL> dist_weights,            // distribution weights used in the forward pass.
-                const int hop_index, const REAL omega,
-                thrust::device_ptr<REAL> grad_omega    // Output: contains grad w.r.t omega (size = 1).
+                const int hop_index, 
+                const REAL omega_scalar, // will not be used if omega_vec != nullptr
+                thrust::device_ptr<REAL> grad_omega,    // Output: contains grad w.r.t omega (size = 1) if omega_vec = nullptr otherwise size should be same size of omega_vec.
+                const thrust::device_ptr<const REAL> omega_vec = nullptr
                 );
 
             void compute_grad_cost_from_root(thrust::device_ptr<REAL> grad_cost_from_root,  // incoming gradient of hop_index + 1 root costs is used to compute grad for hop_index root costs.
@@ -129,13 +139,16 @@ namespace LPMP {
             void grad_mm_diff_of_hop(const thrust::device_ptr<const REAL> before_update_lo_cost, // min-marginal computation was done on input costs (not updated) costs.
                                     const thrust::device_ptr<const REAL> before_update_hi_cost,
                                     const thrust::device_ptr<const REAL> cur_min_marg_diff, // current min-marginals which were subtracted in present iteration.
-                                    const thrust::device_ptr<const REAL> incoming_grad_mm_diff_hop, // gradient of (min-marginal diff. weighted by omega).
+                                    thrust::device_ptr<REAL> incoming_grad_mm_diff_hop, // gradient of min-marginal diff. output is backpropagates through multiplication by omega .
                                     thrust::device_ptr<REAL> grad_lo_cost,
                                     thrust::device_ptr<REAL> grad_hi_cost,
                                     thrust::device_ptr<REAL> grad_cost_from_root,
                                     thrust::device_ptr<REAL> grad_cost_from_terminal,
-                                    thrust::device_ptr<REAL> grad_omega,
-                                    const int hop_index, const REAL omega,
-                                    bool compute_grad_omega = true);
+                                    thrust::device_ptr<REAL> grad_omega,    // Output: contains grad w.r.t omega (size = 1) if omega_vec = nullptr otherwise size should be same size of omega_vec.
+                                    const int hop_index, 
+                                    const REAL omega_scalar, // will not be used if omega_vec != nullptr
+                                    const thrust::device_ptr<const REAL> omega_vec = nullptr,
+                                    const bool backprop_omega = true
+                                    );
     };
 }

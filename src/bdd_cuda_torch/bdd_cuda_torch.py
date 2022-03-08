@@ -35,7 +35,7 @@ class DualIterations(torch.autograd.Function):
         assert(lo_costs_batch.shape == hi_costs_batch.shape)
         assert(lo_costs_batch.shape == dist_weights_batch.shape)
         assert(lo_costs_batch.shape == def_mm_batch.shape)
-        assert(torch.numel(omega) == 1)
+        assert(torch.numel(omega) == 1 or omega.shape == hi_costs_batch.shape)
         ctx.set_materialize_grads(False)
         ctx.save_for_backward(lo_costs_batch, hi_costs_batch, def_mm_batch, dist_weights_batch, omega)
         ctx.solvers = solvers
@@ -45,14 +45,20 @@ class DualIterations(torch.autograd.Function):
         hi_costs_out = torch.empty_like(hi_costs_batch)
         def_mm_out = torch.empty_like(def_mm_batch)
 
+        is_omega_scalar = torch.numel(omega) == 1
         layer_start = 0
         actual_num_itr = []
         for (b, solver) in enumerate(solvers):
             solver.set_solver_costs(lo_costs_batch[layer_start].data_ptr(), hi_costs_batch[layer_start].data_ptr(), def_mm_batch[layer_start].data_ptr())
-            num_itr = solver.iterations(dist_weights_batch[layer_start].data_ptr(), num_iterations, omega.item(), improvement_slope)
+            if is_omega_scalar:
+                num_itr = solver.iterations(dist_weights_batch[layer_start].data_ptr(), num_iterations, omega[0].item(), improvement_slope, 0, False)
+            else:
+                num_itr = solver.iterations(dist_weights_batch[layer_start].data_ptr(), num_iterations, 1.0, improvement_slope, omega[layer_start].data_ptr(), True)
+
             actual_num_itr.append(num_itr)
             solver.get_solver_costs(lo_costs_out[layer_start].data_ptr(), hi_costs_out[layer_start].data_ptr(), def_mm_out[layer_start].data_ptr()) 
             layer_start += solver.nr_layers()
+
         ctx.actual_num_itr = actual_num_itr
         assert(layer_start == lo_costs_batch.shape[0])
         return lo_costs_out, hi_costs_out, def_mm_out
@@ -72,22 +78,27 @@ class DualIterations(torch.autograd.Function):
 
         lo_costs_batch, hi_costs_batch, def_mm_batch, dist_weights_batch, omega = ctx.saved_tensors
         grad_dist_weights_batch_in = torch.empty_like(dist_weights_batch)
-        grad_omega = torch.zeros((1), dtype = torch.float32, device = grad_lo_costs_out.device)
+        grad_omega = torch.empty_like(omega)
 
+        is_omega_scalar = torch.numel(omega) == 1
         layer_start = 0
         for (b, solver) in enumerate(solvers):
-            grad_omega_local = torch.empty((1), dtype = torch.float32, device = grad_lo_costs_out.device)
             solver.set_solver_costs(lo_costs_batch[layer_start].data_ptr(), hi_costs_batch[layer_start].data_ptr(), def_mm_batch[layer_start].data_ptr())
             num_iterations_b = ctx.actual_num_itr[b]
             track_grad_for_num_itr = min(num_iterations_b, ctx.grad_dual_itr_max_itr)
             track_grad_after_itr = num_iterations_b - track_grad_for_num_itr
             try:
-                solver.grad_iterations(dist_weights_batch[layer_start].data_ptr(), grad_lo_costs_in[layer_start].data_ptr(), grad_hi_costs_in[layer_start].data_ptr(),
-                                        grad_deff_mm_diff_in[layer_start].data_ptr(), grad_dist_weights_batch_in[layer_start].data_ptr(), grad_omega_local.data_ptr(),
-                                        omega.item(), track_grad_after_itr, track_grad_for_num_itr)
+                if is_omega_scalar:
+                    solver.grad_iterations(dist_weights_batch[layer_start].data_ptr(), grad_lo_costs_in[layer_start].data_ptr(), grad_hi_costs_in[layer_start].data_ptr(),
+                                            grad_deff_mm_diff_in[layer_start].data_ptr(), grad_dist_weights_batch_in[layer_start].data_ptr(), grad_omega[0].data_ptr(),
+                                            omega[0].item(), track_grad_after_itr, track_grad_for_num_itr, 0, False)
+                else:
+                    solver.grad_iterations(dist_weights_batch[layer_start].data_ptr(), grad_lo_costs_in[layer_start].data_ptr(), grad_hi_costs_in[layer_start].data_ptr(),
+                                            grad_deff_mm_diff_in[layer_start].data_ptr(), grad_dist_weights_batch_in[layer_start].data_ptr(), grad_omega[layer_start].data_ptr(),
+                                            1.0, track_grad_after_itr, track_grad_for_num_itr, omega[layer_start].data_ptr(), True)
+
             except:
                 print(f'Error in grad_iterations.')
-            grad_omega += grad_omega_local
             layer_start += solver.nr_layers()
         return None, grad_lo_costs_in, grad_hi_costs_in, grad_deff_mm_diff_in, grad_dist_weights_batch_in, None, grad_omega, None, None
 
@@ -266,6 +277,7 @@ class ComputeLowerBoundperBDD(torch.autograd.Function):
     @staticmethod
     @once_differentiable
     def backward(ctx, grad_lb_per_bdd_batch):
+        # grad_lb_per_bdd_batch = grad_lb_per_bdd_batch.contiguous()
         valid_input_format(grad_lb_per_bdd_batch)
         assert(grad_lb_per_bdd_batch.dim() == 1)
 

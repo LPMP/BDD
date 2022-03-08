@@ -38,6 +38,21 @@ namespace LPMP {
     };
 
     template<typename REAL>
+    struct compute_mm_diff_flush_mm_lo_with_omega_vec {
+        __device__ void operator()(const thrust::tuple<REAL&, REAL&, const REAL> t) const
+        {
+            REAL& mm_hi = thrust::get<0>(t);
+            REAL& mm_lo = thrust::get<1>(t);
+            const REAL omega = thrust::get<2>(t);
+            if (!isfinite(mm_hi) || !isfinite(mm_lo))
+                mm_hi = 0.0; // Set mm_difference to zero to not create NaNs in costs.
+            else
+                mm_hi = omega * (mm_hi - mm_lo);
+            mm_lo = CUDART_INF_F;
+        }
+    };
+
+    template<typename REAL>
     __global__ void min_marginals_from_directional_costs_cuda(const int cur_num_bdd_nodes, const int start_offset, const int start_offset_layer,
                                                             const int* const __restrict__ lo_bdd_node_index, 
                                                             const int* const __restrict__ hi_bdd_node_index, 
@@ -69,9 +84,8 @@ namespace LPMP {
     // This function does not need lo_path_costs and hi_path_costs to compute min-marginals. Writes min-marginal differences in GPU array referenced by mm_diff_ptr at 
     // locations corresponding to hop_index.
     template<typename REAL>
-    void bdd_cuda_parallel_mma<REAL>::min_marginals_from_directional_costs(const int hop_index, const REAL omega, thrust::device_ptr<REAL> mm_diff_ptr)
+    void bdd_cuda_parallel_mma<REAL>::min_marginals_from_directional_costs(const int hop_index, const REAL omega_scalar, thrust::device_ptr<REAL> mm_diff_ptr, const thrust::device_ptr<const REAL> omega_vec)
     {
-        // TODOAA: Make sure that costs from root and terminal are valid for the desired hop_index.
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         
         const int num_nodes_processed = hop_index > 0 ? this->cum_nr_bdd_nodes_per_hop_dist_[hop_index - 1] : 0;
@@ -96,11 +110,19 @@ namespace LPMP {
 
         thrust::device_ptr<REAL> mm_lo_start = mm_lo_local_.data();
 
-        auto first = thrust::make_zip_iterator(thrust::make_tuple(mm_diff_ptr + start_offset_layer, mm_lo_start));
-        auto last = thrust::make_zip_iterator(thrust::make_tuple(mm_diff_ptr + end_offset_layer, mm_lo_start + cur_num_layers));
-
-        thrust::for_each(first, last, compute_mm_diff_flush_mm_lo<REAL>({omega})); // Convert to min-marginal difference and set mm_lo_local_ to inf.
-
+        if (!omega_vec.get()) // Uses omega as a scalar value.
+        {
+            auto first = thrust::make_zip_iterator(thrust::make_tuple(mm_diff_ptr + start_offset_layer, mm_lo_start));
+            auto last = thrust::make_zip_iterator(thrust::make_tuple(mm_diff_ptr + end_offset_layer, mm_lo_start + cur_num_layers));
+            thrust::for_each(first, last, compute_mm_diff_flush_mm_lo<REAL>({omega_scalar})); // Convert to min-marginal difference and set mm_lo_local_ to inf.
+        }
+        else    // Assumes a value per layer is given which is going to be used to damp min-marginal differences.
+        {
+            assert(omega_scalar == 1.0);
+            auto first = thrust::make_zip_iterator(thrust::make_tuple(mm_diff_ptr + start_offset_layer, mm_lo_start, omega_vec + start_offset_layer));
+            auto last = thrust::make_zip_iterator(thrust::make_tuple(mm_diff_ptr + end_offset_layer, mm_lo_start + cur_num_layers, omega_vec + end_offset_layer));
+            thrust::for_each(first, last, compute_mm_diff_flush_mm_lo_with_omega_vec<REAL>()); // Convert to min-marginal difference and set mm_lo_local_ to inf.
+        }
         #ifndef NDEBUG
             cudaDeviceSynchronize();  // Not necessary, only to compute exact timing of this function.
         #endif
