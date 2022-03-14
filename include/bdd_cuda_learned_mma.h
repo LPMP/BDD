@@ -14,7 +14,7 @@ namespace LPMP {
                 if (num_caches_ == 0)
                     return;
 
-                cache_interval_ = num_iterations / num_caches_;
+                cache_interval_ = round((float) num_iterations / num_caches_);
                 lo_costs_cache_ = std::vector<std::vector<REAL>>(num_caches_);
                 hi_costs_cache_ = std::vector<std::vector<REAL>>(num_caches_);
                 def_mm_cache_ = std::vector<std::vector<REAL>>(num_caches_);

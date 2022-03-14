@@ -230,7 +230,7 @@ namespace LPMP {
         if (num_caches_ == 0)
             return 0;
 
-        const int cache_lower_index = itr / cache_interval_;
+        const int cache_lower_index = min(itr / cache_interval_, num_caches_ - 1);
         thrust::copy(lo_costs_cache_[cache_lower_index].begin(), lo_costs_cache_[cache_lower_index].end(), lo_costs_ptr);
         thrust::copy(hi_costs_cache_[cache_lower_index].begin(), hi_costs_cache_[cache_lower_index].end(), hi_costs_ptr);
         thrust::copy(def_mm_cache_[cache_lower_index].begin(), def_mm_cache_[cache_lower_index].end(), def_mm_ptr);
