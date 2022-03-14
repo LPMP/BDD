@@ -202,6 +202,45 @@ namespace LPMP {
     }
 
     template<typename REAL>
+    void solver_state_cache<REAL>::check_and_set_cache(const int itr, 
+                                                const thrust::device_ptr<const REAL> lo_costs_ptr,
+                                                const thrust::device_ptr<const REAL> hi_costs_ptr,
+                                                const thrust::device_ptr<const REAL> def_mm_ptr)
+    {
+        assert(itr < num_iterations_);
+        if (num_caches_ == 0)
+            return;
+
+        if (itr > 0 && cache_interval_ % itr != 0)
+            return; 
+
+        const int cache_index = itr / cache_interval_;
+        lo_costs_cache_[cache_index] = std::vector<REAL>(num_layers_);
+        hi_costs_cache_[cache_index] = std::vector<REAL>(num_layers_);
+        def_mm_cache_[cache_index] = std::vector<REAL>(num_layers_);
+
+        thrust::copy(lo_costs_ptr, lo_costs_ptr + num_layers_, lo_costs_cache_[cache_index].begin());
+        thrust::copy(hi_costs_ptr, hi_costs_ptr + num_layers_, hi_costs_cache_[cache_index].begin());
+        thrust::copy(def_mm_ptr, def_mm_ptr + num_layers_, def_mm_cache_[cache_index].begin());
+    }
+
+    template<typename REAL>
+    int solver_state_cache<REAL>::check_and_get_cache(const int itr, 
+                                                thrust::device_ptr<REAL> lo_costs_ptr,
+                                                thrust::device_ptr<REAL> hi_costs_ptr,
+                                                thrust::device_ptr<REAL> def_mm_ptr)
+    {
+        if (num_caches_ == 0)
+            return 0;
+
+        const int cache_lower_index = itr / cache_interval_;
+        thrust::copy(lo_costs_cache_[cache_lower_index].begin(), lo_costs_cache_[cache_lower_index].end(), lo_costs_ptr);
+        thrust::copy(hi_costs_cache_[cache_lower_index].begin(), hi_costs_cache_[cache_lower_index].end(), hi_costs_ptr);
+        thrust::copy(def_mm_cache_[cache_lower_index].begin(), def_mm_cache_[cache_lower_index].end(), def_mm_ptr);
+        return cache_lower_index * cache_interval_; // Return the iteration index for which cache is valid for.
+    }
+
+    template<typename REAL>
     void bdd_cuda_learned_mma<REAL>::grad_iterations(
             const thrust::device_ptr<const REAL> dist_weights, // distribution weights used in the forward pass.
             thrust::device_ptr<REAL> grad_lo_cost, // Input: incoming grad w.r.t lo_cost, Outputs in-place to compute grad. lo_cost before iterations.
@@ -212,8 +251,8 @@ namespace LPMP {
             const REAL omega_scalar,
             const int track_grad_after_itr,      // First runs the solver for track_grad_after_itr many iterations without tracking gradients and then backpropagates through only last track_grad_for_num_itr many itrs.
             const int track_grad_for_num_itr,     // See prev. argument.
-            const thrust::device_ptr<const REAL> omega_vec
-        )
+            const int num_caches,
+            const thrust::device_ptr<const REAL> omega_vec)
     {
         thrust::fill(grad_dist_weights_out, grad_dist_weights_out + this->nr_layers(), 0.0);
         if (!omega_vec.get())
@@ -225,19 +264,25 @@ namespace LPMP {
         thrust::device_vector<REAL> grad_cost_from_terminal(this->cost_from_terminal_.size(), 0.0);
 
         iterations(dist_weights, track_grad_after_itr, omega_scalar, 0.0, omega_vec);
-        const auto initial_costs = this->get_solver_costs();
+        solver_state_cache<REAL> costs_cache(max(num_caches, 1), track_grad_for_num_itr, this->nr_layers()); // Atleast cache the starting point through min(num_caches, 1).
+
+        // Populate cache and take solver further to iteration = track_grad_for_num_itr - 2
+        for(int solver_itr = 0; solver_itr < track_grad_for_num_itr - 1; solver_itr++)
+        {
+            iterations(dist_weights, 1, omega_scalar, 0.0, omega_vec);
+            costs_cache.check_and_set_cache(solver_itr, this->lo_cost_.data(), this->hi_cost_.data(), this->deffered_mm_diff_.data());
+        }
 
         for(int itr = track_grad_for_num_itr - 1; itr >= 0; itr--)
         {
-            // Reset solver to original state.
-            if (itr < track_grad_for_num_itr - 1)
-                this->set_solver_costs(initial_costs);
-    
             // To compute grad for iteration itr, first take the solver to state of iteration itr - 1.
-            if (itr > 0)
-                iterations(dist_weights, itr - 1, omega_scalar, 0.0, omega_vec);
-
-            // save costs and mm for later.
+            if (!costs_cache.check_and_get_cache(itr - 1, this->lo_cost_.data(), this->hi_cost_.data(), this->deffered_mm_diff_.data()))
+            {
+                const int cache_itr_index = costs_cache.check_and_get_cache(itr - 1, this->lo_cost_.data(), this->hi_cost_.data(), this->deffered_mm_diff_.data());
+                iterations(dist_weights, itr - 1 - cache_itr_index, omega_scalar, 0.0, omega_vec); // run solver for 'itr - 1 - cache_itr_index' many more iterations.
+            }
+    
+            // save costs and mm for later in GPU memory.
             const auto cur_costs = this->get_solver_costs();
 
             // First backprop through backward iteration which requires running forward iteration to get to the required state.
@@ -979,6 +1024,7 @@ namespace LPMP {
         REAL* grad_lo;
         REAL* grad_hi;
         const size_t nr_vars;
+        const bool account_for_constant;
         __host__ __device__ void operator()(const int layer_index)
         {
             const int primal = primal_index[layer_index];
@@ -993,7 +1039,10 @@ namespace LPMP {
                 const REAL grad_lb = incoming_grad_lb[current_bdd_index];
                 const REAL current_grad_hi = grad_hi[layer_index];
                 grad_hi[layer_index] = current_grad_hi * grad_lb;
-                grad_lo[layer_index] = -current_grad_hi * grad_lb;
+                if (account_for_constant)
+                    grad_lo[layer_index] = (1.0 - current_grad_hi) * grad_lb; // need for primal rounding but doesnt work well for dual ascent.
+                else
+                    grad_lo[layer_index] = -current_grad_hi * grad_lb;
             }
         }
     };
@@ -1002,7 +1051,8 @@ namespace LPMP {
     void bdd_cuda_learned_mma<REAL>::grad_lower_bound_per_bdd(
         thrust::device_ptr<REAL> grad_lb_per_bdd, // Input: incoming grad w.r.t lower bound per BDD.
         thrust::device_ptr<REAL> grad_lo_cost_out, // Gradients w.r.t lo costs
-        thrust::device_ptr<REAL> grad_hi_cost_out // Gradients w.r.t hi costs
+        thrust::device_ptr<REAL> grad_hi_cost_out, // Gradients w.r.t hi costs
+        bool account_for_constant
     )
     {
         this->bdds_solution_cuda(grad_hi_cost_out);
@@ -1012,7 +1062,8 @@ namespace LPMP {
                                 thrust::raw_pointer_cast(grad_lb_per_bdd), 
                                 thrust::raw_pointer_cast(grad_lo_cost_out),
                                 thrust::raw_pointer_cast(grad_hi_cost_out),
-                                this->nr_variables()});
+                                this->nr_variables(),
+                                account_for_constant});
         thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + this->nr_layers(), func);
     }
 

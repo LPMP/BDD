@@ -2,13 +2,13 @@ import torch
 from BDD.bdd_cuda_learned_mma_py import bdd_cuda_learned_mma
 from torch.autograd.function import once_differentiable
 
-def valid_input_format(*args):
+def validate_input_format(*args):
     for arg in args:
         assert arg.dtype == torch.float32, 'argument not in FP32 format'
         assert arg.is_contiguous(), 'argument not contiguous'
 
 def ComputePerBDDSolutions(solvers, lo_costs_batch, hi_costs_batch):
-    valid_input_format(lo_costs_batch, hi_costs_batch)
+    validate_input_format(lo_costs_batch, hi_costs_batch)
     per_bdd_solution_hi = torch.zeros_like(lo_costs_batch) # Initialize by 0's to also copy to deferred min-marginals.
     # per_bdd_solution_lo = torch.empty_like(lo_costs_batch)
     layer_start = 0
@@ -27,8 +27,8 @@ def ComputePerBDDSolutions(solvers, lo_costs_batch, hi_costs_batch):
 
 class DualIterations(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, solvers, lo_costs_batch, hi_costs_batch, def_mm_batch, dist_weights_batch, num_iterations, omega, grad_dual_itr_max_itr, improvement_slope):
-        valid_input_format(lo_costs_batch, hi_costs_batch, def_mm_batch, dist_weights_batch)
+    def forward(ctx, solvers, lo_costs_batch, hi_costs_batch, def_mm_batch, dist_weights_batch, num_iterations, omega, grad_dual_itr_max_itr, improvement_slope, num_caches):
+        validate_input_format(lo_costs_batch, hi_costs_batch, def_mm_batch, dist_weights_batch)
         assert(lo_costs_batch.dim() == 1)
         assert(def_mm_batch.dim() == 1)
         assert(dist_weights_batch.dim() == 1)
@@ -38,6 +38,7 @@ class DualIterations(torch.autograd.Function):
         assert(torch.numel(omega) == 1 or omega.shape == hi_costs_batch.shape)
         ctx.set_materialize_grads(False)
         ctx.save_for_backward(lo_costs_batch, hi_costs_batch, def_mm_batch, dist_weights_batch, omega)
+        ctx.num_caches = num_caches
         ctx.solvers = solvers
         ctx.num_iterations = num_iterations
         ctx.grad_dual_itr_max_itr = grad_dual_itr_max_itr
@@ -46,6 +47,9 @@ class DualIterations(torch.autograd.Function):
         def_mm_out = torch.empty_like(def_mm_batch)
 
         is_omega_scalar = torch.numel(omega) == 1
+        if not is_omega_scalar:
+            validate_input_format(omega)
+
         layer_start = 0
         actual_num_itr = []
         for (b, solver) in enumerate(solvers):
@@ -66,7 +70,7 @@ class DualIterations(torch.autograd.Function):
     @staticmethod
     @once_differentiable
     def backward(ctx, grad_lo_costs_out, grad_hi_costs_out, grad_def_mm_out):
-        valid_input_format(grad_lo_costs_out, grad_hi_costs_out, grad_def_mm_out)
+        validate_input_format(grad_lo_costs_out, grad_hi_costs_out, grad_def_mm_out)
         assert(grad_lo_costs_out.dim() == 1)
         assert(grad_lo_costs_out.shape == grad_hi_costs_out.shape)
         assert(grad_lo_costs_out.shape == grad_def_mm_out.shape)
@@ -91,21 +95,21 @@ class DualIterations(torch.autograd.Function):
                 if is_omega_scalar:
                     solver.grad_iterations(dist_weights_batch[layer_start].data_ptr(), grad_lo_costs_in[layer_start].data_ptr(), grad_hi_costs_in[layer_start].data_ptr(),
                                             grad_deff_mm_diff_in[layer_start].data_ptr(), grad_dist_weights_batch_in[layer_start].data_ptr(), grad_omega[0].data_ptr(),
-                                            omega[0].item(), track_grad_after_itr, track_grad_for_num_itr, 0, False)
+                                            omega[0].item(), track_grad_after_itr, track_grad_for_num_itr, 0, False, ctx.num_caches)
                 else:
                     solver.grad_iterations(dist_weights_batch[layer_start].data_ptr(), grad_lo_costs_in[layer_start].data_ptr(), grad_hi_costs_in[layer_start].data_ptr(),
                                             grad_deff_mm_diff_in[layer_start].data_ptr(), grad_dist_weights_batch_in[layer_start].data_ptr(), grad_omega[layer_start].data_ptr(),
-                                            1.0, track_grad_after_itr, track_grad_for_num_itr, omega[layer_start].data_ptr(), True)
+                                            1.0, track_grad_after_itr, track_grad_for_num_itr, omega[layer_start].data_ptr(), True, ctx.num_caches)
 
             except:
                 print(f'Error in grad_iterations.')
             layer_start += solver.nr_layers()
-        return None, grad_lo_costs_in, grad_hi_costs_in, grad_deff_mm_diff_in, grad_dist_weights_batch_in, None, grad_omega, None, None
+        return None, grad_lo_costs_in, grad_hi_costs_in, grad_deff_mm_diff_in, grad_dist_weights_batch_in, None, grad_omega, None, None, None
 
 class DistributeDeferredDelta(torch.autograd.Function):
     @staticmethod
     def forward(ctx, solvers, lo_costs_batch, hi_costs_batch, def_mm_batch):
-        valid_input_format(lo_costs_batch, hi_costs_batch, def_mm_batch)
+        validate_input_format(lo_costs_batch, hi_costs_batch, def_mm_batch)
         assert(lo_costs_batch.dim() == 1)
         assert(def_mm_batch.dim() == 1)
         assert(lo_costs_batch.shape == hi_costs_batch.shape)
@@ -131,7 +135,7 @@ class DistributeDeferredDelta(torch.autograd.Function):
     @staticmethod
     @once_differentiable
     def backward(ctx, grad_lo_costs_out, grad_hi_costs_out):
-        valid_input_format(grad_lo_costs_out, grad_hi_costs_out)
+        validate_input_format(grad_lo_costs_out, grad_hi_costs_out)
         assert(grad_lo_costs_out.dim() == 1)
         assert(grad_lo_costs_out.shape == grad_hi_costs_out.shape)
 
@@ -154,7 +158,7 @@ class ComputeAllMinMarginalsDiff(torch.autograd.Function):
     # Make sure deferred min-marginals are zero.
     @staticmethod
     def forward(ctx, solvers, lo_costs_batch, hi_costs_batch):
-        valid_input_format(lo_costs_batch, hi_costs_batch)
+        validate_input_format(lo_costs_batch, hi_costs_batch)
         assert(lo_costs_batch.dim() == 1)
         assert(lo_costs_batch.shape == hi_costs_batch.shape)
 
@@ -173,7 +177,7 @@ class ComputeAllMinMarginalsDiff(torch.autograd.Function):
     @staticmethod
     @once_differentiable
     def backward(ctx, grad_mm_diff_batch):
-        valid_input_format(grad_mm_diff_batch)
+        validate_input_format(grad_mm_diff_batch)
         assert(grad_mm_diff_batch.dim() == 1)
 
         lo_costs_batch, hi_costs_batch = ctx.saved_tensors
@@ -197,7 +201,7 @@ class PerturbPrimalCosts(torch.autograd.Function):
     @staticmethod
     # Make sure deferred min-marginals are zero.
     def forward(ctx, solvers, lo_costs_pert_batch, hi_costs_pert_batch, lo_costs_batch, hi_costs_batch):
-        valid_input_format(lo_costs_pert_batch, hi_costs_pert_batch, lo_costs_batch, hi_costs_batch)
+        validate_input_format(lo_costs_pert_batch, hi_costs_pert_batch, lo_costs_batch, hi_costs_batch)
         assert(lo_costs_batch.dim() == 1)
         assert(lo_costs_batch.shape == hi_costs_batch.shape)
         assert(lo_costs_pert_batch.dim() == 1)
@@ -225,7 +229,7 @@ class PerturbPrimalCosts(torch.autograd.Function):
     @staticmethod
     @once_differentiable
     def backward(ctx, grad_lo_costs_out, grad_hi_costs_out):
-        valid_input_format(grad_lo_costs_out, grad_hi_costs_out)
+        validate_input_format(grad_lo_costs_out, grad_hi_costs_out)
         assert(grad_lo_costs_out.dim() == 1)
         assert(grad_lo_costs_out.shape == grad_hi_costs_out.shape)
 
@@ -253,13 +257,14 @@ class PerturbPrimalCosts(torch.autograd.Function):
 
 class ComputeLowerBoundperBDD(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, solvers, lo_costs_batch, hi_costs_batch):
-        valid_input_format(lo_costs_batch, hi_costs_batch)
+    def forward(ctx, solvers, lo_costs_batch, hi_costs_batch, add_cons_lo_grad = False):
+        validate_input_format(lo_costs_batch, hi_costs_batch)
         assert(lo_costs_batch.dim() == 1)
         assert(lo_costs_batch.shape == hi_costs_batch.shape)
 
         ctx.set_materialize_grads(False)
         ctx.solvers = solvers
+        ctx.add_cons_lo_grad = add_cons_lo_grad
         ctx.save_for_backward(lo_costs_batch, hi_costs_batch)
         mm_diff_batch = torch.zeros_like(lo_costs_batch)
         lb_per_bdd_batch = []
@@ -278,7 +283,7 @@ class ComputeLowerBoundperBDD(torch.autograd.Function):
     @once_differentiable
     def backward(ctx, grad_lb_per_bdd_batch):
         # grad_lb_per_bdd_batch = grad_lb_per_bdd_batch.contiguous()
-        valid_input_format(grad_lb_per_bdd_batch)
+        validate_input_format(grad_lb_per_bdd_batch)
         assert(grad_lb_per_bdd_batch.dim() == 1)
 
         lo_costs_batch, hi_costs_batch = ctx.saved_tensors
@@ -290,11 +295,14 @@ class ComputeLowerBoundperBDD(torch.autograd.Function):
         for (b, solver) in enumerate(solvers):
             solver.set_solver_costs(lo_costs_batch[layer_start].data_ptr(), hi_costs_batch[layer_start].data_ptr(), grad_lo_costs_in[layer_start].data_ptr())
             try:
-                solver.grad_lower_bound_per_bdd(grad_lb_per_bdd_batch[bdd_start].data_ptr(), grad_lo_costs_in[layer_start].data_ptr(), grad_hi_costs_in[layer_start].data_ptr())
+                solver.grad_lower_bound_per_bdd(grad_lb_per_bdd_batch[bdd_start].data_ptr(), 
+                                                grad_lo_costs_in[layer_start].data_ptr(), 
+                                                grad_hi_costs_in[layer_start].data_ptr(),
+                                                ctx.add_cons_lo_grad)
             except:
                 print(f'Error in grad_lower_bound_per_bdd.')
 
             bdd_start += solver.nr_bdds()
             layer_start += solver.nr_layers()
         
-        return None, grad_lo_costs_in, grad_hi_costs_in
+        return None, grad_lo_costs_in, grad_hi_costs_in, None

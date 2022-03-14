@@ -207,7 +207,7 @@ void test_problem(const char* instance, const thrust::device_vector<double>& exp
         solver.update_costs(pert_lo, pert_hi); // Perturb costs to backprop through iterations().
         solver.grad_iterations(dist_weights.data(), grad_lo_costs.data(), grad_hi_costs.data(),
                                 grad_def_mm.data(), grad_dist_weights.data(), grad_omega.data(),
-                                omega, 0, num_solver_itr);
+                                omega, 0, num_solver_itr, 0);
         solver.set_solver_costs(orig_costs); // reset to orig state.
         solver.grad_cost_perturbation(grad_lo_costs.data(), grad_hi_costs.data(), grad_pert_lo.data(), grad_pert_hi.data());
         grad_step_pert grad_step_func({

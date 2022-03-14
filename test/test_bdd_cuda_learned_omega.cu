@@ -392,7 +392,7 @@ void test_problem(const char* instance, const double expected_lb, double omega =
         solver.set_solver_costs(initial_costs); // reset to initial state.
         solver.grad_iterations(dist_weights.data(), grad_lo_costs.data(), grad_hi_costs.data(),
                                 grad_def_mm.data(), grad_dist_weights.data(), grad_omega.data(),
-                                omega, 0, num_solver_itr);
+                                omega, 0, num_solver_itr, 2);
         
         omega = max(min(omega - 5e-4 * grad_omega[0], 1.0), 0.0);
     }

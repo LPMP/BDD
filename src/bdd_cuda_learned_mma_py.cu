@@ -268,7 +268,8 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
                                 const int track_grad_after_itr, 
                                 const int track_grad_for_num_itr,
                                 const long omega_vec_ptr,
-                                const bool omega_vec_valid) 
+                                const bool omega_vec_valid,
+                                const int num_caches) 
         {
             thrust::device_ptr<const float> dist_weights_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(dist_weights_ptr));
             thrust::device_ptr<float> grad_lo_cost_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(grad_lo_cost_ptr));
@@ -281,12 +282,12 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
                 thrust::device_ptr<float> omega_vec_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(omega_vec_ptr));
                 solver.grad_iterations(dist_weights_ptr_thrust, grad_lo_cost_ptr_thrust, grad_hi_cost_ptr_thrust,
                                 grad_mm_ptr_thrust,grad_dist_weights_out_ptr_thrust, grad_omega_out_ptr_thrust,
-                                1.0, track_grad_after_itr, track_grad_for_num_itr, omega_vec_thrust);
+                                1.0, track_grad_after_itr, track_grad_for_num_itr, num_caches, omega_vec_thrust);
             }
             else
                 solver.grad_iterations(dist_weights_ptr_thrust, grad_lo_cost_ptr_thrust, grad_hi_cost_ptr_thrust,
                                 grad_mm_ptr_thrust, grad_dist_weights_out_ptr_thrust, grad_omega_out_ptr_thrust,
-                                omega_scalar, track_grad_after_itr, track_grad_for_num_itr);
+                                omega_scalar, track_grad_after_itr, track_grad_for_num_itr, num_caches);
 
 
         }, "Implements backprop through iterations().\n"
@@ -317,12 +318,12 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
             thrust::device_ptr<float> grad_def_mm_out_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(grad_def_mm_out_ptr));
             solver.grad_distribute_delta(grad_lo_cost_ptr_thrust, grad_hi_cost_ptr_thrust, grad_def_mm_out_ptr_thrust);
         }, "Backprop. through distribute_delta.")
-        .def("grad_lower_bound_per_bdd", [](bdd_type& solver, const long grad_lb_per_bdd, const long grad_lo_cost_ptr, const long grad_hi_cost_ptr)
+        .def("grad_lower_bound_per_bdd", [](bdd_type& solver, const long grad_lb_per_bdd, const long grad_lo_cost_ptr, const long grad_hi_cost_ptr, const bool account_for_constant)
         {
             thrust::device_ptr<float> grad_lb_per_bdd_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(grad_lb_per_bdd));
             thrust::device_ptr<float> grad_lo_cost_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(grad_lo_cost_ptr));
             thrust::device_ptr<float> grad_hi_cost_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<float*>(grad_hi_cost_ptr));
-            solver.grad_lower_bound_per_bdd(grad_lb_per_bdd_thrust, grad_lo_cost_ptr_thrust, grad_hi_cost_ptr_thrust);
+            solver.grad_lower_bound_per_bdd(grad_lb_per_bdd_thrust, grad_lo_cost_ptr_thrust, grad_hi_cost_ptr_thrust, account_for_constant);
         }, "Backprop. through lower bound per BDD.")
         .def("all_min_marginal_differences", [](bdd_type& solver, const long mm_diff_out_ptr)
         {

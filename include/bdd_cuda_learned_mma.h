@@ -5,6 +5,35 @@
 namespace LPMP {
 
     template<typename REAL>
+    class solver_state_cache
+    {
+        public:
+            solver_state_cache(const int num_caches, const int num_iterations, const int num_layers): 
+                num_caches_(min(num_caches, num_iterations)), num_iterations_(num_iterations), num_layers_(num_layers) 
+            {
+                if (num_caches_ == 0)
+                    return;
+
+                cache_interval_ = num_iterations / num_caches_;
+                lo_costs_cache_ = std::vector<std::vector<REAL>>(num_caches_);
+                hi_costs_cache_ = std::vector<std::vector<REAL>>(num_caches_);
+                def_mm_cache_ = std::vector<std::vector<REAL>>(num_caches_);
+            }
+            void check_and_set_cache(const int itr, 
+                                    const thrust::device_ptr<const REAL> lo_costs_ptr,
+                                    const thrust::device_ptr<const REAL> hi_costs_ptr,
+                                    const thrust::device_ptr<const REAL> def_mm_ptr);
+            int check_and_get_cache(const int itr,
+                                    thrust::device_ptr<REAL> lo_costs_ptr,
+                                    thrust::device_ptr<REAL> hi_costs_ptr,
+                                    thrust::device_ptr<REAL> def_mm_ptr);
+        private:
+            const int num_caches_, num_iterations_, num_layers_;
+            int cache_interval_ = -1;
+            std::vector<std::vector<REAL>> lo_costs_cache_, hi_costs_cache_, def_mm_cache_;
+    };
+
+    template<typename REAL>
     class bdd_cuda_learned_mma : public bdd_cuda_parallel_mma<REAL> {
         public:
 
@@ -32,6 +61,7 @@ namespace LPMP {
                 const REAL omega_scalar, // will not be used if omega_vec != nullptr
                 const int track_grad_after_itr,      // First runs the solver for track_grad_after_itr many iterations without tracking gradients and then backpropagates through only last track_grad_for_num_itr many itrs.
                 const int track_grad_for_num_itr,     // See prev. argument.
+                const int num_caches,
                 const thrust::device_ptr<const REAL> omega_vec = nullptr
             );
 
@@ -61,7 +91,8 @@ namespace LPMP {
             void grad_lower_bound_per_bdd(
                 thrust::device_ptr<REAL> grad_lb_per_bdd, // Input: incoming grad w.r.t lower bound per BDD.
                 thrust::device_ptr<REAL> grad_lo_cost_out, // Gradients w.r.t lo costs
-                thrust::device_ptr<REAL> grad_hi_cost_out // Gradients w.r.t hi costs
+                thrust::device_ptr<REAL> grad_hi_cost_out, // Gradients w.r.t hi costs
+                bool account_for_constant = false
             );
 
         private:
