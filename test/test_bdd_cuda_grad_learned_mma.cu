@@ -438,7 +438,7 @@ void test_problem(const char* instance, const double expected_lb, const double o
         grad_step_dist_w grad_step_func({
             thrust::raw_pointer_cast(grad_dist_weights.data()),
             thrust::raw_pointer_cast(dist_weights.data()),
-            2.5e-3});
+            2.5e-4});
         thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + solver.nr_layers(), grad_step_func);
     }
     avg_loss_improvement_per_itr = avg_loss_improvement_per_itr / num_learning_itr;
