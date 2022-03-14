@@ -433,7 +433,7 @@ void test_problem(const char* instance, const double expected_lb, const double o
         solver.set_solver_costs(initial_costs); // reset to initial state.
         solver.grad_iterations(dist_weights.data(), grad_lo_costs.data(), grad_hi_costs.data(), 
                                 grad_def_mm.data(), grad_dist_weights.data(), grad_omega.data(),
-                                omega, 0, num_solver_itr, 0);
+                                omega, 0, num_solver_itr, 10);
         
         grad_step_dist_w grad_step_func({
             thrust::raw_pointer_cast(grad_dist_weights.data()),

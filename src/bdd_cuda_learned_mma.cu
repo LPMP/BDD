@@ -208,13 +208,10 @@ namespace LPMP {
                                                 const thrust::device_ptr<const REAL> def_mm_ptr)
     {
         assert(itr < num_iterations_);
-        if (num_caches_ == 0)
-            return;
-
-        if (itr > 0 && cache_interval_ % itr != 0)
-            return; 
-
+        if (num_caches_ == 0) return;
+        if (itr % cache_interval_ != 0) return; 
         const int cache_index = itr / cache_interval_;
+        if (cache_index >= num_caches_) return;
         lo_costs_cache_[cache_index] = std::vector<REAL>(num_layers_);
         hi_costs_cache_[cache_index] = std::vector<REAL>(num_layers_);
         def_mm_cache_[cache_index] = std::vector<REAL>(num_layers_);
@@ -264,7 +261,7 @@ namespace LPMP {
         thrust::device_vector<REAL> grad_cost_from_terminal(this->cost_from_terminal_.size(), 0.0);
 
         iterations(dist_weights, track_grad_after_itr, omega_scalar, 0.0, omega_vec);
-        solver_state_cache<REAL> costs_cache(max(num_caches, 1), track_grad_for_num_itr, this->nr_layers()); // Atleast cache the starting point through min(num_caches, 1).
+        solver_state_cache<REAL> costs_cache(max(num_caches, 1), track_grad_for_num_itr - 1, this->nr_layers()); // Atleast cache the starting point through max(num_caches, 1).
 
         // Populate cache and take solver further to iteration = track_grad_for_num_itr - 2
         for(int solver_itr = 0; solver_itr < track_grad_for_num_itr - 1; solver_itr++)
