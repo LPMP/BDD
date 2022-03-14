@@ -261,23 +261,22 @@ namespace LPMP {
         thrust::device_vector<REAL> grad_cost_from_terminal(this->cost_from_terminal_.size(), 0.0);
 
         iterations(dist_weights, track_grad_after_itr, omega_scalar, 0.0, omega_vec);
-        solver_state_cache<REAL> costs_cache(max(num_caches, 1), track_grad_for_num_itr - 1, this->nr_layers()); // Atleast cache the starting point through max(num_caches, 1).
+        solver_state_cache<REAL> costs_cache(max(num_caches, 1), track_grad_for_num_itr, this->nr_layers()); // Atleast cache the starting point through max(num_caches, 1).
 
-        // Populate cache and take solver further to iteration = track_grad_for_num_itr - 2
-        for(int solver_itr = 0; solver_itr < track_grad_for_num_itr - 1; solver_itr++)
+        // Populate cache.
+        for(int solver_itr = 0; solver_itr <= costs_cache.max_cached_iteration(); solver_itr++)
         {
-            iterations(dist_weights, 1, omega_scalar, 0.0, omega_vec);
+            // Cache the input for solver_itr. So if solver_itr = 0, it caches the input costs.
             costs_cache.check_and_set_cache(solver_itr, this->lo_cost_.data(), this->hi_cost_.data(), this->deffered_mm_diff_.data());
+            iterations(dist_weights, min(1, costs_cache.max_cached_iteration() - solver_itr), omega_scalar, 0.0, omega_vec);
         }
 
         for(int itr = track_grad_for_num_itr - 1; itr >= 0; itr--)
         {
-            // To compute grad for iteration itr, first take the solver to state of iteration itr - 1.
-            if (!costs_cache.check_and_get_cache(itr - 1, this->lo_cost_.data(), this->hi_cost_.data(), this->deffered_mm_diff_.data()))
-            {
-                const int cache_itr_index = costs_cache.check_and_get_cache(itr - 1, this->lo_cost_.data(), this->hi_cost_.data(), this->deffered_mm_diff_.data());
-                iterations(dist_weights, itr - 1 - cache_itr_index, omega_scalar, 0.0, omega_vec); // run solver for 'itr - 1 - cache_itr_index' many more iterations.
-            }
+            // To compute grad for iteration itr, first take the solver to state which was input to iteration itr.
+            const int cache_itr_index = costs_cache.check_and_get_cache(itr, this->lo_cost_.data(), this->hi_cost_.data(), this->deffered_mm_diff_.data());
+            assert(cache_itr_index <= itr);
+            iterations(dist_weights, itr - cache_itr_index, omega_scalar, 0.0, omega_vec); // run solver for 'itr - cache_itr_index' many more iterations.
     
             // save costs and mm for later in GPU memory.
             const auto cur_costs = this->get_solver_costs();

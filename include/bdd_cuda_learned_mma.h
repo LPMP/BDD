@@ -15,6 +15,7 @@ namespace LPMP {
                     return;
 
                 cache_interval_ = round((float) num_iterations / num_caches_);
+                max_cached_iteration_ = cache_interval_ * (num_caches_ - 1);
                 lo_costs_cache_ = std::vector<std::vector<REAL>>(num_caches_);
                 hi_costs_cache_ = std::vector<std::vector<REAL>>(num_caches_);
                 def_mm_cache_ = std::vector<std::vector<REAL>>(num_caches_);
@@ -27,8 +28,10 @@ namespace LPMP {
                                     thrust::device_ptr<REAL> lo_costs_ptr,
                                     thrust::device_ptr<REAL> hi_costs_ptr,
                                     thrust::device_ptr<REAL> def_mm_ptr);
+            int max_cached_iteration() const {return max_cached_iteration_; }
         private:
             const int num_caches_, num_iterations_, num_layers_;
+            int max_cached_iteration_;
             int cache_interval_ = -1;
             std::vector<std::vector<REAL>> lo_costs_cache_, hi_costs_cache_, def_mm_cache_;
     };

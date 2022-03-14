@@ -101,8 +101,10 @@ class DualIterations(torch.autograd.Function):
                                             grad_deff_mm_diff_in[layer_start].data_ptr(), grad_dist_weights_batch_in[layer_start].data_ptr(), grad_omega[layer_start].data_ptr(),
                                             1.0, track_grad_after_itr, track_grad_for_num_itr, omega[layer_start].data_ptr(), True, ctx.num_caches)
 
-            except:
-                print(f'Error in grad_iterations.')
+            except Exception as e:
+                print(e)
+                print(f'Error in grad_iterations: num_iterations_b: {num_iterations_b}, track_grad_for_num_itr: {track_grad_for_num_itr}, track_grad_after_itr: {track_grad_after_itr}')
+                raise
             layer_start += solver.nr_layers()
         return None, grad_lo_costs_in, grad_hi_costs_in, grad_deff_mm_diff_in, grad_dist_weights_batch_in, None, grad_omega, None, None, None
 
