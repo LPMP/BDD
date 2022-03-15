@@ -14,13 +14,6 @@ Subject To
 x_11 + x_12 + x_13 = 1
 End)";
 
-const char * one_simplex_problem_frac_coeffs = 
-R"(Minimize
--2 x_11 - 1 x_12 - 1 x_13
-Subject To
-0.5 x_11 + 0.5 x_12 + 0.5 x_13 = 0.5
-End)";
-
 const char * two_simplex_problem = 
 R"(Minimize
 2 x_1 + 1 x_2 + 1 x_3
@@ -57,22 +50,6 @@ int main(int argc, char** argv)
 {
     {
         ILP_input ilp = ILP_parser::parse_string(one_simplex_problem);
-        bdd_preprocessor bdd_pre(ilp);
-        bdd_collection bdd_col = bdd_pre.get_bdd_collection();
-        bdd_cuda_base<float> bcb(bdd_col);
-
-        test(bcb.nr_variables() == 3);
-        test(bcb.nr_bdds() == 1);
-
-        for(size_t i=0; i<bcb.nr_variables(); ++i)
-            bcb.set_cost(ilp.objective()[i], i);
-
-        const double lb = bcb.lower_bound();
-        test(lb == -2); 
-    }
-
-    {
-        ILP_input ilp = ILP_parser::parse_string(one_simplex_problem_frac_coeffs);
         bdd_preprocessor bdd_pre(ilp);
         bdd_collection bdd_col = bdd_pre.get_bdd_collection();
         bdd_cuda_base<float> bcb(bdd_col);
