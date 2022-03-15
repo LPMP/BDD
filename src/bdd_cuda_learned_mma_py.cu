@@ -54,6 +54,12 @@ std::vector<float> get_constraint_matrix_coeffs(const LPMP::ILP_input& ilp, cons
         std::cout<<"Number of constraints: "<<ilp.nr_constraints()<<", not equal to number of BDDs: "<<solver.nr_bdds()<<"\n";
         throw std::runtime_error("error");
     }
+    const std::vector<size_t> bdd_to_constraint_map = solver.bdd_to_constraint_map();
+    if (bdd_to_constraint_map.size() != solver.nr_bdds())
+    {
+        throw std::runtime_error("bdd_to_constraint_map not calculated.");
+    }
+
     const size_t num_elements = solver.nr_layers();
     std::vector<int> var_indices_sorted(num_elements);
     std::vector<int> con_indices_sorted(num_elements);
@@ -65,7 +71,6 @@ std::vector<float> get_constraint_matrix_coeffs(const LPMP::ILP_input& ilp, cons
         thrust::device_vector<unsigned long> dev_indices(num_elements);
         thrust::sequence(dev_indices.begin(), dev_indices.end());
 
-        const std::vector<size_t> bdd_to_constraint_map = solver.bdd_to_constraint_map();
         thrust::device_vector<size_t> dev_bdd_to_constraint_map(bdd_to_constraint_map.begin(), bdd_to_constraint_map.end());
         thrust::device_vector<int> dev_con_index(dev_bdd_index.size());
 
@@ -140,12 +145,13 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
                     [](const py::bytes& s) {
                         return create_solver(s);
                 }))
-        .def(py::init([](const LPMP::ILP_input& ilp) {
+        .def(py::init([](const LPMP::ILP_input& ilp, const bool compute_bdd_to_constraint_map = true) {
                     LPMP::bdd_preprocessor bdd_pre;
                     const auto constraint_to_bdd_map = bdd_pre.add_ilp(ilp);
                     auto* base = new bdd_type(bdd_pre.get_bdd_collection());
                     base->update_costs(ilp.objective().begin(), ilp.objective().begin(), ilp.objective().begin(), ilp.objective().end());
-                    base->compute_bdd_to_constraint_map(constraint_to_bdd_map);
+                    if (compute_bdd_to_constraint_map)
+                        base->compute_bdd_to_constraint_map(constraint_to_bdd_map);
                     return base;
                 }))
         .def("__repr__", [](const bdd_type &solver) {
