@@ -40,11 +40,11 @@ namespace LPMP {
 
                 void forward_step(const size_t var_group);
                 void min_marginal_averaging_forward();
-                void min_marginal_averaging_step_forward(const size_t var_group);
+                void min_marginal_averaging_step_forward(const size_t var);
 
                 void backward_step(const size_t var_group);
                 void min_marginal_averaging_backward();
-                void min_marginal_averaging_step_backward(const size_t var_group);
+                void min_marginal_averaging_step_backward(const size_t var);
 
                 std::array<value_type,2> average_marginals(std::array<value_type,2>* marginals, const size_t nr_marginals);
 
@@ -283,6 +283,8 @@ namespace LPMP {
     void bdd_mma_base<BDD_BRANCH_NODE>::backward_run()
     {
         MEASURE_FUNCTION_EXECUTION_TIME;
+        if(message_passing_state_ == message_passing_state::after_backward_pass)
+            return;
         // TODO: if we already have done a backward_run, we do not need to do it again. Check state!
         message_passing_state_ = message_passing_state::none;
         for(std::ptrdiff_t i=bdd_branch_nodes_.size()-1; i>=0; --i)
@@ -293,9 +295,9 @@ namespace LPMP {
     template<typename BDD_BRANCH_NODE>
     void bdd_mma_base<BDD_BRANCH_NODE>::forward_run()
     {
+        MEASURE_FUNCTION_EXECUTION_TIME;
         if(message_passing_state_ == message_passing_state::after_forward_pass)
             return;
-        MEASURE_FUNCTION_EXECUTION_TIME;
         // TODO: if we already have done a forward_run, we do not need to do it again. Check state!
         message_passing_state_ = message_passing_state::none;
         for(size_t bdd_index=0; bdd_index<first_bdd_node_indices_.size(); ++bdd_index)

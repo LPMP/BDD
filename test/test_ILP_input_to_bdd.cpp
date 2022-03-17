@@ -214,7 +214,20 @@ void test_miplib(bdd_converter & converter)
     {
         std::cout << "app2_2 ct_1 nr coefficients = " << app2_2_weights_ct_1.size() << "\n";
         auto [bdd,multiplicities] = converter.coefficient_decomposition_convert_to_bdd(app2_2_weights_ct_1, app2_2_ineq_type_ct_1, app2_2_rhs_ct_1);
-        std::cout << "app2_2 ct_0 # bdd nodes = " << bdd.nodes_postorder().size() << "\n";
+        std::cout << "app2_2 ct_1 # bdd nodes = " << bdd.nodes_postorder().size() << "\n";
+    }
+
+    // currently too large!
+    {
+        //std::cout << "cap6000 c1 nr coefficients = " << cap6000_weights_c1.size() << "\n";
+        //auto [bdd,multiplicities] = converter.coefficient_decomposition_convert_to_bdd(cap6000_weights_c1, cap6000_ineq_type_c1, cap6000_rhs_c1);
+        //std::cout << "cap6000 c1 # bdd nodes = " << bdd.nodes_postorder().size() << "\n";
+    }
+
+    {
+        //std::cout << "cap6000 c2 nr coefficients = " << cap6000_weights_c2.size() << "\n";
+        //auto [bdd,multiplicities] = converter.coefficient_decomposition_convert_to_bdd(cap6000_weights_c2, cap6000_ineq_type_c2, cap6000_rhs_c2);
+        //std::cout << "cap6000 c2 # bdd nodes = " << bdd.nodes_postorder().size() << "\n";
     }
 
 }

@@ -25,5 +25,5 @@ namespace LPMP {
             construct_graph_matching_ILP(const graph_matching_instance& gm_instance);
 
     ILP_input parse_graph_matching_file(const std::string& filename);
-    ILP_input parse_graph_matching_string(const std::string& filename);
+    ILP_input parse_graph_matching_string(const std::string& string);
 }

@@ -5,6 +5,7 @@
 #include "bdd_preprocessor.h"
 #include "decomposition_bdd_mma.h"
 #include "bdd_mma_vec.h"
+#include "bdd_mma_smooth.h"
 #include "bdd_cuda.h"
 #include "bdd_parallel_mma.h"
 #include "bdd_fix.h"
@@ -48,6 +49,8 @@ namespace LPMP {
         decomposition_mma_options decomposition_mma_options_;
         bool solution_statistics = false;
 
+        double smoothing = 0;
+
         bool tighten = false;
 
         bool incremental_primal_rounding = false;
@@ -83,7 +86,12 @@ namespace LPMP {
         private:
             //bdd_preprocessor preprocess(ILP_input& ilp);
             bdd_solver_options options;
-            using solver_type = std::variant<bdd_mma_vec<float>, bdd_mma_vec<double>, decomposition_bdd_mma, bdd_cuda<float>, bdd_cuda<double>, bdd_parallel_mma<float>, bdd_parallel_mma<double>>;
+            using solver_type = std::variant<
+                bdd_mma_vec<float>, bdd_mma_vec<double>, bdd_mma_smooth<float>, bdd_mma_smooth<double>,
+                decomposition_bdd_mma,
+                bdd_cuda<float>, bdd_cuda<double>,
+                bdd_parallel_mma<float>, bdd_parallel_mma<double>
+                    >;
             std::optional<solver_type> solver;
             std::vector<double> costs;
             std::optional<bdd_fix> primal_heuristic;
@@ -153,6 +161,9 @@ namespace LPMP {
 
         auto bdd_solver_precision_arg = app.add_option("--precision", bdd_solver_precision_, "floating point precision used in solver")
             ->transform(CLI::CheckedTransformer(bdd_solver_precision_map, CLI::ignore_case));
+
+        app.add_option("--smoothing", smoothing, "smoothing, default value = 0 (no smoothing)")
+                ->check(CLI::PositiveNumber);
 
         auto primal_group = app.add_option_group("primal rounding", "method for obtaining a primal solution from the dual optimization");
         auto diving_primal_arg = primal_group->add_flag("--diving_primal", diving_primal_rounding, "diving primal rounding flag");

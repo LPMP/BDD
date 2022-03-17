@@ -177,13 +177,25 @@ namespace LPMP {
         }
         else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::sequential_mma)
         {
-            if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::single_prec)
-                solver = std::move(bdd_mma_vec<float>(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
-            else if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::double_prec)
-                solver = std::move(bdd_mma_vec<double>(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
-            else
-                throw std::runtime_error("only float and double precision allowed");
-            std::cout << "[bdd solver] constructed sequential mma solver\n"; 
+            if(options.smoothing == 0)
+            {
+                if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::single_prec)
+                    solver = std::move(bdd_mma_vec<float>(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
+                else if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::double_prec)
+                    solver = std::move(bdd_mma_vec<double>(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
+                else
+                    throw std::runtime_error("only float and double precision allowed");
+                assert(false); // set smoothing
+                std::cout << "[bdd solver] constructed sequential mma solver\n"; 
+            } else {
+                if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::single_prec)
+                    solver = std::move(bdd_mma_smooth<float>(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
+                else if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::double_prec)
+                    solver = std::move(bdd_mma_smooth<double>(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
+                else
+                    throw std::runtime_error("only float and double precision allowed");
+                std::cout << "[bdd solver] constructed sequential smooth mma solver\n"; 
+            }
         } 
         else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::decomposition_mma)
         {
@@ -193,6 +205,8 @@ namespace LPMP {
         }
         else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::parallel_mma)
         {
+            if(options.smoothing != 0)
+                throw std::runtime_error("no smoothing implemented for parallel mma");
             if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::single_prec)
                 solver = std::move(bdd_parallel_mma<float>(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
             else if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::double_prec)
@@ -203,6 +217,8 @@ namespace LPMP {
         }
         else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::mma_cuda)
         {
+            if(options.smoothing != 0)
+                throw std::runtime_error("no smoothing implemented for cuda mma");
             if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::single_prec)
                 solver = std::move(bdd_cuda<float>(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
             else if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::double_prec)
@@ -215,6 +231,19 @@ namespace LPMP {
         {
             throw std::runtime_error("no solver nor output of statistics or export of lp selected");
         }
+
+        // set smoothing
+        if(options.smoothing != 0.0)
+            std::visit([&](auto&& s) { 
+                    if constexpr(
+                            std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_smooth<float>>
+                            || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_smooth<double>>
+                            )
+                    s.set_smoothing(options.smoothing);
+                    else
+                    throw std::runtime_error("smoothing not implemented for chosen solver");
+                    }, *solver);
+
 
         if(options.diving_primal_rounding)
         {

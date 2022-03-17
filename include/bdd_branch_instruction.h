@@ -1,4 +1,5 @@
 #pragma once 
+
 #include <numeric>
 #include <array>
 #include <limits>
@@ -40,23 +41,26 @@ namespace LPMP {
             }
     };
 
-    template<typename REAL, typename OFFSET_TYPE>
-    class bdd_branch_instruction : public bdd_branch_instruction_base<REAL, OFFSET_TYPE, bdd_branch_instruction<REAL,OFFSET_TYPE>> {};
-
-    // with bdd index
-    template<typename REAL, typename OFFSET_TYPE>
-    class bdd_branch_instruction_bdd_index : public bdd_branch_instruction_base<REAL,OFFSET_TYPE,bdd_branch_instruction_bdd_index<REAL,OFFSET_TYPE>> {
+    template<typename REAL, typename OFFSET_TYPE, typename DERIVED>
+    class bdd_branch_instruction_bdd_index_base : public bdd_branch_instruction_base<REAL, OFFSET_TYPE, DERIVED> {
         public: 
             constexpr static uint32_t inactive_bdd_index = std::numeric_limits<uint32_t>::max();
             // for distinguishing in bdd base from which bdd the instruction is
             uint32_t bdd_index = inactive_bdd_index;
 
-            void min_marginal(std::array<REAL,2>* reduced_min_marginals);
+            void min_marginal(std::array<REAL,2>* reduced_min_marginals) const;
             void set_marginal(std::array<REAL,2>* min_marginals, const std::array<REAL,2> avg_marginals);
 
 
             bool node_initialized() const;
     };
+
+    template<typename REAL, typename OFFSET_TYPE>
+    class bdd_branch_instruction : public bdd_branch_instruction_base<REAL, OFFSET_TYPE, bdd_branch_instruction<REAL,OFFSET_TYPE>> {};
+
+    // with bdd index
+    template<typename REAL, typename OFFSET_TYPE>
+    class bdd_branch_instruction_bdd_index : public bdd_branch_instruction_bdd_index_base<REAL,OFFSET_TYPE,bdd_branch_instruction_bdd_index<REAL,OFFSET_TYPE>> { };
 
     ////////////////////
     // implementation //
@@ -190,8 +194,8 @@ namespace LPMP {
         return mm;
     }
 
-    template<typename REAL, typename OFFSET_TYPE>
-    void bdd_branch_instruction_bdd_index<REAL,OFFSET_TYPE>::min_marginal(std::array<REAL,2>* reduced_min_marginals)
+    template<typename REAL, typename OFFSET_TYPE, typename DERIVED>
+    void bdd_branch_instruction_bdd_index_base<REAL,OFFSET_TYPE,DERIVED>::min_marginal(std::array<REAL,2>* reduced_min_marginals) const
     {
         assert(this->offset_low > 0 && this->offset_high > 0);
         assert(bdd_index != inactive_bdd_index);
@@ -200,8 +204,8 @@ namespace LPMP {
         reduced_min_marginals[bdd_index][1] = std::min(mm[1], reduced_min_marginals[bdd_index][1]);
     }
 
-    template<typename REAL, typename OFFSET_TYPE>
-    void bdd_branch_instruction_bdd_index<REAL,OFFSET_TYPE>::set_marginal(std::array<REAL,2>* reduced_min_marginals, const std::array<REAL,2> avg_marginals)
+    template<typename REAL, typename OFFSET_TYPE, typename DERIVED>
+    void bdd_branch_instruction_bdd_index_base<REAL,OFFSET_TYPE,DERIVED>::set_marginal(std::array<REAL,2>* reduced_min_marginals, const std::array<REAL,2> avg_marginals)
     {
         assert(!std::isnan(avg_marginals[0]));
         assert(!std::isnan(avg_marginals[1]));
@@ -229,10 +233,10 @@ namespace LPMP {
             return true;
         }
 
-    template<typename REAL, typename OFFSET_TYPE>
-        bool bdd_branch_instruction_bdd_index<REAL,OFFSET_TYPE>::node_initialized() const
+    template<typename REAL, typename OFFSET_TYPE, typename DERIVED>
+        bool bdd_branch_instruction_bdd_index_base<REAL,OFFSET_TYPE,DERIVED>::node_initialized() const
         {
-            if(bdd_branch_instruction_base<REAL,OFFSET_TYPE,bdd_branch_instruction_bdd_index<REAL,OFFSET_TYPE>>::node_initialized() == false)
+            if(bdd_branch_instruction_base<REAL,OFFSET_TYPE,DERIVED>::node_initialized() == false)
                 return false;
             if(bdd_index == inactive_bdd_index)
                 return false;
