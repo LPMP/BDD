@@ -3,6 +3,7 @@
 #include "test.h"
 #include "bdd_branch_instruction_smooth.h"
 #include "bdd_mma_base_smooth.h"
+#include "bdd_parallel_mma_base_smooth.h"
 
 using namespace LPMP;
 
@@ -38,19 +39,37 @@ void run_smooth_instance(const std::string& input)
 {
     const ILP_input ilp = ILP_parser::parse_string(input);
     bdd_preprocessor bdd_pre(ilp);
-    using smooth_bdd_instr_type = bdd_branch_instruction_smooth_bdd_index<double,uint32_t>;
-    bdd_mma_base_smooth<smooth_bdd_instr_type> solver(bdd_pre.get_bdd_collection());
+
+    bdd_mma_base_smooth<bdd_branch_instruction_smooth_bdd_index<double,uint32_t>> solver(bdd_pre.get_bdd_collection());
+    bdd_parallel_mma_base_smooth<bdd_branch_instruction_smooth<double,uint32_t>> parallel_solver(bdd_pre.get_bdd_collection());
+
     for(size_t i=0; i<ilp.nr_variables(); ++i)
         solver.update_cost(0, ilp.objective(i), i);
+    parallel_solver.update_costs(ilp.objective().begin(), ilp.objective().begin(), ilp.objective().begin(), ilp.objective().end());
+
     for(size_t iter=0; iter<100; ++iter)
     {
         solver.smooth_iteration();
         const double solver_lb = solver.smooth_lower_bound();
-        std::cout << "iteration = " << iter << " smooth lb = " << solver_lb << "\n";
+        std::cout << "[smooth mma] iteration = " << iter << " smooth lb = " << solver_lb << "\n";
     }
+
+    for(size_t iter=0; iter<100; ++iter)
+    {
+        parallel_solver.smooth_parallel_mma();
+        const double parallel_solver_lb = parallel_solver.smooth_lower_bound();
+        std::cout << "[parallel smooth mma] iteration = " << iter << " smooth lb = " << parallel_solver_lb << "\n";
+    }
+
     const double solver_lb = solver.smooth_lower_bound();
-    std::cout << "final smooth lb = " << solver_lb << "\n";
-    std::cout << "final lb = " << solver.lower_bound() << "\n";
+    parallel_solver.distribute_delta();
+    const double parallel_solver_lb = parallel_solver.smooth_lower_bound();
+    std::cout << "[smooth mma] final smooth lb = " << solver_lb << "\n";
+    std::cout << "[smooth mma] final lb = " << solver.lower_bound() << "\n";
+    std::cout << "[parallel smooth mma] final smooth lb = " << parallel_solver_lb << "\n";
+    std::cout << "[parallel smooth mma] final lb = " << parallel_solver.lower_bound() << "\n";
+
+    test(std::abs(solver_lb - parallel_solver_lb) <= 1e-4);
 }
 
 int main(int argc, char** argv)
