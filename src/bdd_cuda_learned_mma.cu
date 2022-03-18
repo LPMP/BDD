@@ -1035,10 +1035,7 @@ namespace LPMP {
                 const REAL grad_lb = incoming_grad_lb[current_bdd_index];
                 const REAL current_grad_hi = grad_hi[layer_index];
                 grad_hi[layer_index] = current_grad_hi * grad_lb;
-                if (account_for_constant)
-                    grad_lo[layer_index] = (1.0 - current_grad_hi) * grad_lb; // need for primal rounding but doesnt work well for dual ascent.
-                else
-                    grad_lo[layer_index] = -current_grad_hi * grad_lb;
+                grad_lo[layer_index] = (1.0 - current_grad_hi) * grad_lb;
             }
         }
     };
@@ -1047,8 +1044,7 @@ namespace LPMP {
     void bdd_cuda_learned_mma<REAL>::grad_lower_bound_per_bdd(
         thrust::device_ptr<REAL> grad_lb_per_bdd, // Input: incoming grad w.r.t lower bound per BDD.
         thrust::device_ptr<REAL> grad_lo_cost_out, // Gradients w.r.t lo costs
-        thrust::device_ptr<REAL> grad_hi_cost_out, // Gradients w.r.t hi costs
-        bool account_for_constant
+        thrust::device_ptr<REAL> grad_hi_cost_out // Gradients w.r.t hi costs
     )
     {
         this->bdds_solution_cuda(grad_hi_cost_out);
@@ -1058,8 +1054,7 @@ namespace LPMP {
                                 thrust::raw_pointer_cast(grad_lb_per_bdd), 
                                 thrust::raw_pointer_cast(grad_lo_cost_out),
                                 thrust::raw_pointer_cast(grad_hi_cost_out),
-                                this->nr_variables(),
-                                account_for_constant});
+                                this->nr_variables()});
         thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + this->nr_layers(), func);
     }
 

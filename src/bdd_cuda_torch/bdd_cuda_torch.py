@@ -259,14 +259,13 @@ class PerturbPrimalCosts(torch.autograd.Function):
 
 class ComputeLowerBoundperBDD(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, solvers, lo_costs_batch, hi_costs_batch, add_cons_lo_grad = False):
+    def forward(ctx, solvers, lo_costs_batch, hi_costs_batch):
         validate_input_format(lo_costs_batch, hi_costs_batch)
         assert(lo_costs_batch.dim() == 1)
         assert(lo_costs_batch.shape == hi_costs_batch.shape)
 
         ctx.set_materialize_grads(False)
         ctx.solvers = solvers
-        ctx.add_cons_lo_grad = add_cons_lo_grad
         ctx.save_for_backward(lo_costs_batch, hi_costs_batch)
         mm_diff_batch = torch.zeros_like(lo_costs_batch)
         lb_per_bdd_batch = []
@@ -299,8 +298,7 @@ class ComputeLowerBoundperBDD(torch.autograd.Function):
             try:
                 solver.grad_lower_bound_per_bdd(grad_lb_per_bdd_batch[bdd_start].data_ptr(), 
                                                 grad_lo_costs_in[layer_start].data_ptr(), 
-                                                grad_hi_costs_in[layer_start].data_ptr(),
-                                                ctx.add_cons_lo_grad)
+                                                grad_hi_costs_in[layer_start].data_ptr())
             except:
                 print(f'Error in grad_lower_bound_per_bdd.')
 
