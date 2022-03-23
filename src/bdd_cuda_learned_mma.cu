@@ -251,6 +251,9 @@ namespace LPMP {
             const int num_caches,
             const thrust::device_ptr<const REAL> omega_vec)
     {
+        if (track_grad_for_num_itr == 0)
+            return;
+
         thrust::fill(grad_dist_weights_out, grad_dist_weights_out + this->nr_layers(), 0.0);
         if (!omega_vec.get())
             thrust::fill(grad_omega, grad_omega + 1, 0.0); // omega_scalar is used.

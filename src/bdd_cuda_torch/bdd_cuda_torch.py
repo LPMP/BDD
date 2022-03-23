@@ -84,6 +84,10 @@ class DualIterations(torch.autograd.Function):
         grad_dist_weights_batch_in = torch.empty_like(dist_weights_batch)
         grad_omega = torch.empty_like(omega)
 
+        # assert(torch.all(torch.isfinite(grad_lo_costs_out)))
+        # assert(torch.all(torch.isfinite(grad_hi_costs_out)))
+        # assert(torch.all(torch.isfinite(grad_def_mm_out)))
+
         is_omega_scalar = torch.numel(omega) == 1
         layer_start = 0
         for (b, solver) in enumerate(solvers):
@@ -106,6 +110,26 @@ class DualIterations(torch.autograd.Function):
                 print(f'Error in grad_iterations: num_iterations_b: {num_iterations_b}, track_grad_for_num_itr: {track_grad_for_num_itr}, track_grad_after_itr: {track_grad_after_itr}')
                 raise
             layer_start += solver.nr_layers()
+
+        # print(f'lo_costs_batch: min: {lo_costs_batch.min():.3f}, max: {lo_costs_batch.max():.3f}')
+        # print(f'hi_costs_batch: min: {hi_costs_batch.min():.3f}, max: {hi_costs_batch.max():.3f}')
+        # print(f'def_mm_batch: min: {def_mm_batch.min():.3f}, max: {def_mm_batch.max():.3f}')
+
+        # print(f'grad_lo_costs_in: min: {grad_lo_costs_in.min():.3f}, max: {grad_lo_costs_in.max():.3f}')
+        # print(f'grad_hi_costs_in: min: {grad_hi_costs_in.min():.3f}, max: {grad_hi_costs_in.max():.3f}')
+        # print(f'grad_deff_mm_diff_in: min: {grad_deff_mm_diff_in.min():.3f}, max: {grad_deff_mm_diff_in.max():.3f}')
+        # assert(torch.all(torch.isfinite(lo_costs_batch)))
+        # assert(torch.all(torch.isfinite(hi_costs_batch)))
+        # assert(torch.all(torch.isfinite(def_mm_batch)))
+        # assert(torch.all(torch.isfinite(omega)))
+        # assert(torch.all(torch.isfinite(dist_weights_batch)))
+
+        # assert(torch.all(torch.isfinite(grad_lo_costs_in)))
+        # assert(torch.all(torch.isfinite(grad_hi_costs_in)))
+        # assert(torch.all(torch.isfinite(grad_deff_mm_diff_in)))
+        # assert(torch.all(torch.isfinite(grad_dist_weights_batch_in)))
+        # assert(torch.all(torch.isfinite(grad_omega)))
+
         return None, grad_lo_costs_in, grad_hi_costs_in, grad_deff_mm_diff_in, grad_dist_weights_batch_in, None, grad_omega, None, None, None
 
 class DistributeDeferredDelta(torch.autograd.Function):
@@ -149,8 +173,10 @@ class DistributeDeferredDelta(torch.autograd.Function):
             solver.set_solver_costs(lo_costs_batch[layer_start].data_ptr(), hi_costs_batch[layer_start].data_ptr(), def_mm_batch[layer_start].data_ptr())
             try:
                 solver.grad_distribute_delta(grad_lo_costs_out[layer_start].data_ptr(), grad_hi_costs_out[layer_start].data_ptr(), grad_deff_mm_diff_in[layer_start].data_ptr())
-            except:
+            except Exception as e:
+                print(e)
                 print(f'Error in grad_distribute_delta.')
+                raise
 
             layer_start += solver.nr_layers()
         # Jacobian of lo_costs w.r.t lo_costs is identity so just pass the received gradients of lo_costs backward. (same for hi_costs.)
@@ -192,8 +218,10 @@ class ComputeAllMinMarginalsDiff(torch.autograd.Function):
             solver.set_solver_costs(lo_costs_batch[layer_start].data_ptr(), hi_costs_batch[layer_start].data_ptr(), def_mm_batch[layer_start].data_ptr())
             try:
                 solver.grad_all_min_marginal_differences(grad_mm_diff_batch[layer_start].data_ptr(), grad_lo_costs_in[layer_start].data_ptr(), grad_hi_costs_in[layer_start].data_ptr())
-            except:
+            except Exception as e:
+                print(e)
                 print(f'Error in grad_all_min_marginal_differences.')
+                raise
 
             layer_start += solver.nr_layers()
         # Jacobian of lo_costs w.r.t lo_costs is identity so just pass the received gradients of lo_costs backward. (same for hi_costs.)
@@ -248,8 +276,10 @@ class PerturbPrimalCosts(torch.autograd.Function):
             try:
                 solver.grad_cost_perturbation(grad_lo_costs_out[layer_start].data_ptr(), grad_hi_costs_out[layer_start].data_ptr(), 
                                             grad_lo_costs_pert_in[var_start].data_ptr(), grad_hi_costs_pert_in[var_start].data_ptr())
-            except:
+            except Exception as e:
+                print(e)
                 print(f'Error in grad_cost_perturbation.')
+                raise
 
             var_start += solver.nr_primal_variables() + 1
             layer_start += solver.nr_layers()
@@ -299,8 +329,10 @@ class ComputeLowerBoundperBDD(torch.autograd.Function):
                 solver.grad_lower_bound_per_bdd(grad_lb_per_bdd_batch[bdd_start].data_ptr(), 
                                                 grad_lo_costs_in[layer_start].data_ptr(), 
                                                 grad_hi_costs_in[layer_start].data_ptr())
-            except:
-                print(f'Error in grad_lower_bound_per_bdd.')
+            except Exception as e:
+                print(e)
+                print(f'Error in grad_lb')
+                raise
 
             bdd_start += solver.nr_bdds()
             layer_start += solver.nr_layers()
