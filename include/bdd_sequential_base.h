@@ -54,14 +54,15 @@ namespace LPMP {
 
             template<typename ITERATOR>
                 void fix_variables(ITERATOR zero_fixations_begin, ITERATOR zero_fixations_end, ITERATOR one_fixations_begin, ITERATOR one_fixations_end);
+            void fix_variable(const size_t var, const bool value);
 
             // make a step that is guaranteed to be non-decreasing in the lower bound.
             void diffusion_step(const two_dim_variable_array<std::array<value_type,2>>& min_margs, const value_type damping_step = 1.0);
 
             // compute incremental min marginals and perform min-marginal averaging subsequently
             void parallel_mma();
-            void forward_mm(const size_t bdd_nr, const typename BDD_BRANCH_NODE::value_type omega, std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& mms_to_collect, std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& mms_to_distribute);
-            value_type backward_mm(const size_t bdd_nr, const typename BDD_BRANCH_NODE::value_type omega, std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& mms_to_collect, std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& mms_to_distribute);
+            void forward_mm(const size_t bdd_nr, const typename BDD_BRANCH_NODE::value_type omega, std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& delta_out, std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& delta_in);
+            value_type backward_mm(const size_t bdd_nr, const typename BDD_BRANCH_NODE::value_type omega, std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& delta_out, std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& delta_in);
             void distribute_delta();
 
             // Both operations below are inverses of each other
@@ -79,7 +80,7 @@ namespace LPMP {
             template<typename STREAM>
                 void export_graphviz(STREAM& s, const size_t bdd_nr);
 
-            private:
+            protected:
             enum class message_passing_state {
                 after_forward_pass,
                 after_backward_pass,
@@ -114,8 +115,8 @@ namespace LPMP {
             std::vector<size_t> nr_bdds_per_variable_;
 
             // for parallel mma
-            std::vector<std::array<value_type,2>> mms_to_collect_;
-            std::vector<std::array<value_type,2>> mms_to_distribute_;
+            std::vector<std::array<value_type,2>> delta_out_;
+            std::vector<std::array<value_type,2>> delta_in_;
         };
 
     ////////////////////
@@ -427,6 +428,7 @@ namespace LPMP {
             MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME2("parallel mma backward_run");
             if(message_passing_state_ == message_passing_state::after_backward_pass)
                 return;
+
             message_passing_state_ = message_passing_state::none;
 #pragma omp parallel for schedule(static,512)
             for(std::ptrdiff_t bdd_nr=nr_bdds()-1; bdd_nr>=0; --bdd_nr)
@@ -774,6 +776,16 @@ namespace LPMP {
         }
 
     template<typename BDD_BRANCH_NODE>
+        void bdd_sequential_base<BDD_BRANCH_NODE>::fix_variable(const size_t var, const bool value)
+        {
+            const std::array<size_t,1> vars = {var};
+            if(value == false)
+                fix_variables(vars.begin(), vars.begin(), vars.begin(), vars.end());
+            else
+                fix_variables(vars.begin(), vars.end(), vars.begin(), vars.begin());
+        }
+
+    template<typename BDD_BRANCH_NODE>
         void bdd_sequential_base<BDD_BRANCH_NODE>::diffusion_step(const two_dim_variable_array<std::array<typename BDD_BRANCH_NODE::value_type,2>>& min_margs, const value_type damping_step)
         {
             throw std::runtime_error("not correct yet");
@@ -818,11 +830,11 @@ namespace LPMP {
     template<typename BDD_BRANCH_NODE>
         void bdd_sequential_base<BDD_BRANCH_NODE>::forward_mm(
                 const size_t bdd_nr, const typename BDD_BRANCH_NODE::value_type omega,
-                std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& mms_to_collect,
-                std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& mms_to_distribute)
+                std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& delta_out,
+                std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& delta_in)
         {
-            assert(mms_to_collect.size() == nr_variables());
-            assert(mms_to_distribute.size() == nr_variables());
+            assert(delta_out.size() == nr_variables());
+            assert(delta_in.size() == nr_variables());
             assert(omega > 0.0 && omega <= 1.0);
             assert(bdd_nr < nr_bdds());
 
@@ -845,19 +857,19 @@ namespace LPMP {
                 }
 
                 if(!std::isfinite(cur_mm[0]))
-                    atomic_store(mms_to_collect[var][0], std::numeric_limits<value_type>::infinity());
+                    atomic_store(delta_out[var][0], std::numeric_limits<value_type>::infinity());
                 if(!std::isfinite(cur_mm[1]))
-                    atomic_store(mms_to_collect[var][1], std::numeric_limits<value_type>::infinity());
+                    atomic_store(delta_out[var][1], std::numeric_limits<value_type>::infinity());
                 if(std::isfinite(cur_mm[0]) && std::isfinite(cur_mm[1]))
                 {
                     if(cur_mm[0] < cur_mm[1])
-                        atomic_add(mms_to_collect[var][1], omega*(cur_mm[1] - cur_mm[0]));
+                        atomic_add(delta_out[var][1], omega*(cur_mm[1] - cur_mm[0]));
                     else
-                        atomic_add(mms_to_collect[var][0], omega*(cur_mm[0] - cur_mm[1]));
+                        atomic_add(delta_out[var][0], omega*(cur_mm[0] - cur_mm[1]));
                 }
 
-                assert(mms_to_collect[var][0] >= 0.0);
-                assert(mms_to_collect[var][1] >= 0.0);
+                assert(delta_out[var][0] >= 0.0);
+                assert(delta_out[var][1] >= 0.0);
 
                 for(size_t i=first_bdd_node; i<last_bdd_node; ++i)
                 {
@@ -884,8 +896,8 @@ namespace LPMP {
                 }
                 for(size_t i=first_bdd_node; i<last_bdd_node; ++i)
                 {
-                    bdd_branch_nodes_[i].low_cost += mms_to_distribute[var][0];
-                    bdd_branch_nodes_[i].high_cost += mms_to_distribute[var][1];
+                    bdd_branch_nodes_[i].low_cost += delta_in[var][0];
+                    bdd_branch_nodes_[i].high_cost += delta_in[var][1];
                     bdd_branch_nodes_[i].forward_step(); 
                 }
             }
@@ -893,10 +905,10 @@ namespace LPMP {
 
     template<typename BDD_BRANCH_NODE>
         typename BDD_BRANCH_NODE::value_type 
-        bdd_sequential_base<BDD_BRANCH_NODE>::backward_mm(const size_t bdd_nr, const typename BDD_BRANCH_NODE::value_type omega, std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& mms_to_collect, std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& mms_to_distribute)
+        bdd_sequential_base<BDD_BRANCH_NODE>::backward_mm(const size_t bdd_nr, const typename BDD_BRANCH_NODE::value_type omega, std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& delta_out, std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& delta_in)
         {
-            assert(mms_to_collect.size() == nr_variables());
-            assert(mms_to_distribute.size() == nr_variables());
+            assert(delta_out.size() == nr_variables());
+            assert(delta_in.size() == nr_variables());
             assert(omega > 0.0 && omega <= 1.0);
             assert(bdd_nr < nr_bdds());
 
@@ -914,19 +926,19 @@ namespace LPMP {
                 }
 
                 if(!std::isfinite(cur_mm[0]))
-                    atomic_store(mms_to_collect[var][0], std::numeric_limits<value_type>::infinity());
+                    atomic_store(delta_out[var][0], std::numeric_limits<value_type>::infinity());
                 if(!std::isfinite(cur_mm[1]))
-                    atomic_store(mms_to_collect[var][1], std::numeric_limits<value_type>::infinity());
+                    atomic_store(delta_out[var][1], std::numeric_limits<value_type>::infinity());
                 if(std::isfinite(cur_mm[0]) && std::isfinite(cur_mm[1]))
                 {
                     if(cur_mm[0] < cur_mm[1])
-                        atomic_add(mms_to_collect[var][1], omega*(cur_mm[1] - cur_mm[0]));
+                        atomic_add(delta_out[var][1], omega*(cur_mm[1] - cur_mm[0]));
                     else
-                        atomic_add(mms_to_collect[var][0], omega*(cur_mm[0] - cur_mm[1]));
+                        atomic_add(delta_out[var][0], omega*(cur_mm[0] - cur_mm[1]));
                 }
 
-                assert(mms_to_collect[var][0] >= 0.0);
-                assert(mms_to_collect[var][1] >= 0.0);
+                assert(delta_out[var][0] >= 0.0);
+                assert(delta_out[var][1] >= 0.0);
 
                 for(std::ptrdiff_t i=std::ptrdiff_t(last_bdd_node)-1; i>=std::ptrdiff_t(first_bdd_node); --i)
                 {
@@ -947,8 +959,8 @@ namespace LPMP {
 
                 for(std::ptrdiff_t i=std::ptrdiff_t(last_bdd_node)-1; i>=std::ptrdiff_t(first_bdd_node); --i)
                 {
-                    bdd_branch_nodes_[i].low_cost += mms_to_distribute[var][0];
-                    bdd_branch_nodes_[i].high_cost += mms_to_distribute[var][1];
+                    bdd_branch_nodes_[i].low_cost += delta_in[var][0];
+                    bdd_branch_nodes_[i].high_cost += delta_in[var][1];
                     bdd_branch_nodes_[i].backward_step(); 
                 }
             }
@@ -987,8 +999,8 @@ namespace LPMP {
                 }
             };
 
-            init_mms(mms_to_collect_);
-            init_mms(mms_to_distribute_);
+            init_mms(delta_out_);
+            init_mms(delta_in_);
 
             double lb = constant_;
 
@@ -996,16 +1008,16 @@ namespace LPMP {
                 MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME2("parallel mma incremental marginal computation");
 #pragma omp parallel for schedule(static,256)
                 for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
-                    forward_mm(bdd_nr, 0.5, mms_to_collect_, mms_to_distribute_);
-                average_mms(mms_to_collect_);
-                reset_mms(mms_to_distribute_);
-                std::swap(mms_to_collect_, mms_to_distribute_);
+                    forward_mm(bdd_nr, 0.5, delta_out_, delta_in_);
+                average_mms(delta_out_);
+                reset_mms(delta_in_);
+                std::swap(delta_out_, delta_in_);
 #pragma omp parallel for schedule(static,256) reduction(+:lb)
                 for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
-                    lb += backward_mm(bdd_nr, 0.5, mms_to_collect_, mms_to_distribute_);
-                average_mms(mms_to_collect_);
-                reset_mms(mms_to_distribute_);
-                std::swap(mms_to_collect_, mms_to_distribute_);
+                    lb += backward_mm(bdd_nr, 0.5, delta_out_, delta_in_);
+                average_mms(delta_out_);
+                reset_mms(delta_in_);
+                std::swap(delta_out_, delta_in_);
             }
 
             lower_bound_ = lb;
@@ -1020,7 +1032,7 @@ namespace LPMP {
             message_passing_state_ = message_passing_state::none;
             lower_bound_state_ = lower_bound_state::invalid; 
 
-            assert(mms_to_distribute_.size() == nr_variables());
+            assert(delta_in_.size() == nr_variables());
 
 #pragma omp parallel for
             for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
@@ -1032,14 +1044,14 @@ namespace LPMP {
 
                     for(size_t i=first_bdd_node; i<last_bdd_node; ++i)
                     {
-                        bdd_branch_nodes_[i].low_cost += mms_to_distribute_[var][0];
-                        bdd_branch_nodes_[i].high_cost += mms_to_distribute_[var][1];
+                        bdd_branch_nodes_[i].low_cost += delta_in_[var][0];
+                        bdd_branch_nodes_[i].high_cost += delta_in_[var][1];
                     }
                 }
             }
 
             const std::array<typename BDD_BRANCH_NODE::value_type,2> zeros = {0.0, 0.0};
-            std::fill(mms_to_distribute_.begin(), mms_to_distribute_.end(), zeros);
+            std::fill(delta_in_.begin(), delta_in_.end(), zeros);
         }
 
     template<typename BDD_BRANCH_NODE>

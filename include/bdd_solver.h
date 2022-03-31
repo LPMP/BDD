@@ -8,6 +8,7 @@
 #include "bdd_mma_smooth.h"
 #include "bdd_cuda.h"
 #include "bdd_parallel_mma.h"
+#include "bdd_parallel_mma_smooth.h"
 #include "bdd_fix.h"
 #include "incremental_mm_agreement_rounding.hxx"
 #include <variant> 
@@ -90,7 +91,7 @@ namespace LPMP {
                 bdd_mma_vec<float>, bdd_mma_vec<double>, bdd_mma_smooth<float>, bdd_mma_smooth<double>,
                 decomposition_bdd_mma,
                 bdd_cuda<float>, bdd_cuda<double>,
-                bdd_parallel_mma<float>, bdd_parallel_mma<double>
+                bdd_parallel_mma<float>, bdd_parallel_mma<double>, bdd_parallel_mma_smooth<float>, bdd_parallel_mma_smooth<double>
                     >;
             std::optional<solver_type> solver;
             std::vector<double> costs;
