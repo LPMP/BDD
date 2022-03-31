@@ -13,6 +13,7 @@
 #include <thrust/iterator/discard_iterator.h>
 #include "time_measure_util.h"
 #include <thrust/iterator/constant_iterator.h>
+#include <thrust/random.h>
 
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
@@ -182,6 +183,28 @@ inline void coo_sorting(thrust::device_vector<int>& i, thrust::device_vector<int
 }
 
 template<typename T>
+struct add_noise_func
+{
+    T noise_mag;
+    T* vec;
+
+    __host__ __device__ void operator()(const unsigned int n)
+    {
+        thrust::default_random_engine rng;
+        thrust::uniform_real_distribution<T> dist(-noise_mag, noise_mag);
+        rng.discard(n);
+        vec[n] += dist(rng);
+    }
+};
+
+template<typename T>
+inline void add_noise(thrust::device_ptr<T> v, const size_t num, const T noise_magnitude)
+{
+    add_noise_func<T> add_noise({noise_magnitude, thrust::raw_pointer_cast(v)});
+    thrust::for_each(thrust::make_counting_iterator<unsigned int>(0), thrust::make_counting_iterator<unsigned int>(0) + num, add_noise);
+}
+
+template<typename T>
 inline void print_vector(const thrust::device_vector<T>& v, const char* name, const int num = 0)
 {
     std::cout<<name<<": ";
@@ -201,6 +224,21 @@ inline void print_vector(const thrust::device_ptr<T>& v, const char* name, const
     std::cout<<name<<": ";
     thrust::copy(v, v + num, std::ostream_iterator<T>(std::cout, " "));
     std::cout<<"\n";
+}
+
+template<typename T>
+inline void check_finite(const thrust::device_ptr<T>& v, const size_t num)
+{
+    auto result = thrust::minmax_element(v, v + num);
+    assert(std::isfinite(*result.first));
+    assert(std::isfinite(*result.second));
+}
+
+template<typename T>
+inline void print_min_max(const thrust::device_ptr<T>& v, const char* name, const size_t num)
+{
+    auto result = thrust::minmax_element(v, v + num);
+    std::cout<<name<<": min = "<<*result.first<<", max = "<<*result.second<<"\n";
 }
 
 struct tuple_min

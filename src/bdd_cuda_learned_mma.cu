@@ -254,6 +254,9 @@ namespace LPMP {
         if (track_grad_for_num_itr == 0)
             return;
 
+        // add_noise<REAL>(this->lo_cost_.data(), this->nr_layers(), (REAL) 1e-6);
+        // add_noise<REAL>(this->hi_cost_.data(), this->nr_layers(), (REAL) 1e-6);
+
         thrust::fill(grad_dist_weights_out, grad_dist_weights_out + this->nr_layers(), 0.0);
         if (!omega_vec.get())
             thrust::fill(grad_omega, grad_omega + 1, 0.0); // omega_scalar is used.
@@ -472,7 +475,7 @@ namespace LPMP {
 
         for (int s = this->nr_hops() - 1; s >= 0; s--)
         {
-            compute_grad_cost_from_root(grad_cost_from_root, grad_lo_cost, grad_hi_cost, s);
+            compute_grad_cost_from_root(grad_cost_from_root, grad_lo_cost, grad_hi_cost, s);          
             grad_hop_update_learned_mm_dist(this->lo_cost_out_.data(), this->hi_cost_out_.data(), deferred_min_marg_diff, 
                                             grad_lo_cost, grad_hi_cost,
                                             grad_cost_from_root, grad_cost_from_terminal, 
@@ -820,7 +823,7 @@ namespace LPMP {
                 const REAL cur_c_from_root = cost_from_root[bdd_node_idx];
                 
                 const REAL current_lo_path_cost = cur_c_from_root + cur_lo_cost + cost_from_terminal[next_lo_node];
-                if (current_lo_path_cost < min_lo_path || best_lo_node == -1)
+                if (current_lo_path_cost <= min_lo_path || best_lo_node == -1)
                 {
                     min_lo_path = current_lo_path_cost;
                     best_lo_node = bdd_node_idx;
@@ -828,13 +831,15 @@ namespace LPMP {
                 }
                 const REAL current_hi_path_cost = cur_c_from_root + cur_hi_cost + cost_from_terminal[next_hi_node];
 
-                if (current_hi_path_cost < min_hi_path || best_hi_node == -1)
+                if (current_hi_path_cost <= min_hi_path || best_hi_node == -1)
                 {
                     min_hi_path = current_hi_path_cost;
                     best_hi_node = bdd_node_idx;
                     best_hi_next_node = next_hi_node;
                 }
             }
+            assert(isfinite(min_lo_path));
+            assert(isfinite(min_hi_path));
             const REAL incoming_grad = omega_scalar * grad_mm_diff[layer_index];
             grad_lo_cost[layer_index] -= incoming_grad;
             grad_hi_cost[layer_index] += incoming_grad;

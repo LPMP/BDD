@@ -25,9 +25,28 @@ def ComputePerBDDSolutions(solvers, lo_costs_batch, hi_costs_batch):
     return per_bdd_solution_hi
     #return per_bdd_solution_lo, per_bdd_solution_hi
 
+def log_grad_stats(t, name, start, end, logger, filepath, step):
+    if logger is None or filepath is None or step is None:
+        return
+    import os
+    filename = os.path.basename(filepath)
+    fin = torch.isfinite(t[start:end])
+    if not torch.all(fin):
+        print(f"NaN gradient in {filename} / {name}. Number of NaNs: {torch.numel(fin) - fin.sum()} / {torch.numel(fin)}")
+    mean = t[start:end].mean()
+    std = t[start:end].std()
+    min = t[start:end].min()
+    max = t[start:end].max()
+    if max > 1e3 or min < -1e3:
+        print(f"Large gradient in {filename} / {name}. min: {min}, max: {max}.")
+    logger.add_scalar(f'train_{filename}/{name}_mean', mean, global_step = step)
+    logger.add_scalar(f'train_{filename}/{name}_std', std, global_step = step)
+    logger.add_scalar(f'train_{filename}/{name}_min', min, global_step = step)
+    logger.add_scalar(f'train_{filename}/{name}_max', max, global_step = step)
+
 class DualIterations(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, solvers, lo_costs_batch, hi_costs_batch, def_mm_batch, dist_weights_batch, num_iterations, omega, grad_dual_itr_max_itr, improvement_slope, num_caches):
+    def forward(ctx, solvers, lo_costs_batch, hi_costs_batch, def_mm_batch, dist_weights_batch, num_iterations, omega, grad_dual_itr_max_itr, improvement_slope, num_caches, logger, filepahts, step):
         validate_input_format(lo_costs_batch, hi_costs_batch, def_mm_batch, dist_weights_batch)
         assert(lo_costs_batch.dim() == 1)
         assert(def_mm_batch.dim() == 1)
@@ -38,6 +57,9 @@ class DualIterations(torch.autograd.Function):
         assert(torch.numel(omega) == 1 or omega.shape == hi_costs_batch.shape)
         ctx.set_materialize_grads(False)
         ctx.save_for_backward(lo_costs_batch, hi_costs_batch, def_mm_batch, dist_weights_batch, omega)
+        ctx.logger = logger
+        ctx.filepahts = filepahts
+        ctx.step = step
         ctx.num_caches = num_caches
         ctx.solvers = solvers
         ctx.num_iterations = num_iterations
@@ -84,9 +106,6 @@ class DualIterations(torch.autograd.Function):
         grad_dist_weights_batch_in = torch.empty_like(dist_weights_batch)
         grad_omega = torch.empty_like(omega)
 
-        # assert(torch.all(torch.isfinite(grad_lo_costs_out)))
-        # assert(torch.all(torch.isfinite(grad_hi_costs_out)))
-        # assert(torch.all(torch.isfinite(grad_def_mm_out)))
 
         is_omega_scalar = torch.numel(omega) == 1
         layer_start = 0
@@ -95,6 +114,10 @@ class DualIterations(torch.autograd.Function):
             num_iterations_b = ctx.actual_num_itr[b]
             track_grad_for_num_itr = min(num_iterations_b, ctx.grad_dual_itr_max_itr)
             track_grad_after_itr = num_iterations_b - track_grad_for_num_itr
+            # log_grad_stats(grad_lo_costs_in, 'grad_lo_costs_input', layer_start, layer_start + solver.nr_layers(), ctx.logger, ctx.filepahts[b], ctx.step)
+            # log_grad_stats(grad_hi_costs_in, 'grad_hi_costs_input', layer_start, layer_start + solver.nr_layers(), ctx.logger, ctx.filepahts[b], ctx.step)
+            # log_grad_stats(grad_deff_mm_diff_in, 'grad_deff_mm_diff_input', layer_start, layer_start + solver.nr_layers(), ctx.logger, ctx.filepahts[b], ctx.step)
+
             try:
                 if is_omega_scalar:
                     solver.grad_iterations(dist_weights_batch[layer_start].data_ptr(), grad_lo_costs_in[layer_start].data_ptr(), grad_hi_costs_in[layer_start].data_ptr(),
@@ -109,28 +132,20 @@ class DualIterations(torch.autograd.Function):
                 print(e)
                 print(f'Error in grad_iterations: num_iterations_b: {num_iterations_b}, track_grad_for_num_itr: {track_grad_for_num_itr}, track_grad_after_itr: {track_grad_after_itr}')
                 raise
+            # log_grad_stats(grad_lo_costs_in, 'grad_lo_costs_out', layer_start, layer_start + solver.nr_layers(), ctx.logger, ctx.filepahts[b], ctx.step)
+            # log_grad_stats(grad_hi_costs_in, 'grad_hi_costs_out', layer_start, layer_start + solver.nr_layers(), ctx.logger, ctx.filepahts[b], ctx.step)
+            # log_grad_stats(grad_deff_mm_diff_in, 'grad_deff_mm_diff_out', layer_start, layer_start + solver.nr_layers(), ctx.logger, ctx.filepahts[b], ctx.step)
+            # log_grad_stats(grad_dist_weights_batch_in, 'grad_dist_weights_batch_out', layer_start, layer_start + solver.nr_layers(), ctx.logger, ctx.filepahts[b], ctx.step)
+            # log_grad_stats(grad_omega, 'grad_omega', layer_start, layer_start + solver.nr_layers(), ctx.logger, ctx.filepahts[b], ctx.step)
             layer_start += solver.nr_layers()
 
-        # print(f'lo_costs_batch: min: {lo_costs_batch.min():.3f}, max: {lo_costs_batch.max():.3f}')
-        # print(f'hi_costs_batch: min: {hi_costs_batch.min():.3f}, max: {hi_costs_batch.max():.3f}')
-        # print(f'def_mm_batch: min: {def_mm_batch.min():.3f}, max: {def_mm_batch.max():.3f}')
+        assert(torch.all(torch.isfinite(grad_lo_costs_in)))
+        assert(torch.all(torch.isfinite(grad_hi_costs_in)))
+        assert(torch.all(torch.isfinite(grad_deff_mm_diff_in)))
+        assert(torch.all(torch.isfinite(grad_dist_weights_batch_in)))
+        assert(torch.all(torch.isfinite(grad_omega)))
 
-        # print(f'grad_lo_costs_in: min: {grad_lo_costs_in.min():.3f}, max: {grad_lo_costs_in.max():.3f}')
-        # print(f'grad_hi_costs_in: min: {grad_hi_costs_in.min():.3f}, max: {grad_hi_costs_in.max():.3f}')
-        # print(f'grad_deff_mm_diff_in: min: {grad_deff_mm_diff_in.min():.3f}, max: {grad_deff_mm_diff_in.max():.3f}')
-        # assert(torch.all(torch.isfinite(lo_costs_batch)))
-        # assert(torch.all(torch.isfinite(hi_costs_batch)))
-        # assert(torch.all(torch.isfinite(def_mm_batch)))
-        # assert(torch.all(torch.isfinite(omega)))
-        # assert(torch.all(torch.isfinite(dist_weights_batch)))
-
-        # assert(torch.all(torch.isfinite(grad_lo_costs_in)))
-        # assert(torch.all(torch.isfinite(grad_hi_costs_in)))
-        # assert(torch.all(torch.isfinite(grad_deff_mm_diff_in)))
-        # assert(torch.all(torch.isfinite(grad_dist_weights_batch_in)))
-        # assert(torch.all(torch.isfinite(grad_omega)))
-
-        return None, grad_lo_costs_in, grad_hi_costs_in, grad_deff_mm_diff_in, grad_dist_weights_batch_in, None, grad_omega, None, None, None
+        return None, grad_lo_costs_in, grad_hi_costs_in, grad_deff_mm_diff_in, grad_dist_weights_batch_in, None, grad_omega, None, None, None, None, None, None
 
 class DistributeDeferredDelta(torch.autograd.Function):
     @staticmethod
@@ -313,7 +328,7 @@ class ComputeLowerBoundperBDD(torch.autograd.Function):
     @staticmethod
     @once_differentiable
     def backward(ctx, grad_lb_per_bdd_batch):
-        # grad_lb_per_bdd_batch = grad_lb_per_bdd_batch.contiguous()
+        grad_lb_per_bdd_batch = grad_lb_per_bdd_batch.contiguous()
         validate_input_format(grad_lb_per_bdd_batch)
         assert(grad_lb_per_bdd_batch.dim() == 1)
 
