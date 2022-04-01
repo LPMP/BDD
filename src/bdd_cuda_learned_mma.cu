@@ -320,6 +320,9 @@ namespace LPMP {
         thrust::device_ptr<REAL> grad_hi_cost_out // Outputs in-place to compute grad. hi_cost before all min-marginal difference computation.
         )
     {
+        this->forward_run();
+        this->backward_run(false);
+
         thrust::device_vector<REAL> grad_cost_from_root(this->cost_from_root_.size(), 0.0);
         thrust::device_vector<REAL> grad_cost_from_terminal(this->cost_from_terminal_.size(), 0.0);
 

@@ -387,7 +387,6 @@ namespace LPMP {
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         forward_state_valid_ = false;
-        path_costs_valid_ = false;
     }
 
     template<typename REAL>
@@ -395,7 +394,6 @@ namespace LPMP {
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         backward_state_valid_ = false;
-        path_costs_valid_ = false;
     }
 
     template<typename REAL>
@@ -652,8 +650,7 @@ namespace LPMP {
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         thrust::device_vector<REAL> hi_path_cost, lo_path_cost; 
-        if ((backward_state_valid_ && path_costs_valid_) ||
-            (!compute_path_costs && backward_state_valid_))
+        if (backward_state_valid_ && !compute_path_costs)
             return {lo_path_cost, hi_path_cost};
 
         if (compute_path_costs)
@@ -690,8 +687,6 @@ namespace LPMP {
 
         }
         backward_state_valid_ = true;
-        if (compute_path_costs)
-            path_costs_valid_ = true;
         return {lo_path_cost, hi_path_cost};
     }
 
