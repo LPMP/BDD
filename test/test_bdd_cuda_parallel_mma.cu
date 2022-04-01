@@ -7,6 +7,15 @@
 using namespace LPMP;
 using namespace BDD;
 
+const char * problem_with_fixed_var = 
+R"(Minimize
+2 x_1 + 1 x_2 + 1 x_3 + 1 x_4 + 2 x_5 + x_6
+Subject To
+x_1 + x_2 + 2 x_3 = 1
+x_3 + x_4 + x_5 = 2
+x_5 + x_6 = 2
+End)";
+
 const char * matching_3x3 = 
 R"(Minimize
 -2 x_11 - 1 x_12 - 1 x_13
@@ -194,7 +203,7 @@ mu_8_1 - mu_78_01 - mu_78_11 = 0
 End)";
 
 
-void test_problem(const char* instance, const double expected_lb, const double tol = 1e-12)
+void test_problem(const char* instance, const double expected_lb, const double tol = 1e-12, const bool test_primal_obj = true)
 {
     ILP_input ilp = ILP_parser::parse_string(instance);
     bdd_preprocessor bdd_pre(ilp);
@@ -213,7 +222,7 @@ void test_problem(const char* instance, const double expected_lb, const double t
         test(diff <= tol, buffer.str());
     }
 
-    for(size_t iter=0; iter<200; ++iter)
+    for(size_t iter=0; iter<5; ++iter)
     {
         solver.iteration();
         std::cout<<"Iter: "<<iter<<", LB: "<<solver.lower_bound()<<std::endl;
@@ -224,18 +233,23 @@ void test_problem(const char* instance, const double expected_lb, const double t
     std::cout<<"Final lower bound: "<<solver.lower_bound()<<", Expected: "<<expected_lb<<"\n";
     test(std::abs(solver.lower_bound() - expected_lb) <= tol);
 
-    std::vector<double> cost_vector_after = solver.compute_primal_objective_vector();
-    for(size_t i=0; i<solver.nr_variables(); ++i)
+    if (test_primal_obj)
     {
-        const auto diff = std::abs(ilp.objective()[i] - cost_vector_after[i]);
-        std::stringstream buffer;
-        buffer<<i<<" "<<ilp.objective()[i]<<" "<<cost_vector_before[i]<<" "<<diff<<"\n";
-        test(diff <= tol, buffer.str());
+        std::vector<double> cost_vector_after = solver.compute_primal_objective_vector();
+        for(size_t i=0; i<solver.nr_variables(); ++i)
+        {
+            const auto diff = std::abs(ilp.objective()[i] - cost_vector_after[i]);
+            std::stringstream buffer;
+            buffer<<i<<" "<<ilp.objective()[i]<<" "<<cost_vector_before[i]<<" "<<diff<<"\n";
+            test(diff <= tol, buffer.str());
+        }
     }
 }
 
 int main(int argc, char** argv)
 {
+    std::cout<<"problem_with_fixed_var\n";
+    test_problem(problem_with_fixed_var, 5.0, false); // Primal objective vector cannot be reconstructed as some variables assignments are infeasible.
     std::cout<<"matching_3x3"<<"\n";
     test_problem(matching_3x3, -6.0);
     std::cout<<"short_chain_shuffled"<<"\n";

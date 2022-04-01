@@ -61,7 +61,7 @@ namespace LPMP {
                                                             const REAL* const __restrict__ hi_cost,
                                                             const REAL* const __restrict__ cost_from_root,
                                                             const REAL* const __restrict__ cost_from_terminal,
-                                                            REAL* __restrict__ mm_lo_local, REAL* __restrict__ mm_hi)
+                                                            REAL* __restrict__ mm_lo_local, REAL* __restrict__ mm_hi_local)
     {
         const int start_index = blockIdx.x * blockDim.x + threadIdx.x;
         const int num_threads = blockDim.x * gridDim.x;
@@ -77,14 +77,19 @@ namespace LPMP {
             const int layer_idx = bdd_node_to_layer_map[bdd_node_idx];
 
             atomicMin(&mm_lo_local[layer_idx - start_offset_layer], cur_c_from_root + lo_cost[layer_idx] + cost_from_terminal[next_lo_node]);
-            atomicMin(&mm_hi[layer_idx], cur_c_from_root + hi_cost[layer_idx] + cost_from_terminal[next_hi_node]);
+            atomicMin(&mm_hi_local[layer_idx - start_offset_layer], cur_c_from_root + hi_cost[layer_idx] + cost_from_terminal[next_hi_node]);
         }
     }
 
     // This function does not need lo_path_costs and hi_path_costs to compute min-marginals. Writes min-marginal differences in GPU array referenced by mm_diff_ptr at 
     // locations corresponding to hop_index.
     template<typename REAL>
-    void bdd_cuda_parallel_mma<REAL>::min_marginals_from_directional_costs(const int hop_index, const REAL omega_scalar, thrust::device_ptr<REAL> mm_diff_ptr, const thrust::device_ptr<const REAL> omega_vec)
+    void bdd_cuda_parallel_mma<REAL>::min_marginals_from_directional_costs(const int hop_index, const REAL omega_scalar, 
+                                                                        thrust::device_ptr<REAL> mm_diff_local_ptr, 
+                                                                        const thrust::device_ptr<const REAL> lo_costs, 
+                                                                        const thrust::device_ptr<const REAL> hi_costs, 
+                                                                        const thrust::device_ptr<const REAL> omega_vec, 
+                                                                        const bool convert_to_diff)
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         
@@ -101,27 +106,29 @@ namespace LPMP {
                                                 thrust::raw_pointer_cast(this->lo_bdd_node_index_.data()),
                                                 thrust::raw_pointer_cast(this->hi_bdd_node_index_.data()),
                                                 thrust::raw_pointer_cast(this->bdd_node_to_layer_map_.data()),
-                                                thrust::raw_pointer_cast(this->lo_cost_.data()),
-                                                thrust::raw_pointer_cast(this->hi_cost_.data()),
+                                                thrust::raw_pointer_cast(lo_costs),
+                                                thrust::raw_pointer_cast(hi_costs),
                                                 thrust::raw_pointer_cast(this->cost_from_root_.data()),
                                                 thrust::raw_pointer_cast(this->cost_from_terminal_.data()),
                                                 thrust::raw_pointer_cast(mm_lo_local_.data()),
-                                                thrust::raw_pointer_cast(mm_diff_ptr));
+                                                thrust::raw_pointer_cast(mm_diff_local_ptr));
 
-        thrust::device_ptr<REAL> mm_lo_start = mm_lo_local_.data();
-
-        if (!omega_vec.get()) // Uses omega as a scalar value.
+        if (convert_to_diff)
         {
-            auto first = thrust::make_zip_iterator(thrust::make_tuple(mm_diff_ptr + start_offset_layer, mm_lo_start));
-            auto last = thrust::make_zip_iterator(thrust::make_tuple(mm_diff_ptr + end_offset_layer, mm_lo_start + cur_num_layers));
-            thrust::for_each(first, last, compute_mm_diff_flush_mm_lo<REAL>({omega_scalar})); // Convert to min-marginal difference and set mm_lo_local_ to inf.
-        }
-        else    // Assumes a value per layer is given which is going to be used to damp min-marginal differences.
-        {
-            assert(omega_scalar == 1.0);
-            auto first = thrust::make_zip_iterator(thrust::make_tuple(mm_diff_ptr + start_offset_layer, mm_lo_start, omega_vec + start_offset_layer));
-            auto last = thrust::make_zip_iterator(thrust::make_tuple(mm_diff_ptr + end_offset_layer, mm_lo_start + cur_num_layers, omega_vec + end_offset_layer));
-            thrust::for_each(first, last, compute_mm_diff_flush_mm_lo_with_omega_vec<REAL>()); // Convert to min-marginal difference and set mm_lo_local_ to inf.
+            thrust::device_ptr<REAL> mm_lo_start = mm_lo_local_.data();
+            if (!omega_vec.get()) // Uses omega as a scalar value.
+            {
+                auto first = thrust::make_zip_iterator(thrust::make_tuple(mm_diff_local_ptr, mm_lo_start));
+                auto last = thrust::make_zip_iterator(thrust::make_tuple(mm_diff_local_ptr + cur_num_layers, mm_lo_start + cur_num_layers));
+                thrust::for_each(first, last, compute_mm_diff_flush_mm_lo<REAL>({omega_scalar})); // Convert to min-marginal difference and set mm_lo_local_ to inf.
+            }
+            else    // Assumes a value per layer is given which is going to be used to damp min-marginal differences.
+            {
+                assert(omega_scalar == 1.0);
+                auto first = thrust::make_zip_iterator(thrust::make_tuple(mm_diff_local_ptr, mm_lo_start, omega_vec + start_offset_layer));
+                auto last = thrust::make_zip_iterator(thrust::make_tuple(mm_diff_local_ptr + cur_num_layers, mm_lo_start + cur_num_layers, omega_vec + end_offset_layer));
+                thrust::for_each(first, last, compute_mm_diff_flush_mm_lo_with_omega_vec<REAL>()); // Convert to min-marginal difference and set mm_lo_local_ to inf.
+            }
         }
         #ifndef NDEBUG
             cudaDeviceSynchronize();  // Not necessary, only to compute exact timing of this function.
@@ -131,7 +138,8 @@ namespace LPMP {
     template<typename REAL>
     void bdd_cuda_parallel_mma<REAL>::min_marginals_from_directional_costs(const int hop_index, const REAL omega)
     {
-        min_marginals_from_directional_costs(hop_index, omega, this->deffered_mm_diff_.data());
+        const int start_offset_layer = hop_index > 0 ? this->cum_nr_layers_per_hop_dist_[hop_index - 1]: 0;
+        min_marginals_from_directional_costs(hop_index, omega, this->deffered_mm_diff_.data() + start_offset_layer, this->lo_cost_.data(), this->hi_cost_.data());
     }
 
 

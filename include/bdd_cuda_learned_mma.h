@@ -107,7 +107,7 @@ namespace LPMP {
             // Compute gradient of forward_iteration_learned_mm_dist.
             // Assumes solver state is set to state before forward_iteration_learned_mm_dist was called. 
             void grad_forward_iteration_learned_mm_dist(
-                thrust::device_ptr<REAL> deferred_min_marg_diff, // deferred min-marginals used in forward pass, output will contains deferred min-marginals after forward iteration (not useful)
+                thrust::device_ptr<REAL> deferred_min_marg_diff, // deferred min-marginals used in forward pass, output will contain min-marginals hi after forward iteration (not useful)
                 const thrust::device_ptr<const REAL> dist_weights, // distribution weights used in the forward pass.
                 thrust::device_ptr<REAL> grad_lo_cost, // Input: incoming grad w.r.t lo_cost current iteration and Outputs in-place to compute grad. lo_cost before iteration.
                 thrust::device_ptr<REAL> grad_hi_cost, // Input: incoming grad w.r.t hi_cost current iteration and Outputs in-place to compute grad. hi_cost before iteration.
@@ -123,7 +123,7 @@ namespace LPMP {
             // Compute gradient of backward_iteration_learned_mm_dist.
             // Assumes solver state is set to state before backward_iteration_learned_mm_dist was called. 
             void grad_backward_iteration_learned_mm_dist(
-                thrust::device_ptr<REAL> deferred_min_marg_diff, // deferred min-marginals used in forward pass, output will contains deferred min-marginals after backward iteration (not useful)
+                thrust::device_ptr<REAL> deferred_min_marg_diff, // deferred min-marginals used in forward pass, output will contains min-marginals hi after backward iteration (not useful)
                 const thrust::device_ptr<const REAL> dist_weights, // distribution weights used in the forward pass.
                 thrust::device_ptr<REAL> grad_lo_cost, // Input: incoming grad w.r.t lo_cost current iteration and Outputs in-place to compute grad. lo_cost before iteration.
                 thrust::device_ptr<REAL> grad_hi_cost, // Input: incoming grad w.r.t hi_cost current iteration and Outputs in-place to compute grad. hi_cost before iteration.
@@ -171,7 +171,7 @@ namespace LPMP {
 
             void grad_mm_diff_of_hop(const thrust::device_ptr<const REAL> before_update_lo_cost, // min-marginal computation was done on input costs (not updated) costs.
                                     const thrust::device_ptr<const REAL> before_update_hi_cost,
-                                    const thrust::device_ptr<const REAL> cur_min_marg_diff, // current min-marginals which were subtracted in present iteration.
+                                    thrust::device_ptr<REAL> memory_for_mm_hi,
                                     thrust::device_ptr<REAL> incoming_grad_mm_diff_hop, // gradient of min-marginal diff. output is backpropagates through multiplication by omega .
                                     thrust::device_ptr<REAL> grad_lo_cost,
                                     thrust::device_ptr<REAL> grad_hi_cost,

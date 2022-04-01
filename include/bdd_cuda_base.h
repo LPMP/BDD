@@ -156,7 +156,6 @@ namespace LPMP {
             std::vector<size_t> bdd_to_constraint_map_;
 
         private:
-            bool path_costs_valid_ = false; // here valid means lo, hi path paths are valid.
             void initialize(const BDD::bdd_collection& bdd_col);
             std::tuple<thrust::device_vector<int>, thrust::device_vector<int>> populate_bdd_nodes(const BDD::bdd_collection& bdd_col);
             void reorder_bdd_nodes(thrust::device_vector<int>& bdd_hop_dist_root, thrust::device_vector<int>& bdd_depth);
