@@ -13,6 +13,7 @@
 #include <thrust/iterator/discard_iterator.h>
 #include "time_measure_util.h"
 #include <thrust/iterator/constant_iterator.h>
+#include <thrust/logical.h>
 #include <thrust/random.h>
 
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
@@ -226,12 +227,21 @@ inline void print_vector(const thrust::device_ptr<T>& v, const char* name, const
     std::cout<<"\n";
 }
 
+struct isfinite_func
+{
+    template<typename T>
+    __host__ __device__
+    bool operator()(const T val)
+    {
+        return isfinite(val);
+    }
+};
+
 template<typename T>
 inline void check_finite(const thrust::device_ptr<T>& v, const size_t num)
 {
-    auto result = thrust::minmax_element(v, v + num);
-    assert(std::isfinite(*result.first));
-    assert(std::isfinite(*result.second));
+    bool finite = thrust::all_of(v, v + num, isfinite_func());
+    assert(finite);
 }
 
 template<typename T>
@@ -239,6 +249,9 @@ inline void print_min_max(const thrust::device_ptr<T>& v, const char* name, cons
 {
     auto result = thrust::minmax_element(v, v + num);
     std::cout<<name<<": min = "<<*result.first<<", max = "<<*result.second<<"\n";
+    assert(std::isfinite(*result.first));
+    assert(std::isfinite(*result.second));
+    check_finite(v, num);
 }
 
 struct tuple_min

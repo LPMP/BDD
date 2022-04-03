@@ -1,5 +1,7 @@
 #include "bdd_cuda_learned_mma.h"
 #include "cuda_utils.h"
+#include <time.h>
+#include <thrust/random.h>
 
 namespace LPMP {
     template<typename REAL>
@@ -341,6 +343,7 @@ namespace LPMP {
             grad_mm_diff_of_hop(this->lo_cost_.data(), this->hi_cost_.data(), this->deffered_mm_diff_.data(), incoming_grad_mm, grad_lo_cost_out, grad_hi_cost_out, 
                                 grad_cost_from_root.data(), grad_cost_from_terminal.data(), 
                                 grad_omega.data(), hop_index, 1.0, nullptr, false);
+
         // mm gradients are backpropagated into arc costs and costs from root/terminal. Now backprop through costs from root/terminal calculation.
         for (int hop_index = 0; hop_index < this->nr_hops(); hop_index++) // Inverse direction as that of backward_run().
             compute_grad_cost_from_terminal(grad_cost_from_terminal.data(), grad_lo_cost_out, grad_hi_cost_out, hop_index);
@@ -553,15 +556,14 @@ namespace LPMP {
     }
 
     template<typename REAL>
-    __global__ void grad_cost_from_root_indices_cuda(const int cur_num_bdd_nodes, const int start_offset,
+    __global__ void grad_cost_from_root_indices_cuda(const int cur_num_bdd_nodes, const int start_offset, const int start_offset_next_hop,
                                                 const int* const __restrict__ lo_bdd_node_index, 
                                                 const int* const __restrict__ hi_bdd_node_index, 
                                                 const int* const __restrict__ bdd_node_to_layer_map, 
                                                 const REAL* const __restrict__ lo_cost,
                                                 const REAL* const __restrict__ hi_cost,
                                                 const REAL* const __restrict__ cost_from_root,
-                                                char* to_accumulate_lo,
-                                                char* to_accumulate_hi)
+                                                int* next_hop_backprop_index)
     {
         const int start_index = blockIdx.x * blockDim.x + threadIdx.x;
         const int num_threads = blockDim.x * gridDim.x;
@@ -571,24 +573,32 @@ namespace LPMP {
             if (next_lo_node < 0)
                 continue; // nothing needs to be done for terminal node.
             
+            const int next_hi_node = hi_bdd_node_index[bdd_node_idx];
             const int layer_idx = bdd_node_to_layer_map[bdd_node_idx];
             const REAL cur_c_from_root = cost_from_root[bdd_node_idx];
 
             if(cur_c_from_root + lo_cost[layer_idx] <= cost_from_root[next_lo_node])
-                to_accumulate_lo[start_index] = 1;
+            {
+                const bool next_lo_bot_sink = lo_bdd_node_index[next_lo_node] == BOT_SINK_INDICATOR_CUDA;
+                if (!next_lo_bot_sink)
+                    next_hop_backprop_index[next_lo_node - start_offset_next_hop] = bdd_node_idx; // without atomic for randomization.
+            }
 
-            if(cur_c_from_root + hi_cost[layer_idx] <= cost_from_root[hi_bdd_node_index[bdd_node_idx]])
-                to_accumulate_hi[start_index] = 1;
+            if(cur_c_from_root + hi_cost[layer_idx] <= cost_from_root[next_hi_node])
+            {
+                const bool next_hi_bot_sink = lo_bdd_node_index[next_hi_node] == BOT_SINK_INDICATOR_CUDA;
+                if (!next_hi_bot_sink)
+                    next_hop_backprop_index[next_hi_node - start_offset_next_hop] = bdd_node_idx; // without atomic for randomization.
+            }
         }
     }
 
     template<typename REAL>
-    __global__ void propagate_grad_cost_from_root_cuda(const int cur_num_bdd_nodes, const int start_offset,
+    __global__ void propagate_grad_cost_from_root_cuda(const int cur_num_bdd_nodes, const int start_offset, const int start_offset_next_hop,
                                                 const int* const __restrict__ lo_bdd_node_index, 
                                                 const int* const __restrict__ hi_bdd_node_index, 
                                                 const int* const __restrict__ bdd_node_to_layer_map, 
-                                                const char* const __restrict__ to_accumulate_lo,
-                                                const char* const __restrict__ to_accumulate_hi,
+                                                const int* const __restrict__ next_hop_backprop_index,
                                                 REAL* __restrict__ grad_cost_from_root,
                                                 REAL* __restrict__ grad_lo_cost,
                                                 REAL* __restrict__ grad_hi_cost)
@@ -601,76 +611,27 @@ namespace LPMP {
             if (next_lo_node < 0)
                 continue; // nothing needs to be done for terminal node.
 
-            const char prop_from_lo = to_accumulate_lo[start_index];
-            const char prop_from_hi = to_accumulate_hi[start_index];
-
-            const int norm = prop_from_lo + prop_from_hi;
-            if (norm == 0)
-                continue;
-
             const int layer_idx = bdd_node_to_layer_map[bdd_node_idx];
-            if (prop_from_lo)
+            const int next_hi_node = hi_bdd_node_index[bdd_node_idx];
+            const bool next_lo_bot_sink = lo_bdd_node_index[next_lo_node] == BOT_SINK_INDICATOR_CUDA;
+            const bool next_hi_bot_sink = lo_bdd_node_index[next_hi_node] == BOT_SINK_INDICATOR_CUDA;
+
+            if (!next_lo_bot_sink && next_hop_backprop_index[next_lo_node - start_offset_next_hop] == bdd_node_idx)
             {
-                const REAL incoming_grad = grad_cost_from_root[next_lo_node] / norm;
+                const REAL incoming_grad = grad_cost_from_root[next_lo_node];
+                assert(isfinite(incoming_grad));
                 grad_cost_from_root[bdd_node_idx] += incoming_grad;
                 atomicAdd(&grad_lo_cost[layer_idx], incoming_grad);
             }
-            if (prop_from_hi)
+            if (!next_hi_bot_sink && next_hop_backprop_index[next_hi_node - start_offset_next_hop] == bdd_node_idx)
             {
-                const REAL incoming_grad = grad_cost_from_root[hi_bdd_node_index[bdd_node_idx]] / norm;
+                const REAL incoming_grad = grad_cost_from_root[next_hi_node];
+                assert(isfinite(incoming_grad));
                 grad_cost_from_root[bdd_node_idx] += incoming_grad;
                 atomicAdd(&grad_hi_cost[layer_idx], incoming_grad);
             }
         }
     }
-
-    template<typename REAL>
-    __global__ void debug_grad_cost_from_root_indices_cuda(const int cur_num_bdd_nodes, const int start_offset, const int start_offset_next,
-                                                            const int* const __restrict__ lo_bdd_node_index, 
-                                                            const int* const __restrict__ hi_bdd_node_index, 
-                                                            const int* const __restrict__ bdd_node_to_layer_map, 
-                                                            const REAL* const __restrict__ lo_cost,
-                                                            const REAL* const __restrict__ hi_cost,
-                                                            const char* const __restrict__ to_accumulate_lo,
-                                                            const char* const __restrict__ to_accumulate_hi,
-                                                            const REAL* const __restrict__ cost_from_root, 
-                                                            int* next_hop_propagated)
-    {
-        const int start_index = blockIdx.x * blockDim.x + threadIdx.x;
-        const int num_threads = blockDim.x * gridDim.x;
-        for (int bdd_node_idx = start_index + start_offset; bdd_node_idx < cur_num_bdd_nodes + start_offset; bdd_node_idx += num_threads) 
-        {
-            const int next_lo_node = lo_bdd_node_index[bdd_node_idx];
-            if (next_lo_node < 0)
-                continue; // nothing needs to be done for terminal node.
-            
-            if(to_accumulate_lo[start_index])
-                atomicAdd(&next_hop_propagated[next_lo_node - start_offset_next], 1);
-
-            if(to_accumulate_hi[start_index])
-                atomicAdd(&next_hop_propagated[hi_bdd_node_index[bdd_node_idx] - start_offset_next], 1);
-
-            if (!to_accumulate_lo[start_index] && !to_accumulate_hi[start_index])
-            {
-                const int layer_idx = bdd_node_to_layer_map[bdd_node_idx];
-                // printf("lo: computed r cost: %f, existing r cost: %f\n", cost_from_root[bdd_node_idx] + lo_cost[layer_idx], cost_from_root[next_lo_node]);
-                // printf("hi: computed r cost: %f, existing r cost: %f\n", cost_from_root[bdd_node_idx] + hi_cost[layer_idx], cost_from_root[hi_bdd_node_index[bdd_node_idx]]);
-            }
-        }
-    }
-
-    template<typename REAL>
-    struct check_grad_cost_from_root_propagation_func {
-        const REAL* grad_cost_from_root_local;
-        const int* lo_bdd_node_index_local;
-        const int* propagated;
-        __host__ __device__ void operator()(const int bdd_node_idx_local) const
-        {
-            // if (grad_cost_from_root_local[bdd_node_idx_local] != 0.0)
-            if (lo_bdd_node_index_local[bdd_node_idx_local] >= 0)
-                assert(propagated[bdd_node_idx_local] > 0);
-        }
-    };
 
     template<typename REAL>
     void bdd_cuda_learned_mma<REAL>::compute_grad_cost_from_root(
@@ -679,63 +640,35 @@ namespace LPMP {
         thrust::device_ptr<REAL> grad_hi_cost,          // accumulates gradient for hop_index
         const int hop_index)
     {
-        // this->flush_forward_states();
-        // this->forward_run();
         assert(hop_index < this->nr_hops());
         const int start_offset = hop_index > 0 ? this->cum_nr_bdd_nodes_per_hop_dist_[hop_index - 1] : 0;
         const int cur_num_bdd_nodes = this->nr_bdd_nodes(hop_index);
         const int blockCount = ceil(cur_num_bdd_nodes / (float) NUM_THREADS_CUDA);
 
-        thrust::device_vector<char> to_accumulate_lo(cur_num_bdd_nodes, 0);
-        thrust::device_vector<char> to_accumulate_hi(cur_num_bdd_nodes, 0);
+        thrust::device_vector<int> next_hop_backprop_index(cur_num_bdd_nodes, -1);
 
-        grad_cost_from_root_indices_cuda<<<blockCount, NUM_THREADS_CUDA>>>(cur_num_bdd_nodes, start_offset,
+        grad_cost_from_root_indices_cuda<<<blockCount, NUM_THREADS_CUDA>>>(cur_num_bdd_nodes, start_offset, start_offset + cur_num_bdd_nodes,
                                                             thrust::raw_pointer_cast(this->lo_bdd_node_index_.data()),
                                                             thrust::raw_pointer_cast(this->hi_bdd_node_index_.data()),
                                                             thrust::raw_pointer_cast(this->bdd_node_to_layer_map_.data()),
                                                             thrust::raw_pointer_cast(this->lo_cost_.data()),
                                                             thrust::raw_pointer_cast(this->hi_cost_.data()),
                                                             thrust::raw_pointer_cast(this->cost_from_root_.data()),
-                                                            thrust::raw_pointer_cast(to_accumulate_lo.data()),
-                                                            thrust::raw_pointer_cast(to_accumulate_hi.data()));
+                                                            thrust::raw_pointer_cast(next_hop_backprop_index.data()));
 
-        propagate_grad_cost_from_root_cuda<<<blockCount, NUM_THREADS_CUDA>>>(cur_num_bdd_nodes, start_offset,
+        propagate_grad_cost_from_root_cuda<<<blockCount, NUM_THREADS_CUDA>>>(cur_num_bdd_nodes, start_offset, start_offset + cur_num_bdd_nodes,
                                                             thrust::raw_pointer_cast(this->lo_bdd_node_index_.data()),
                                                             thrust::raw_pointer_cast(this->hi_bdd_node_index_.data()),
                                                             thrust::raw_pointer_cast(this->bdd_node_to_layer_map_.data()),
-                                                            thrust::raw_pointer_cast(to_accumulate_lo.data()),
-                                                            thrust::raw_pointer_cast(to_accumulate_hi.data()),
+                                                            thrust::raw_pointer_cast(next_hop_backprop_index.data()),
                                                             thrust::raw_pointer_cast(grad_cost_from_root),
                                                             thrust::raw_pointer_cast(grad_lo_cost),
                                                             thrust::raw_pointer_cast(grad_hi_cost));
-        #ifndef NDEBUG
-            // Make sure non-zero gradients in hop_index + 1 are propagated back to hop_index.
-            const int num_bdd_nodes_next_hop = this->nr_bdd_nodes(hop_index + 1);
-            const int start_offset_next_hop = this->cum_nr_bdd_nodes_per_hop_dist_[hop_index];
 
-            thrust::device_vector<int> next_hop_propagated(num_bdd_nodes_next_hop, 0);
-            debug_grad_cost_from_root_indices_cuda<<<blockCount, NUM_THREADS_CUDA>>>(cur_num_bdd_nodes, start_offset, start_offset_next_hop,
-                                                            thrust::raw_pointer_cast(this->lo_bdd_node_index_.data()),
-                                                            thrust::raw_pointer_cast(this->hi_bdd_node_index_.data()),
-                                                            thrust::raw_pointer_cast(this->bdd_node_to_layer_map_.data()),
-                                                            thrust::raw_pointer_cast(this->lo_cost_.data()),
-                                                            thrust::raw_pointer_cast(this->hi_cost_.data()),
-                                                            thrust::raw_pointer_cast(to_accumulate_lo.data()),
-                                                            thrust::raw_pointer_cast(to_accumulate_hi.data()),
-                                                            thrust::raw_pointer_cast(this->cost_from_root_.data()),
-                                                            thrust::raw_pointer_cast(next_hop_propagated.data()));
-            
-            check_grad_cost_from_root_propagation_func<REAL> check_prop({
-                                                        thrust::raw_pointer_cast(grad_cost_from_root + start_offset_next_hop),
-                                                        thrust::raw_pointer_cast(this->lo_bdd_node_index_.data() + start_offset_next_hop),
-                                                        thrust::raw_pointer_cast(next_hop_propagated.data())});
-            
-            thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + num_bdd_nodes_next_hop, check_prop);
-        #endif
     }
 
     template<typename REAL>
-    __global__ void grad_cost_from_terminal_cuda(const int cur_num_bdd_nodes, const int start_offset,
+    __global__ void grad_cost_from_terminal_cuda(const int cur_num_bdd_nodes, const int start_offset, const unsigned int seed,
                                             const int* const __restrict__ lo_bdd_node_index, 
                                             const int* const __restrict__ hi_bdd_node_index, 
                                             const int* const __restrict__ bdd_node_to_layer_map, 
@@ -749,6 +682,7 @@ namespace LPMP {
     {
         const int start_index = blockIdx.x * blockDim.x + threadIdx.x;
         const int num_threads = blockDim.x * gridDim.x;
+
         for (int bdd_node_idx = start_index + start_offset; bdd_node_idx < cur_num_bdd_nodes + start_offset; bdd_node_idx += num_threads) 
         {
             const int next_lo_node = lo_bdd_node_index[bdd_node_idx];
@@ -758,20 +692,29 @@ namespace LPMP {
             const int layer_idx = bdd_node_to_layer_map[bdd_node_idx];
 
             const REAL current_incoming_grad = grad_cost_from_terminal[bdd_node_idx];
+            assert(isfinite(current_incoming_grad));
             const int next_hi_node = hi_bdd_node_index[bdd_node_idx];
 
             const float lo_path_cost = lo_cost[layer_idx] + cost_from_terminal[next_lo_node];
             const float hi_path_cost = hi_cost[layer_idx] + cost_from_terminal[next_hi_node];
-            const int n = 1 + (hi_path_cost == lo_path_cost); 
-            if (hi_path_cost <= lo_path_cost)
-            { // min is coming from hi_arc:
-                atomicAdd(&grad_cost_from_terminal[next_hi_node], current_incoming_grad / n);
-                atomicAdd(&grad_hi_cost[layer_idx], current_incoming_grad / n);
-            }
-            if (lo_path_cost <= hi_path_cost)
+            bool backprop_lo = lo_path_cost < hi_path_cost;
+            if (hi_path_cost == lo_path_cost)
             {
-                atomicAdd(&grad_cost_from_terminal[next_lo_node], current_incoming_grad / n);
-                atomicAdd(&grad_lo_cost[layer_idx], current_incoming_grad / n);
+                thrust::default_random_engine rng;
+                thrust::uniform_int_distribution<int> dist(0, 1);
+                rng.discard(bdd_node_idx + seed);
+                const int gradient_index = dist(rng);
+                backprop_lo = gradient_index == 0;
+            }
+            if (backprop_lo)
+            { // min is coming from lo arc:
+                atomicAdd(&grad_cost_from_terminal[next_lo_node], current_incoming_grad);
+                atomicAdd(&grad_lo_cost[layer_idx], current_incoming_grad);
+            }
+            else
+            {
+                atomicAdd(&grad_cost_from_terminal[next_hi_node], current_incoming_grad);
+                atomicAdd(&grad_hi_cost[layer_idx], current_incoming_grad);
             }
         }
     }
@@ -787,7 +730,7 @@ namespace LPMP {
         const int start_offset = hop_index > 0 ? this->cum_nr_bdd_nodes_per_hop_dist_[hop_index - 1] : 0;
         const int cur_num_bdd_nodes = this->nr_bdd_nodes(hop_index);
         const int blockCount = ceil(cur_num_bdd_nodes / (float) NUM_THREADS_CUDA);
-        grad_cost_from_terminal_cuda<<<blockCount, NUM_THREADS_CUDA>>>(cur_num_bdd_nodes, start_offset,
+        grad_cost_from_terminal_cuda<<<blockCount, NUM_THREADS_CUDA>>>(cur_num_bdd_nodes, start_offset, time(NULL),
                                                         thrust::raw_pointer_cast(this->lo_bdd_node_index_.data()),
                                                         thrust::raw_pointer_cast(this->hi_bdd_node_index_.data()),
                                                         thrust::raw_pointer_cast(this->bdd_node_to_layer_map_.data()),
@@ -811,8 +754,8 @@ namespace LPMP {
                                                     const REAL* const __restrict__ cost_from_terminal,
                                                     const REAL* const __restrict__ mm_lo_local, 
                                                     const REAL* const __restrict__ mm_hi_local,
-                                                    char* __restrict__ to_accumulate_lo,
-                                                    char* __restrict__ to_accumulate_hi,
+                                                    int* __restrict__ to_accumulate_lo,
+                                                    int* __restrict__ to_accumulate_hi,
                                                     int* __restrict__ num_adds_lo,
                                                     int* __restrict__ num_adds_hi)
     {
@@ -842,6 +785,26 @@ namespace LPMP {
         }
     }
 
+    struct pick_subgradient_grad_mm_nodes {
+        int* num_adds;
+        const int* primal_index;
+        unsigned int N; // to generate different random number each time.
+        const unsigned long num_vars;
+        __host__ __device__ void operator()(const int i)
+        {
+            if (primal_index[i] >= num_vars)
+                return;
+
+            thrust::default_random_engine rng;
+            const int maxv = num_adds[i];
+            assert(maxv > 0);
+            thrust::uniform_int_distribution<int> dist(0, maxv - 1);
+            rng.discard(i + N);
+            const int gradient_index = dist(rng);
+            num_adds[i] = gradient_index;
+        }
+    };
+
     template<typename REAL>
     struct grad_mm_bdd_node_costs_func {
         const REAL omega_scalar;
@@ -851,10 +814,10 @@ namespace LPMP {
         const int* bdd_node_to_layer_map;
         const int* lo_bdd_node_index;
         const int* hi_bdd_node_index;
-        const int* num_adds_lo;
-        const int* num_adds_hi;
-        const char* to_accumulate_lo;
-        const char* to_accumulate_hi;
+        const int* grad_index_lo;
+        const int* grad_index_hi;
+        const int* to_accumulate_lo;
+        const int* to_accumulate_hi;
         REAL* grad_cost_from_root;
         REAL* grad_cost_from_terminal;
         __host__ __device__ void operator()(const int bdd_node_idx)
@@ -866,17 +829,32 @@ namespace LPMP {
 
             const int layer_idx = bdd_node_to_layer_map[bdd_node_idx];
             const REAL incoming_grad = omega_scalar * grad_mm_diff[layer_idx];
-            if (to_accumulate_lo[bdd_node_idx - start_offset])
+            assert(isfinite(incoming_grad));
+
+            const int local_node_idx = bdd_node_idx - start_offset;
+            const int cur_acc_lo = to_accumulate_lo[local_node_idx];
+            if (cur_acc_lo - 1 == grad_index_lo[layer_idx])
             {
-                const int n = num_adds_lo[layer_idx - start_offset_layer];
-                grad_cost_from_root[bdd_node_idx] -= incoming_grad / n;
-                atomicAdd(&grad_cost_from_terminal[next_lo_node], -incoming_grad / n);
+                const bool acc_lo_due_first_node = local_node_idx == 0 || layer_idx != bdd_node_to_layer_map[bdd_node_idx - 1];
+                const bool acc_lo_due_rest = local_node_idx != 0 && cur_acc_lo > to_accumulate_lo[local_node_idx - 1]; 
+
+                if (acc_lo_due_first_node || acc_lo_due_rest)
+                {
+                    grad_cost_from_root[bdd_node_idx] -= incoming_grad;
+                    atomicAdd(&grad_cost_from_terminal[next_lo_node], -incoming_grad);
+                }
             }
-            if (to_accumulate_hi[bdd_node_idx - start_offset])
+            const int cur_acc_hi = to_accumulate_hi[local_node_idx];
+            if (cur_acc_hi - 1 == grad_index_hi[layer_idx])
             {
-                const int n = num_adds_hi[layer_idx - start_offset_layer];
-                grad_cost_from_root[bdd_node_idx] += incoming_grad / n;
-                atomicAdd(&grad_cost_from_terminal[next_hi_node], incoming_grad / n);
+                const bool acc_hi_due_first_node = local_node_idx == 0 || layer_idx != bdd_node_to_layer_map[bdd_node_idx - 1];
+                const bool acc_hi_due_rest = local_node_idx != 0 && cur_acc_hi > to_accumulate_hi[local_node_idx - 1]; 
+
+                if (acc_hi_due_first_node || acc_hi_due_rest)
+                {
+                    grad_cost_from_root[bdd_node_idx] += incoming_grad;
+                    atomicAdd(&grad_cost_from_terminal[next_hi_node], incoming_grad);
+                }
             }
         }
     };
@@ -888,8 +866,6 @@ namespace LPMP {
         const unsigned long num_vars;
         const int* primal_index;
         const REAL* grad_mm_diff;
-        const int* num_adds_lo;
-        const int* num_adds_hi;
         REAL* grad_lo_cost;
         REAL* grad_hi_cost;
         __host__ __device__ void operator()(const int layer_idx)
@@ -898,12 +874,9 @@ namespace LPMP {
                 return;
 
             const REAL incoming_grad = omega_scalar * grad_mm_diff[layer_idx];
-            const int n_lo = num_adds_lo[layer_idx - start_offset_layer];
-            assert(n_lo > 0);
-            grad_lo_cost[layer_idx] -= incoming_grad / n_lo;
-            const int n_hi = num_adds_hi[layer_idx - start_offset_layer];
-            assert(n_hi > 0);
-            grad_hi_cost[layer_idx] += incoming_grad / n_hi;
+            assert(isfinite(incoming_grad));
+            grad_lo_cost[layer_idx] -= incoming_grad;
+            grad_hi_cost[layer_idx] += incoming_grad;
         }
     };
 
@@ -917,8 +890,7 @@ namespace LPMP {
         const unsigned long num_vars;
         __host__ __device__ void operator()(const int i)
         {
-            const int primal = primal_index[i];
-            if (primal >= num_vars)
+            if (primal_index[i] >= num_vars)
                 out[i] = 0;
             else
                 out[i] += grad_mm[i] * (mm_hi[i] - mm_lo[i]);
@@ -969,8 +941,8 @@ namespace LPMP {
         thrust::device_vector<int> num_adds_lo(cur_num_layers, 0);
         thrust::device_vector<int> num_adds_hi(cur_num_layers, 0);
 
-        thrust::device_vector<char> to_accumulate_lo(cur_num_bdd_nodes, 0);
-        thrust::device_vector<char> to_accumulate_hi(cur_num_bdd_nodes, 0);
+        thrust::device_vector<int> to_accumulate_lo(cur_num_bdd_nodes, 0);
+        thrust::device_vector<int> to_accumulate_hi(cur_num_bdd_nodes, 0);
 
         grad_min_marginals_indices_cuda<<<blockCount, NUM_THREADS_CUDA>>>(cur_num_bdd_nodes, num_nodes_processed, start_offset_layer,
                                                 thrust::raw_pointer_cast(this->lo_bdd_node_index_.data()),
@@ -987,6 +959,26 @@ namespace LPMP {
                                                 thrust::raw_pointer_cast(num_adds_lo.data()),
                                                 thrust::raw_pointer_cast(num_adds_hi.data()));
 
+        thrust::inclusive_scan_by_key(this->bdd_node_to_layer_map_.begin() + num_nodes_processed, 
+                                    this->bdd_node_to_layer_map_.begin() + num_nodes_processed + cur_num_bdd_nodes,
+                                    to_accumulate_lo.begin(), to_accumulate_lo.begin());
+
+        thrust::inclusive_scan_by_key(this->bdd_node_to_layer_map_.begin() + num_nodes_processed, 
+                                    this->bdd_node_to_layer_map_.begin() + num_nodes_processed + cur_num_bdd_nodes,
+                                    to_accumulate_hi.begin(), to_accumulate_hi.begin());
+
+        unsigned int seed = time(NULL);
+        pick_subgradient_grad_mm_nodes pick_grad_lo({thrust::raw_pointer_cast(num_adds_lo.data()), 
+                                                thrust::raw_pointer_cast(this->primal_variable_index_.data() + start_offset_layer),
+                                                seed, this->nr_variables()});
+        thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + num_adds_lo.size(), pick_grad_lo);
+
+        seed = time(NULL);
+        pick_subgradient_grad_mm_nodes pick_grad_hi({thrust::raw_pointer_cast(num_adds_hi.data()),
+                                                thrust::raw_pointer_cast(this->primal_variable_index_.data() + start_offset_layer),
+                                                seed, this->nr_variables()});
+        thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + num_adds_hi.size(), pick_grad_hi);
+
         grad_mm_bdd_node_costs_func<REAL> grad_mm_bdd_node_costs({omega_scalar, num_nodes_processed, start_offset_layer,
                                                 thrust::raw_pointer_cast(incoming_grad_mm_diff_hop),
                                                 thrust::raw_pointer_cast(this->bdd_node_to_layer_map_.data()),
@@ -998,6 +990,7 @@ namespace LPMP {
                                                 thrust::raw_pointer_cast(to_accumulate_hi.data()),
                                                 thrust::raw_pointer_cast(grad_cost_from_root),
                                                 thrust::raw_pointer_cast(grad_cost_from_terminal)});
+
         thrust::for_each(thrust::make_counting_iterator<int>(0) + num_nodes_processed, 
                         thrust::make_counting_iterator<int>(0) + num_nodes_processed + cur_num_bdd_nodes,
                         grad_mm_bdd_node_costs);
@@ -1005,8 +998,6 @@ namespace LPMP {
         grad_mm_bdd_arcs_func<REAL> grad_mm_bdd_arcs({omega_scalar, start_offset_layer, this->nr_variables(),
                                                 thrust::raw_pointer_cast(this->primal_variable_index_.data()),
                                                 thrust::raw_pointer_cast(incoming_grad_mm_diff_hop),
-                                                thrust::raw_pointer_cast(num_adds_lo.data()),
-                                                thrust::raw_pointer_cast(num_adds_hi.data()),
                                                 thrust::raw_pointer_cast(grad_lo_cost),
                                                 thrust::raw_pointer_cast(grad_hi_cost)});
         thrust::for_each(thrust::make_counting_iterator<int>(0) + start_offset_layer, thrust::make_counting_iterator<int>(0) + end_offset_layer, grad_mm_bdd_arcs);
@@ -1058,7 +1049,7 @@ namespace LPMP {
                 return; 
             }
             const REAL cur_mm_diff = mm_diff[i];
-            if (cur_mm_diff > 0)
+            if (cur_mm_diff >= 0)
                 grad_deff_mm[i] = grad_hi_cost[i];
             else
                 grad_deff_mm[i] = -grad_lo_cost[i];
