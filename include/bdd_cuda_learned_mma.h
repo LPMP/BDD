@@ -107,6 +107,7 @@ namespace LPMP {
             // Compute gradient of forward_iteration_learned_mm_dist.
             // Assumes solver state is set to state before forward_iteration_learned_mm_dist was called. 
             void grad_forward_iteration_learned_mm_dist(
+                unsigned int seed,
                 thrust::device_ptr<REAL> deferred_min_marg_diff, // deferred min-marginals used in forward pass, output will contain min-marginals hi after forward iteration (not useful)
                 const thrust::device_ptr<const REAL> dist_weights, // distribution weights used in the forward pass.
                 thrust::device_ptr<REAL> grad_lo_cost, // Input: incoming grad w.r.t lo_cost current iteration and Outputs in-place to compute grad. lo_cost before iteration.
@@ -123,6 +124,7 @@ namespace LPMP {
             // Compute gradient of backward_iteration_learned_mm_dist.
             // Assumes solver state is set to state before backward_iteration_learned_mm_dist was called. 
             void grad_backward_iteration_learned_mm_dist(
+                unsigned int seed,
                 thrust::device_ptr<REAL> deferred_min_marg_diff, // deferred min-marginals used in forward pass, output will contains min-marginals hi after backward iteration (not useful)
                 const thrust::device_ptr<const REAL> dist_weights, // distribution weights used in the forward pass.
                 thrust::device_ptr<REAL> grad_lo_cost, // Input: incoming grad w.r.t lo_cost current iteration and Outputs in-place to compute grad. lo_cost before iteration.
@@ -141,6 +143,7 @@ namespace LPMP {
             // Rest of the hi / lo costs remain unchanged.
             // The functions takes as input dL / d (hi / lo costs new), dL / d (current mm difference), dL / d (cost_from_root / cost_from_terminal) and updates in-place.
             void grad_hop_update_learned_mm_dist(
+                unsigned int seed,
                 const thrust::device_ptr<const REAL> before_update_lo_cost,
                 const thrust::device_ptr<const REAL> before_update_hi_cost,
                 thrust::device_ptr<REAL> cur_min_marg_diff, // current min-marginals which were subtracted in present iteration.
@@ -159,29 +162,33 @@ namespace LPMP {
                 const thrust::device_ptr<const REAL> omega_vec = nullptr
                 );
 
-            void compute_grad_cost_from_root(thrust::device_ptr<REAL> grad_cost_from_root,  // incoming gradient of hop_index + 1 root costs is used to compute grad for hop_index root costs.
-                                            thrust::device_ptr<REAL> grad_lo_cost,          // accumulates gradient for hop_index
-                                            thrust::device_ptr<REAL> grad_hi_cost,          // accumulates gradient for hop_index
-                                            const int hop_index);
+            void compute_grad_cost_from_root(
+                thrust::device_ptr<REAL> grad_cost_from_root,  // incoming gradient of hop_index + 1 root costs is used to compute grad for hop_index root costs.
+                thrust::device_ptr<REAL> grad_lo_cost,          // accumulates gradient for hop_index
+                thrust::device_ptr<REAL> grad_hi_cost,          // accumulates gradient for hop_index
+                const int hop_index);
 
-            void compute_grad_cost_from_terminal(thrust::device_ptr<REAL> grad_cost_from_terminal,  // incoming gradient of hop_index terminal costs is used to compute grad for hop_index + 1 terminal costs.
-                                                thrust::device_ptr<REAL> grad_lo_cost,          // accumulates gradient for hop_index
-                                                thrust::device_ptr<REAL> grad_hi_cost,          // accumulates gradient for hop_index
-                                                const int hop_index);
+            void compute_grad_cost_from_terminal(
+                unsigned int seed,
+                thrust::device_ptr<REAL> grad_cost_from_terminal,  // incoming gradient of hop_index terminal costs is used to compute grad for hop_index + 1 terminal costs.
+                thrust::device_ptr<REAL> grad_lo_cost,          // accumulates gradient for hop_index
+                thrust::device_ptr<REAL> grad_hi_cost,          // accumulates gradient for hop_index
+                const int hop_index);
 
-            void grad_mm_diff_of_hop(const thrust::device_ptr<const REAL> before_update_lo_cost, // min-marginal computation was done on input costs (not updated) costs.
-                                    const thrust::device_ptr<const REAL> before_update_hi_cost,
-                                    thrust::device_ptr<REAL> memory_for_mm_hi,
-                                    thrust::device_ptr<REAL> incoming_grad_mm_diff_hop, // gradient of min-marginal diff. output is backpropagates through multiplication by omega .
-                                    thrust::device_ptr<REAL> grad_lo_cost,
-                                    thrust::device_ptr<REAL> grad_hi_cost,
-                                    thrust::device_ptr<REAL> grad_cost_from_root,
-                                    thrust::device_ptr<REAL> grad_cost_from_terminal,
-                                    thrust::device_ptr<REAL> grad_omega,    // Output: contains grad w.r.t omega (size = 1) if omega_vec = nullptr otherwise size should be same size of omega_vec.
-                                    const int hop_index, 
-                                    const REAL omega_scalar, // will not be used if omega_vec != nullptr
-                                    const thrust::device_ptr<const REAL> omega_vec = nullptr,
-                                    const bool backprop_omega = true
-                                    );
+            void grad_mm_diff_of_hop(
+                unsigned int seed,
+                const thrust::device_ptr<const REAL> before_update_lo_cost, // min-marginal computation was done on input costs (not updated) costs.
+                const thrust::device_ptr<const REAL> before_update_hi_cost,
+                thrust::device_ptr<REAL> memory_for_mm_hi,
+                thrust::device_ptr<REAL> incoming_grad_mm_diff_hop, // gradient of min-marginal diff. output is backpropagates through multiplication by omega .
+                thrust::device_ptr<REAL> grad_lo_cost,
+                thrust::device_ptr<REAL> grad_hi_cost,
+                thrust::device_ptr<REAL> grad_cost_from_root,
+                thrust::device_ptr<REAL> grad_cost_from_terminal,
+                thrust::device_ptr<REAL> grad_omega,    // Output: contains grad w.r.t omega (size = 1) if omega_vec = nullptr otherwise size should be same size of omega_vec.
+                const int hop_index, 
+                const REAL omega_scalar, // will not be used if omega_vec != nullptr
+                const thrust::device_ptr<const REAL> omega_vec = nullptr,
+                const bool backprop_omega = true);
     };
 }
