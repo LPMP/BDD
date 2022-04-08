@@ -7,6 +7,7 @@
 #include "two_dimensional_variable_array.hxx"
 #include "bdd_preprocessor.h"
 #include <sstream>
+#include <fstream>
 #include "cuda_utils.h"
 #include <thrust/sort.h>
 #include <thrust/device_vector.h>
@@ -160,6 +161,12 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
                 ", nr_bdds: "+ std::to_string(solver.nr_bdds()) +
                 ", nr_layers: "+ std::to_string(solver.nr_layers());
                 })
+        .def("export_ss", [](const bdd_type& solver, const std::string output_path){
+            std::ofstream os(output_path, std::ios::binary);
+            cereal::BinaryOutputArchive archive(os);
+            archive(solver);
+            std::cout<<"Exported solver data to path: "<<output_path<<"\n";
+        })
         .def("nr_primal_variables", [](const bdd_type& solver) { return solver.nr_variables(); })
         .def("nr_layers", [](const bdd_type& solver) { return solver.nr_layers(); })
         .def("nr_layers", [](const bdd_type& solver, const int hop_index) { return solver.nr_layers(hop_index); })

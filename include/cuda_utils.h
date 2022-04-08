@@ -185,6 +185,7 @@ inline void coo_sorting(thrust::device_vector<int>& i, thrust::device_vector<int
 template<typename T>
 struct add_noise_func
 {
+    unsigned int seed;
     T noise_mag;
     T* vec;
 
@@ -192,15 +193,15 @@ struct add_noise_func
     {
         thrust::default_random_engine rng;
         thrust::uniform_real_distribution<T> dist(-noise_mag, noise_mag);
-        rng.discard(n);
+        rng.discard(seed + n);
         vec[n] += dist(rng);
     }
 };
 
 template<typename T>
-inline void add_noise(thrust::device_ptr<T> v, const size_t num, const T noise_magnitude)
+inline void add_noise(thrust::device_ptr<T> v, const size_t num, const T noise_magnitude, const unsigned int seed)
 {
-    add_noise_func<T> add_noise({noise_magnitude, thrust::raw_pointer_cast(v)});
+    add_noise_func<T> add_noise({seed, noise_magnitude, thrust::raw_pointer_cast(v)});
     thrust::for_each(thrust::make_counting_iterator<unsigned int>(0), thrust::make_counting_iterator<unsigned int>(0) + num, add_noise);
 }
 

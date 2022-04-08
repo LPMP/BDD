@@ -254,9 +254,6 @@ namespace LPMP {
         if (track_grad_for_num_itr == 0)
             return;
 
-        // add_noise<REAL>(this->lo_cost_.data(), this->nr_layers(), (REAL) 1e-6);
-        // add_noise<REAL>(this->hi_cost_.data(), this->nr_layers(), (REAL) 1e-6);
-
         thrust::fill(grad_dist_weights_out, grad_dist_weights_out + this->nr_layers(), 0.0);
         if (!omega_vec.get())
             thrust::fill(grad_omega, grad_omega + 1, 0.0); // omega_scalar is used.
@@ -281,9 +278,12 @@ namespace LPMP {
         {
             // To compute grad for iteration itr, first take the solver to state which was input to iteration itr.
             const int cache_itr_index = costs_cache.check_and_get_cache(itr, this->lo_cost_.data(), this->hi_cost_.data(), this->deffered_mm_diff_.data());
+            this->flush_forward_states();
+            this->flush_backward_states();
+
             assert(cache_itr_index <= itr);
             iterations(dist_weights, itr - cache_itr_index, omega_scalar, 0.0, omega_vec); // run solver for 'itr - cache_itr_index' many more iterations.
-    
+
             // save costs and mm for later in GPU memory.
             const auto cur_costs = this->get_solver_costs();
 
@@ -473,6 +473,8 @@ namespace LPMP {
         forward_iteration_learned_mm_dist(dist_weights, deferred_min_marg_diff, omega_scalar, omega_vec);
         // lo_cost_out_, hi_cost_out_ now contain dual costs before this.
 
+        this->backward_run(false);
+
         thrust::device_vector<REAL> grad_delta_lo(this->delta_lo_.size(), 0.0);
         thrust::device_vector<REAL> grad_delta_hi(this->delta_hi_.size(), 0.0);
 
@@ -521,10 +523,12 @@ namespace LPMP {
         backward_iteration_learned_mm_dist(dist_weights, deferred_min_marg_diff, omega_scalar, omega_vec);
         // lo_cost_out_, hi_cost_out_ now contain dual costs before this.
 
+        this->forward_run();
+
         thrust::device_vector<REAL> grad_delta_lo(this->delta_lo_.size(), 0.0);
         thrust::device_vector<REAL> grad_delta_hi(this->delta_hi_.size(), 0.0);
 
-        for (int s = 0; s < this->cum_nr_bdd_nodes_per_hop_dist_.size() - 1; s++)
+        for (int s = 0; s < this->nr_hops(); s++)
         {
             compute_grad_cost_from_terminal(grad_cost_from_terminal, grad_lo_cost, grad_hi_cost, s);
 
@@ -634,6 +638,7 @@ namespace LPMP {
         thrust::device_ptr<REAL> grad_hi_cost,          // accumulates gradient for hop_index
         const int hop_index)
     {
+        assert(this->forward_state_valid_);
         assert(hop_index < this->nr_hops());
         thrust::device_vector<int> next_hop_prev_best_nodes(this->nr_bdd_nodes(hop_index + 1), -1);
         thrust::device_vector<REAL> next_hop_root_costs(this->nr_bdd_nodes(hop_index + 1), CUDART_INF_F_HOST);
@@ -716,6 +721,7 @@ namespace LPMP {
         thrust::device_ptr<REAL> grad_hi_cost,          // accumulates gradient for hop_index
         const int hop_index)
     {
+        assert(this->backward_state_valid_);
         assert(hop_index < this->nr_hops());
         const int start_offset = hop_index > 0 ? this->cum_nr_bdd_nodes_per_hop_dist_[hop_index - 1] : 0;
         const int cur_num_bdd_nodes = this->nr_bdd_nodes(hop_index);
@@ -886,6 +892,9 @@ namespace LPMP {
         const thrust::device_ptr<const REAL> omega_vec,
         const bool backprop_omega)
     {
+        assert(this->forward_state_valid_);
+        assert(this->backward_state_valid_);
+
         const int start_offset_layer = hop_index > 0 ? this->cum_nr_layers_per_hop_dist_[hop_index - 1]: 0;
         const int end_offset_layer = this->cum_nr_layers_per_hop_dist_[hop_index];
         const int cur_num_layers = end_offset_layer - start_offset_layer;
