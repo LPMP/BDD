@@ -64,7 +64,8 @@ namespace LPMP {
             void bdds_solution_cuda(thrust::device_ptr<REAL> sol); // Computes argmin for each BDD separately and sets in sol.
             two_dim_variable_array<REAL> bdds_solution(); // Returns the solution on CPU and laid out in similar way as the output of min_marginals()
 
-            std::vector<REAL> compute_primal_objective_vector();
+            void compute_primal_objective_vec(thrust::device_ptr<REAL> primal_obj);
+            std::vector<REAL> get_primal_objective_vector_host();
 
             size_t nr_variables() const { return nr_vars_; }
             size_t nr_bdds() const { return nr_bdds_; }

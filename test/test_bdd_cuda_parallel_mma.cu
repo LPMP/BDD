@@ -204,7 +204,7 @@ void test_problem(const char* instance, const double expected_lb, const double t
     for(size_t i=0; i<solver.nr_variables(); ++i)
         solver.set_cost(ilp.objective()[i], i);
 
-    std::vector<double> cost_vector_before = solver.compute_primal_objective_vector();
+    std::vector<double> cost_vector_before = solver.get_primal_objective_vector_host();
     for(size_t i=0; i<solver.nr_variables(); ++i)
     {
         const auto diff = std::abs(ilp.objective()[i] - cost_vector_before[i]);
@@ -224,7 +224,7 @@ void test_problem(const char* instance, const double expected_lb, const double t
     std::cout<<"Final lower bound: "<<solver.lower_bound()<<", Expected: "<<expected_lb<<"\n";
     test(std::abs(solver.lower_bound() - expected_lb) <= tol);
 
-    std::vector<double> cost_vector_after = solver.compute_primal_objective_vector();
+    std::vector<double> cost_vector_after = solver.get_primal_objective_vector_host();
     for(size_t i=0; i<solver.nr_variables(); ++i)
     {
         const auto diff = std::abs(ilp.objective()[i] - cost_vector_after[i]);

@@ -452,7 +452,7 @@ void test_problem(const char* instance, const double expected_lb, const double o
     std::cout<<"Final lower bound: "<<solver.lower_bound()<<", Max. possible:  "<<expected_lb<<"\n\n\n";
 
     // Check feasibility:
-    std::vector<double> cost_vector_after = solver.compute_primal_objective_vector();
+    std::vector<double> cost_vector_after = solver.get_primal_objective_vector_host();
     for(size_t i=0; i<solver.nr_variables(); ++i)
     {
         const auto diff = std::abs(ilp.objective()[i] - cost_vector_after[i]);

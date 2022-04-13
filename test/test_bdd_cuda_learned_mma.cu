@@ -8,6 +8,15 @@
 using namespace LPMP;
 using namespace BDD;
 
+const char * two_simplex_non_unique_sols = 
+R"(Minimize
+1 x_1 + 1 x_2 + 1 x_3
++2 x_4 + 1 x_5 + 1 x_6
+Subject To
+x_1 + x_2 + x_3 + x_4 = 1
+x_4 + x_5 + x_6 = 2
+End)";
+
 const char * matching_3x3 = 
 R"(Minimize
 -2 x_11 - 1 x_12 - 1 x_13
@@ -209,7 +218,7 @@ struct isotropic_dist_w_func {
     }
 };
 
-void test_problem(const char* instance, const double expected_lb, const double tol = 1e-12)
+void test_problem(const char* instance, const double expected_lb, const double tol = 1e-8)
 {
     ILP_input ilp = ILP_parser::parse_string(instance);
     bdd_preprocessor bdd_pre(ilp);
@@ -219,7 +228,7 @@ void test_problem(const char* instance, const double expected_lb, const double t
     for(size_t i=0; i<solver.nr_variables(); ++i)
         solver.set_cost(ilp.objective()[i], i);
 
-    std::vector<double> cost_vector_before = solver.compute_primal_objective_vector();
+    std::vector<double> cost_vector_before = solver.get_primal_objective_vector_host();
     for(size_t i=0; i<solver.nr_variables(); ++i)
     {
         const auto diff = std::abs(ilp.objective()[i] - cost_vector_before[i]);
@@ -230,7 +239,6 @@ void test_problem(const char* instance, const double expected_lb, const double t
 
     const thrust::device_vector<int> primal_var_index = solver.get_primal_variable_index();
     const thrust::device_vector<int> num_bdds_var = solver.get_num_bdds_per_var();
-
     thrust::device_vector<double> dist_weights(primal_var_index.size());
 
     isotropic_dist_w_func func({thrust::raw_pointer_cast(primal_var_index.data()), 
@@ -239,12 +247,16 @@ void test_problem(const char* instance, const double expected_lb, const double t
                             solver.nr_variables()});
 
     thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + dist_weights.size(), func);
-    solver.iterations(dist_weights.data(), 200, 0.5);
+
+
+    thrust::device_vector<double> sol_avg(primal_var_index.size());
+    solver.iterations(dist_weights.data(), 500, 0.5, 1e-9, sol_avg.data(), 20, 0.9);
+    print_min_max(sol_avg.data(), "sol_avg", sol_avg.size());
     
     std::cout<<"Lower bound before distribute: "<<solver.lower_bound()<<", Expected: "<<expected_lb<<"\n";
     solver.distribute_delta();
 
-    std::vector<double> cost_vector_after = solver.compute_primal_objective_vector();
+    std::vector<double> cost_vector_after = solver.get_primal_objective_vector_host();
     for(size_t i=0; i<solver.nr_variables(); ++i)
     {
         const auto diff = std::abs(ilp.objective()[i] - cost_vector_after[i]);
@@ -259,6 +271,8 @@ void test_problem(const char* instance, const double expected_lb, const double t
 
 int main(int argc, char** argv)
 {
+    std::cout<<"two_simplex_non_unique_sols"<<"\n";
+    test_problem(two_simplex_non_unique_sols, 3.0);
     std::cout<<"matching_3x3"<<"\n";
     test_problem(matching_3x3, -6.0);
     std::cout<<"short_chain_shuffled"<<"\n";
