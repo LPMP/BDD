@@ -117,6 +117,23 @@ namespace LPMP {
 
         costs = options.ilp.objective();
 
+        if(options.take_cost_logarithms)
+        {
+            std::cout << "[bdd solver] Take logarithms of costs\n";
+            for(size_t i=0; i<costs.size(); ++i)
+            {
+                assert(costs[i] > 0);
+                costs[i] = std::log(costs[i]);
+            }
+        }
+
+        if(options.optimization == bdd_solver_options::optimization_type::maximization)
+        {
+            std::cout << "[bdd solver] Use negative costs due to maximization\n";
+            for(size_t i=0; i<costs.size(); ++i)
+                costs[i] = -costs[i];
+        }
+
         const bool normalize_constraints = [&]() {
             if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::sequential_mma)
                 return true;
@@ -138,7 +155,7 @@ namespace LPMP {
         {
             std::ofstream f;
             f.open(options.export_bdd_lp_file);
-            bdd_pre.get_bdd_collection().write_bdd_lp(f, options.ilp.objective().begin(), options.ilp.objective().end());
+            bdd_pre.get_bdd_collection().write_bdd_lp(f, costs.begin(), costs.end());
             f.close(); 
             exit(0);
         }
@@ -180,17 +197,17 @@ namespace LPMP {
             if(options.smoothing == 0)
             {
                 if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::single_prec)
-                    solver = std::move(bdd_mma_vec<float>(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
+                    solver = std::move(bdd_mma_vec<float>(bdd_pre.get_bdd_collection(), costs.begin(), costs.end()));
                 else if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::double_prec)
-                    solver = std::move(bdd_mma_vec<double>(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
+                    solver = std::move(bdd_mma_vec<double>(bdd_pre.get_bdd_collection(), costs.begin(), costs.end()));
                 else
                     throw std::runtime_error("only float and double precision allowed");
                 std::cout << "[bdd solver] constructed sequential mma solver\n"; 
             } else {
                 if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::single_prec)
-                    solver = std::move(bdd_mma_smooth<float>(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
+                    solver = std::move(bdd_mma_smooth<float>(bdd_pre.get_bdd_collection(), costs.begin(), costs.end()));
                 else if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::double_prec)
-                    solver = std::move(bdd_mma_smooth<double>(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
+                    solver = std::move(bdd_mma_smooth<double>(bdd_pre.get_bdd_collection(), costs.begin(), costs.end()));
                 else
                     throw std::runtime_error("only float and double precision allowed");
                 std::cout << "[bdd solver] constructed sequential smooth mma solver\n"; 
@@ -198,7 +215,7 @@ namespace LPMP {
         } 
         else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::decomposition_mma)
         {
-            //solver = std::move(decomposition_bdd_mma(stor, options.ilp.objective().begin(), options.ilp.objective().end(), options.decomposition_mma_options_));
+            //solver = std::move(decomposition_bdd_mma(stor, costs.begin(), costs.end(), options.decomposition_mma_options_));
             throw std::runtime_error("not currently supported");
             std::cout << "[bdd solver] constructed decomposition mma solver\n";
         }
@@ -207,9 +224,9 @@ namespace LPMP {
             if(options.smoothing == 0)
             {
                 if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::single_prec)
-                    solver = std::move(bdd_parallel_mma<float>(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
+                    solver = std::move(bdd_parallel_mma<float>(bdd_pre.get_bdd_collection(), costs.begin(), costs.end()));
                 else if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::double_prec)
-                    solver = std::move(bdd_parallel_mma<double>(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
+                    solver = std::move(bdd_parallel_mma<double>(bdd_pre.get_bdd_collection(), costs.begin(), costs.end()));
                 else
                     throw std::runtime_error("only float and double precision allowed");
                 std::cout << "[bdd solver] constructed parallel mma solver\n"; 
@@ -217,9 +234,9 @@ namespace LPMP {
             else
             {
                 if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::single_prec)
-                    solver = std::move(bdd_parallel_mma_smooth<float>(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
+                    solver = std::move(bdd_parallel_mma_smooth<float>(bdd_pre.get_bdd_collection(), costs.begin(), costs.end()));
                 else if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::double_prec)
-                    solver = std::move(bdd_parallel_mma_smooth<double>(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
+                    solver = std::move(bdd_parallel_mma_smooth<double>(bdd_pre.get_bdd_collection(), costs.begin(), costs.end()));
                 else
                     throw std::runtime_error("only float and double precision allowed");
                 std::cout << "[bdd solver] constructed smooth parallel mma solver\n"; 
@@ -230,9 +247,9 @@ namespace LPMP {
             if(options.smoothing != 0)
                 throw std::runtime_error("no smoothing implemented for cuda mma");
             if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::single_prec)
-                solver = std::move(bdd_cuda<float>(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
+                solver = std::move(bdd_cuda<float>(bdd_pre.get_bdd_collection(), costs.begin(), costs.end()));
             else if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::double_prec)
-                solver = std::move(bdd_cuda<double>(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
+                solver = std::move(bdd_cuda<double>(bdd_pre.get_bdd_collection(), costs.begin(), costs.end()));
             else
                 throw std::runtime_error("only float and double precision allowed");
             std::cout << "[bdd solver] constructed CUDA based mma solver\n"; 

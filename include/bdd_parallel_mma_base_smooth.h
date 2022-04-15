@@ -39,12 +39,12 @@ namespace LPMP {
                         std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& delta_in
                         );
                 // returns smooth and non-smooth lower bound
-                std::array<value_type,2> backward_sm(
+                std::tuple<double,double> backward_sm(
                         const typename BDD_BRANCH_NODE::value_type omega,
                         std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& delta_out,
                         std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& delta_in
                         );
-                std::array<value_type,2> backward_sm(
+                std::tuple<double,double> backward_sm(
                         const size_t bdd_nr, const typename BDD_BRANCH_NODE::value_type omega,
                         std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& delta_out,
                         std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& delta_in
@@ -484,7 +484,7 @@ namespace LPMP {
         }
 
     template<typename BDD_BRANCH_NODE>
-        std::array<typename BDD_BRANCH_NODE::value_type, 2> bdd_parallel_mma_base_smooth<BDD_BRANCH_NODE>::backward_sm(
+        std::tuple<double,double> bdd_parallel_mma_base_smooth<BDD_BRANCH_NODE>::backward_sm(
                 const typename BDD_BRANCH_NODE::value_type omega,
                 std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& delta_out,
                 std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& delta_in)
@@ -504,7 +504,7 @@ namespace LPMP {
         }
 
     template<typename BDD_BRANCH_NODE>
-        std::array<typename BDD_BRANCH_NODE::value_type, 2> bdd_parallel_mma_base_smooth<BDD_BRANCH_NODE>::backward_sm(
+        std::tuple<double,double> bdd_parallel_mma_base_smooth<BDD_BRANCH_NODE>::backward_sm(
                 const size_t bdd_nr, const typename BDD_BRANCH_NODE::value_type omega,
                 std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& delta_out,
                 std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& delta_in)

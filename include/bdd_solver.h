@@ -35,6 +35,8 @@ namespace LPMP {
 
         std::string input_file;
         std::string input_string;
+        bool take_cost_logarithms = false;
+        enum class optimization_type { minimization, maximization } optimization = optimization_type::minimization;
         ILP_input ilp;
         ILP_input::variable_order var_order = ILP_input::variable_order::input;
 
@@ -114,6 +116,14 @@ namespace LPMP {
         auto input_string_arg = input_group->add_option("--input_string", input_string, "ILP input in string");
 
         input_group->require_option(1); // either as string or as filename
+
+        app.add_flag("--logarithms", take_cost_logarithms, "");
+        std::unordered_map<std::string, optimization_type> optimization_type_map{
+            {"maximization", optimization_type::maximization},
+            {"minimization", optimization_type::minimization}
+        };
+        app.add_option("--optimization", optimization, "minimization/maximization of objective")
+            ->transform(CLI::CheckedTransformer(optimization_type_map, CLI::ignore_case));
 
         std::unordered_map<std::string, ILP_input::variable_order> variable_order_map{
             {"input", ILP_input::variable_order::input},
@@ -265,6 +275,7 @@ namespace LPMP {
             else
                 return ILP_input();
         }();
+
         ilp.normalize();
     }
 
