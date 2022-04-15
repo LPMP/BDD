@@ -185,7 +185,6 @@ namespace LPMP {
                     solver = std::move(bdd_mma_vec<double>(bdd_pre.get_bdd_collection(), options.ilp.objective().begin(), options.ilp.objective().end()));
                 else
                     throw std::runtime_error("only float and double precision allowed");
-                assert(false); // set smoothing
                 std::cout << "[bdd solver] constructed sequential mma solver\n"; 
             } else {
                 if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::single_prec)

@@ -62,12 +62,8 @@ namespace LPMP {
             for(size_t i=this->bdd_branch_node_offsets_[var]; i<this->bdd_branch_node_offsets_[var+1]; ++i)
             {
                 auto& bdd = this->bdd_branch_nodes_[i];
-
-                const auto& sm_0 = sum_marginals[bdd.bdd_index][0];
-                bdd.low_cost -= -std::log(sm_0.sum) - sm_0.max + avg_marginals[0];
-
-                const auto& sm_1 = sum_marginals[bdd.bdd_index][1];
-                bdd.high_cost -= -std::log(sm_1.sum) - sm_1.max + avg_marginals[1];
+                bdd.low_cost += sum_marginals[bdd.bdd_index][0].log() - avg_marginals[0];
+                bdd.high_cost += sum_marginals[bdd.bdd_index][1].log() - avg_marginals[1];
             }
 
             smooth_forward_step(var);
@@ -102,12 +98,8 @@ namespace LPMP {
             for(size_t i=this->bdd_branch_node_offsets_[var]; i<this->bdd_branch_node_offsets_[var+1]; ++i)
             {
                 auto& bdd = this->bdd_branch_nodes_[i];
-
-                const auto& sm_0 = sum_marginals[bdd.bdd_index][0];
-                bdd.low_cost -= -std::log(sm_0.sum) - sm_0.max + avg_marginals[0];
-
-                const auto& sm_1 = sum_marginals[bdd.bdd_index][1];
-                bdd.high_cost -= -std::log(sm_1.sum) - sm_1.max + avg_marginals[1];
+                bdd.low_cost += sum_marginals[bdd.bdd_index][0].log() - avg_marginals[0];
+                bdd.high_cost += sum_marginals[bdd.bdd_index][1].log() - avg_marginals[1];
             }
 
             smooth_backward_step(var);
@@ -168,13 +160,13 @@ namespace LPMP {
         {
             value_type avg_0 = 0.0;
             for(size_t i=0; i<nr_marginals; ++i)
-                avg_0 += std::log(marginals[i][0].sum) + marginals[i][0].max;
+                avg_0 += marginals[i][0].log();
             avg_0 /= value_type(nr_marginals);
             assert(std::isfinite(avg_0));
 
             value_type avg_1 = 0.0;
             for(size_t i=0; i<nr_marginals; ++i)
-                avg_1 += std::log(marginals[i][1].sum) + marginals[i][1].max;
+                avg_1 += marginals[i][1].log();
             avg_1 /= value_type(nr_marginals);
             assert(std::isfinite(avg_1));
 
@@ -252,11 +244,12 @@ namespace LPMP {
             {
                 assert(this->first_bdd_node_indices_.size(i) == 1);
                 const auto& bdd_node = this->bdd_branch_nodes_[this->first_bdd_node_indices_(i,0)];
-                smooth_lb += -smoothing * (std::log(bdd_node.m) + bdd_node.current_max);
+                smooth_lb += -smoothing * bdd_node.get_exp_sum().log();
                 lb += -smoothing*bdd_node.current_max;
             }
 
             smooth_lower_bound_ = smooth_lb;
+            // TODO: set non smooth lower bound as well, same for after backward pass
             smooth_lower_bound_state_ = base_type::lower_bound_state::valid;
             this->lower_bound_state_ = base_type::lower_bound_state::valid;
         }
@@ -280,7 +273,7 @@ namespace LPMP {
                     s.update(sm[0]);
                     s.update(sm[1]);
                 }
-                smooth_lb += -smoothing * (std::log(s.sum) + s.max);
+                smooth_lb += -smoothing * s.log();
                 lb += -smoothing*s.max;
             }
 

@@ -4,6 +4,7 @@
 #include "bfs_ordering.hxx"
 #include "minimum_degree_ordering.hxx"
 #include "time_measure_util.h"
+#include "two_dimensional_variable_array.hxx"
 #include <iostream>
 #include <limits>
 #include <unordered_set>
@@ -500,6 +501,115 @@ namespace LPMP {
         }
 
         return adjacency;
+    }
+
+    void ILP_input::fix_variable(const std::string& var, const int val)
+    {
+        assert(var_exists(var));
+        return fix_variable(get_var_index(var), val);
+    }
+
+    void ILP_input::fix_variable(const size_t var_idx, const int val)
+    {
+        assert(var_idx < nr_variables());
+        assert(val == 0 || val == 1);
+        var_fixations_.push_back({var_idx, val});
+    }
+
+    void ILP_input::substitute_fixed_variables()
+    {
+        if(var_fixations_.size() == 0)
+            return;
+
+        std::unordered_set<size_t> zeros;
+        std::unordered_set<size_t> ones;
+        for(const auto [var, val] : var_fixations_)
+        {
+            if(val == 0)
+                zeros.insert(var);
+            else if(val == 1)
+            {
+                ones.insert(var);
+                constant_ += objective_[val];
+            }
+            else
+                throw std::runtime_error("fixations to zero or one only are allowed");
+        }
+
+        // substitute in inequalities
+        for(auto& constr : constraints_)
+        {
+            two_dim_variable_array<size_t> new_monomials;
+            std::vector<int> new_coefficients;
+            std::vector<size_t> unset_monomial_vars;
+            std::vector<size_t> one_monomial_vars;
+            std::vector<size_t> zero_monomial_vars;
+
+            for(size_t monomial_ctr=0; monomial_ctr<constr.monomials.size(); ++monomial_ctr)
+            {
+                unset_monomial_vars.clear();
+                one_monomial_vars.clear();
+                zero_monomial_vars.clear();
+                for(size_t var_ctr=0; var_ctr<constr.monomials.size(monomial_ctr); ++var_ctr)
+                {
+                    bool monomial_always_true = false;
+                    bool monomial_always_false = false;
+                    const size_t var = constr.monomials(monomial_ctr, var_ctr);
+                    assert(zeros.count(var) == 0 || ones.count(var) == 0);
+                    if(zeros.count(var) > 0)
+                        zero_monomial_vars.push_back(var);
+                    else if(ones.count(var) > 0)
+                        one_monomial_vars.push_back(var);
+                    else
+                        unset_monomial_vars.push_back(var);
+                }
+                if(zero_monomial_vars.size() > 0)
+                {}
+                else if(one_monomial_vars.size() == constr.monomials.size(monomial_ctr))
+                {
+                    constr.right_hand_side -= constr.coefficients[monomial_ctr];
+                }
+                else
+                {
+                    new_monomials.push_back(unset_monomial_vars.begin(), unset_monomial_vars.end());
+                    new_coefficients.push_back(constr.coefficients[monomial_ctr]);
+                }
+            }
+            if(new_monomials.size() > 0)
+            {
+                constr.monomials = new_monomials;
+                constr.coefficients = new_coefficients;
+            }
+            else
+            {
+                // case not handled
+                // also do not forget to update inequality_identifier_to_index_
+                throw std::runtime_error("constraint has become trivial after variable fixation, this case is not handled yet");
+            }
+        }
+
+        // remove variables from ILP
+        std::vector<double> new_objective_;
+        std::vector<std::string> new_var_index_to_name_;
+        tsl::robin_map<std::string, size_t> new_var_name_to_index_;
+
+        for(size_t var=0; var<nr_variables(); ++var)
+        {
+            if(zeros.count(var) == 0 && ones.count(var) == 0)
+            {
+                new_objective_.push_back(objective_[var]);
+                assert(var < var_index_to_name_.size());
+                const std::string var_name = var_index_to_name_[var];
+                new_var_index_to_name_.push_back(var_name);
+                if(var_name != "")
+                    new_var_name_to_index_.insert({var_name,new_objective_.size()-1});
+            }
+        }
+
+        objective_ = new_objective_;
+        var_index_to_name_ = new_var_index_to_name_;
+        var_name_to_index_ = new_var_name_to_index_;
+        var_fixations_.clear();
     }
 
     permutation ILP_input::reorder(ILP_input::variable_order var_ord)

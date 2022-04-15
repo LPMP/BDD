@@ -10,7 +10,7 @@ int main(int argc, char** argv)
 {
     std::vector<double> smoothing_values = {1.0, 0.5, 1.5, 0.1, 7.5};
 
-    for(size_t i=1; i<42; ++i)
+    for(size_t i=2; i<42; ++i)
     {
         for(const double smoothing_val : smoothing_values)
         {

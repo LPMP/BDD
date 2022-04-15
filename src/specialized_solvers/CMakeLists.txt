@@ -1,3 +1,9 @@
+add_library(mrf_input mrf_input.cpp)
+target_link_libraries(mrf_input ILP_input LPMP-BDD)
+
+add_library(mrf_uai_parser mrf_uai_parser.cpp)
+target_link_libraries(mrf_uai_parser ILP_input LPMP-BDD)
+
 add_library(graph_matching_input graph_matching_input.cpp)
 target_link_libraries(graph_matching_input ILP_input LPMP-BDD)
 
