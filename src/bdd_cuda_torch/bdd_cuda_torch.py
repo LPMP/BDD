@@ -47,7 +47,7 @@ def log_grad_stats(t, name, start, end, logger, filepath, step):
 class DualIterations(torch.autograd.Function):
     @staticmethod
     def forward(ctx, solvers, lo_costs_batch, hi_costs_batch, def_mm_batch, dist_weights_batch, num_iterations, omega, 
-                grad_dual_itr_max_itr, improvement_slope, num_caches, compute_avg_sol_for_itrs, avg_sol_beta, logger, filepahts, step):
+                grad_dual_itr_max_itr, improvement_slope, num_caches, compute_history_for_itrs, history_avg_beta, logger, filepahts, step):
         validate_input_format(lo_costs_batch, hi_costs_batch, def_mm_batch, dist_weights_batch)
         assert(lo_costs_batch.dim() == 1)
         assert(def_mm_batch.dim() == 1)
@@ -69,38 +69,49 @@ class DualIterations(torch.autograd.Function):
         hi_costs_out = torch.empty_like(hi_costs_batch)
         def_mm_out = torch.empty_like(def_mm_batch)
         sol_avg_out = None
-        if compute_avg_sol_for_itrs > 0:
+        lb_first_order_hist = None
+        lb_sec_order_hist = None
+        if compute_history_for_itrs > 0:
             sol_avg_out = torch.empty_like(def_mm_batch)
+            num_bdds_batch = sum([s.nr_bdds() for s in solvers])
+            lb_first_order_hist = torch.empty((num_bdds_batch), device = lo_costs_batch.device, dtype = torch.float32)
+            lb_sec_order_hist = torch.empty_like(lb_first_order_hist)
             ctx.mark_non_differentiable(sol_avg_out)
+            ctx.mark_non_differentiable(lb_first_order_hist)
+            ctx.mark_non_differentiable(lb_sec_order_hist)
 
         is_omega_scalar = torch.numel(omega) == 1
         if not is_omega_scalar:
             validate_input_format(omega)
 
         layer_start = 0
+        bdd_start = 0
         actual_num_itr = []
         for (b, solver) in enumerate(solvers):
             solver.set_solver_costs(lo_costs_batch[layer_start].data_ptr(), hi_costs_batch[layer_start].data_ptr(), def_mm_batch[layer_start].data_ptr())
             if is_omega_scalar:
                 num_itr = solver.iterations(dist_weights_batch[layer_start].data_ptr(), num_iterations, 
                                             omega[0].item(), improvement_slope, 0, False,
-                                            compute_avg_sol_for_itrs, avg_sol_beta, sol_avg_out[layer_start].data_ptr())
+                                            compute_history_for_itrs, history_avg_beta, sol_avg_out[layer_start].data_ptr(),
+                                            lb_first_order_hist[bdd_start].data_ptr(), lb_sec_order_hist[bdd_start].data_ptr())
             else:
                 num_itr = solver.iterations(dist_weights_batch[layer_start].data_ptr(), num_iterations, 
                                             1.0, improvement_slope, omega[layer_start].data_ptr(), True,
-                                            compute_avg_sol_for_itrs, avg_sol_beta, sol_avg_out[layer_start].data_ptr())
+                                            compute_history_for_itrs, history_avg_beta, sol_avg_out[layer_start].data_ptr(),
+                                            lb_first_order_hist[bdd_start].data_ptr(), lb_sec_order_hist[bdd_start].data_ptr())
 
             actual_num_itr.append(num_itr)
             solver.get_solver_costs(lo_costs_out[layer_start].data_ptr(), hi_costs_out[layer_start].data_ptr(), def_mm_out[layer_start].data_ptr()) 
             layer_start += solver.nr_layers()
+            bdd_start += solver.nr_bdds()
 
         ctx.actual_num_itr = actual_num_itr
         assert(layer_start == lo_costs_batch.shape[0])
-        return lo_costs_out, hi_costs_out, def_mm_out, sol_avg_out
+        return lo_costs_out, hi_costs_out, def_mm_out, sol_avg_out, lb_first_order_hist, lb_sec_order_hist
 
     @staticmethod
     @once_differentiable
-    def backward(ctx, grad_lo_costs_out, grad_hi_costs_out, grad_def_mm_out, grad_sol_avg_out):
+    def backward(ctx, grad_lo_costs_out, grad_hi_costs_out, grad_def_mm_out, grad_sol_avg_out, grad_lb_first, grad_lb_sec):
         validate_input_format(grad_lo_costs_out, grad_hi_costs_out, grad_def_mm_out)
         assert(grad_lo_costs_out.dim() == 1)
         assert(grad_lo_costs_out.shape == grad_hi_costs_out.shape)
@@ -112,8 +123,8 @@ class DualIterations(torch.autograd.Function):
         solvers = ctx.solvers
 
         lo_costs_batch, hi_costs_batch, def_mm_batch, dist_weights_batch, omega = ctx.saved_tensors
-        grad_dist_weights_batch_in = torch.empty_like(dist_weights_batch)
-        grad_omega = torch.empty_like(omega)
+        grad_dist_weights_batch_in = torch.zeros_like(dist_weights_batch)
+        grad_omega = torch.zeros_like(omega)
 
 
         is_omega_scalar = torch.numel(omega) == 1
@@ -322,16 +333,16 @@ class ComputeLowerBoundperBDD(torch.autograd.Function):
         ctx.solvers = solvers
         ctx.save_for_backward(lo_costs_batch, hi_costs_batch)
         mm_diff_batch = torch.zeros_like(lo_costs_batch)
-        lb_per_bdd_batch = []
+        num_bdds_batch = sum([s.nr_bdds() for s in solvers])
+        lb_per_bdd_batch = torch.empty((num_bdds_batch), device = lo_costs_batch.device, dtype = torch.float32)
         layer_start = 0
+        bdd_start = 0
         for (b, solver) in enumerate(solvers):  
             solver.set_solver_costs(lo_costs_batch[layer_start].data_ptr(), hi_costs_batch[layer_start].data_ptr(), mm_diff_batch[layer_start].data_ptr())
-            lb_per_bdd = torch.empty((solver.nr_bdds()), device = lo_costs_batch.device, dtype = torch.float32)
-            solver.lower_bound_per_bdd(lb_per_bdd.data_ptr())
-            lb_per_bdd_batch.append(lb_per_bdd)
+            solver.lower_bound_per_bdd(lb_per_bdd_batch[bdd_start].data_ptr())
+            bdd_start += solver.nr_bdds()
             layer_start += solver.nr_layers()
         assert(layer_start == lo_costs_batch.shape[0])
-        lb_per_bdd_batch = torch.cat(lb_per_bdd_batch)
         return lb_per_bdd_batch
 
     @staticmethod

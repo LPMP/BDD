@@ -51,9 +51,11 @@ namespace LPMP {
                             const int num_itr, 
                             const REAL omega_scalar, // will not be used if omega_vec != nullptr
                             const double improvement_slope = 1e-6,
-                            thrust::device_ptr<REAL> sol_avg = nullptr, // should already allocate a space of nr_layers if compute_sol_avg_for_itr > 0.
-                            const int compute_sol_avg_for_itr = 0,
-                            const REAL sol_avg_beta = 0.9,
+                            thrust::device_ptr<REAL> sol_avg = nullptr,
+                            thrust::device_ptr<REAL> lb_first_diff_avg = nullptr,
+                            thrust::device_ptr<REAL> lb_second_diff_avg = nullptr,
+                            const int compute_history_for_itr = 0,
+                            const REAL history_avg_beta = 0.9,
                             const thrust::device_ptr<const REAL> omega_vec = nullptr);
 
             // Assumes that deffered_mm_diff_ contains the mm's containing the values before iterations() was called.

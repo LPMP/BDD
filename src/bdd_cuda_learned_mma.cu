@@ -175,13 +175,13 @@ namespace LPMP {
     }
 
     template<typename REAL>
-    struct compute_sol_exp_moving_avg {
+    struct compute_exp_moving_avg {
         REAL beta;
-        const REAL* cur_sol;
-        REAL* sol_avg;
+        const REAL* cur_vec;
+        REAL* avg;
         __host__ __device__ void operator()(const int i)
         {
-            sol_avg[i] = beta * sol_avg[i] + (1.0 - beta) * cur_sol[i];
+            avg[i] = beta * avg[i] + (1.0 - beta) * cur_vec[i];
         }
     };
 
@@ -192,8 +192,10 @@ namespace LPMP {
                                 const REAL omega_scalar, 
                                 const double improvement_slope,
                                 thrust::device_ptr<REAL> sol_avg,
-                                const int compute_sol_avg_for_itr,
-                                const REAL sol_avg_beta,
+                                thrust::device_ptr<REAL> lb_first_diff_avg,
+                                thrust::device_ptr<REAL> lb_second_diff_avg,
+                                const int compute_history_for_itr,
+                                const REAL history_avg_beta,
                                 const thrust::device_ptr<const REAL> omega_vec)
     {
         const double lb_initial = this->lower_bound();
@@ -203,29 +205,59 @@ namespace LPMP {
         int itr = 0;
         bool converged = false;
         thrust::device_vector<REAL> last_sol;
-        if (compute_sol_avg_for_itr)
+        thrust::device_vector<REAL> last_lb, second_last_lb, third_last_lb;
+        if (compute_history_for_itr)
         {
             last_sol = thrust::device_vector<REAL>(this->nr_layers());
+            last_lb = thrust::device_vector<REAL>(this->nr_bdds());
+            second_last_lb = thrust::device_vector<REAL>(this->nr_bdds());
+            third_last_lb = thrust::device_vector<REAL>(this->nr_bdds());
         }
-        int sol_avg_tracked_for = 0;
+        int history_tracked_for = 0;
         for(itr = 0; itr < num_itr; itr++)
         {
             forward_iteration_learned_mm_dist(dist_weights, this->deffered_mm_diff_.data(), omega_scalar, omega_vec);
             backward_iteration_learned_mm_dist(dist_weights, this->deffered_mm_diff_.data(), omega_scalar, omega_vec);
-            if (compute_sol_avg_for_itr && (compute_sol_avg_for_itr >= num_itr - itr || converged))
+            if (compute_history_for_itr && (compute_history_for_itr >= num_itr - itr || converged))
             {
                 this->bdds_solution_cuda(last_sol.data());
-                if (num_itr - itr == compute_sol_avg_for_itr) // first iteration of moving average.
+                this->lower_bound_per_bdd(last_lb.data());
+                if (history_tracked_for == 0) // first iteration of moving average.
                     thrust::copy(last_sol.begin(), last_sol.end(), sol_avg);
                 else
                 {
-                    compute_sol_exp_moving_avg<REAL> compute_sol_avg({sol_avg_beta,
-                                                thrust::raw_pointer_cast(last_sol.data()), 
-                                                thrust::raw_pointer_cast(sol_avg)});
-                    thrust::for_each(thrust::make_counting_iterator<int>(0), 
-                                    thrust::make_counting_iterator<int>(0) + this->nr_layers(), compute_sol_avg);
+                    compute_exp_moving_avg<REAL> compute_sol_avg({history_avg_beta, thrust::raw_pointer_cast(last_sol.data()), thrust::raw_pointer_cast(sol_avg)});
+                    thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + this->nr_layers(), compute_sol_avg);
+                    
+                    thrust::device_vector<REAL> last_lb_change(last_lb);
+                    // subtract lb's for t with t - 1 to get delta_t
+                    thrust::transform(last_lb_change.begin(), last_lb_change.end(), second_last_lb.begin(), last_lb_change.begin(), thrust::minus<REAL>());
+
+                    if (history_tracked_for == 1)
+                        thrust::copy(last_lb_change.begin(), last_lb_change.end(), lb_first_diff_avg);
+                    else
+                    {
+                        compute_exp_moving_avg<REAL> compute_lb_first_diff_avg({history_avg_beta, thrust::raw_pointer_cast(last_lb_change.data()), thrust::raw_pointer_cast(lb_first_diff_avg)});
+                        thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + this->nr_bdds(), compute_lb_first_diff_avg);
+
+                        thrust::device_vector<REAL> prev_lb_change(second_last_lb);
+                        // subtract lb's for t - 1 with t - 2 to get delta_{t-1}
+                        thrust::transform(prev_lb_change.begin(), prev_lb_change.end(), third_last_lb.begin(), prev_lb_change.begin(), thrust::minus<REAL>());
+                        // subtract delta_t with delta_{t-1} to get second order change and put in array last_lb_change
+                        thrust::transform(last_lb_change.begin(), last_lb_change.end(), prev_lb_change.begin(), last_lb_change.begin(), thrust::minus<REAL>());
+    
+                        if (history_tracked_for == 2)
+                            thrust::copy(last_lb_change.begin(), last_lb_change.end(), lb_second_diff_avg);
+                        else
+                        {
+                            compute_exp_moving_avg<REAL> compute_lb_sec_diff_avg({history_avg_beta, thrust::raw_pointer_cast(last_lb_change.data()), thrust::raw_pointer_cast(lb_second_diff_avg)});
+                            thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + this->nr_bdds(), compute_lb_sec_diff_avg);
+                        }
+                    }
                 }
-                sol_avg_tracked_for++;
+                thrust::swap(second_last_lb, last_lb); // second now points to last and last to second (which should become third).
+                thrust::swap(third_last_lb, last_lb); // make second lb as first.
+                history_tracked_for++;
             }
             lb_prev = lb_post;
             lb_post = this->lower_bound();
@@ -233,7 +265,7 @@ namespace LPMP {
                 lb_first_iter = lb_post;
             if (!converged && std::abs(lb_prev - lb_post) < improvement_slope * std::abs(lb_initial - lb_first_iter))
                 converged = true;
-            if (converged && (sol_avg_tracked_for == compute_sol_avg_for_itr))
+            if (converged && (history_tracked_for == compute_history_for_itr))
                 break;
         }
         return itr;
@@ -301,7 +333,7 @@ namespace LPMP {
         thrust::device_vector<REAL> grad_cost_from_root(this->cost_from_root_.size(), 0.0);
         thrust::device_vector<REAL> grad_cost_from_terminal(this->cost_from_terminal_.size(), 0.0);
 
-        iterations(dist_weights, track_grad_after_itr, omega_scalar, 0.0, nullptr, 0, 0, omega_vec);
+        iterations(dist_weights, track_grad_after_itr, omega_scalar, 0.0, nullptr, nullptr, nullptr, 0, 0, omega_vec);
         solver_state_cache<REAL> costs_cache(max(num_caches, 1), track_grad_for_num_itr, this->nr_layers()); // Atleast cache the starting point through max(num_caches, 1).
 
         // Populate cache.
@@ -309,7 +341,7 @@ namespace LPMP {
         {
             // Cache the input for solver_itr. So if solver_itr = 0, it caches the input costs.
             costs_cache.check_and_set_cache(solver_itr, this->lo_cost_.data(), this->hi_cost_.data(), this->deffered_mm_diff_.data());
-            iterations(dist_weights, min(1, costs_cache.max_cached_iteration() - solver_itr), omega_scalar, 0.0, nullptr, 0, 0, omega_vec);
+            iterations(dist_weights, min(1, costs_cache.max_cached_iteration() - solver_itr), omega_scalar, 0.0, nullptr, nullptr, nullptr, 0, 0, omega_vec);
         }
 
         for(int itr = track_grad_for_num_itr - 1; itr >= 0; itr--)
@@ -320,7 +352,7 @@ namespace LPMP {
             this->flush_backward_states();
 
             assert(cache_itr_index <= itr);
-            iterations(dist_weights, itr - cache_itr_index, omega_scalar, 0.0, nullptr, 0, 0, omega_vec); // run solver for 'itr - cache_itr_index' many more iterations.
+            iterations(dist_weights, itr - cache_itr_index, omega_scalar, 0.0, nullptr, nullptr, nullptr, 0, 0, omega_vec); // run solver for 'itr - cache_itr_index' many more iterations.
 
             // save costs and mm for later in GPU memory.
             const auto cur_costs = this->get_solver_costs();

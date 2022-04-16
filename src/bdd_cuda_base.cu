@@ -775,8 +775,10 @@ namespace LPMP {
         __host__ __device__ void operator()(const int layer_index)
         {
             const int node_index = next_path_nodes[layer_index]; // which node to select in current bdd layer.
-            assert(node_index >= 0); // terminal node.
+            if (node_index <= 0)
+                return; // terminal node.
             const int next_lo_node = lo_bdd_node_index[node_index];
+            assert(next_lo_node != BOT_SINK_INDICATOR_CUDA);
             if (next_lo_node < 0)
                 return; // current node is a terminal node and thus does not correspond to a variable.
 
