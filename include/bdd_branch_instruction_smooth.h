@@ -5,18 +5,9 @@
 #include <limits>
 #include <type_traits>
 #include "bdd_branch_instruction.h"
+#include "exp_sum.h"
 
 namespace LPMP {
-
-    template<typename REAL>
-    struct exp_sum {
-        exp_sum() {}
-        exp_sum(const REAL _sum, const REAL _max) : sum(_sum), max(_max) {}
-        REAL sum = 0.0;
-        REAL max = -std::numeric_limits<REAL>::infinity();
-
-        void update(const exp_sum o);
-    };
 
     template<typename REAL, typename OFFSET_TYPE, typename DERIVED, template<class,class,class> class BASE>
         class bdd_branch_instruction_smooth_base : public BASE<REAL,OFFSET_TYPE,DERIVED> 
@@ -28,6 +19,9 @@ namespace LPMP {
             void smooth_forward_step();
             void smooth_backward_step();
             std::array<exp_sum<REAL>,2> sum_marginals() const;
+
+            exp_sum<REAL> get_exp_sum() const { return {this->m, current_max}; }
+            bdd_branch_instruction_smooth_base& assign(const exp_sum<REAL> es);
 
             void check_instruction() const;
     };
@@ -80,45 +74,28 @@ namespace LPMP {
             }
 
             // low edge
-            const auto [low_m, low_max] = [&]() -> std::array<REAL,2> {
+            const auto low = [&]() -> exp_sum<REAL> {
                 if(this->offset_low == this->terminal_0_offset)
                     return {0.0, -std::numeric_limits<REAL>::infinity()};
                 if(this->offset_low == this->terminal_1_offset)
                     return {std::exp(REAL(0.0)), REAL(0.0)};
                 else
-                    return {this->address(this->offset_low)->m, this->address(this->offset_low)->current_max};
+                    return this->address(this->offset_low)->get_exp_sum();//{this->address(this->offset_low)->m, this->address(this->offset_low)->current_max};
             }();
             // high edge
-            const auto [high_m, high_max] = [&]() -> std::array<REAL,2> {
+            const auto high = [&]() -> exp_sum<REAL> {
                 if(this->offset_high == this->terminal_0_offset)
                     return {REAL(0.0), -std::numeric_limits<REAL>::infinity()};
                 if(this->offset_high == this->terminal_1_offset)
                     return {std::exp(REAL(0.0)), REAL(0.0)};
                 else
-                    return {this->address(this->offset_high)->m, this->address(this->offset_high)->current_max};
+                    return this->address(this->offset_high)->get_exp_sum();
             }();
 
-            assert(std::isfinite(low_m));
-            assert(std::isfinite(high_m));
+            std::tuple<REAL,REAL> t;
+            t = (low * exp_sum<REAL>(-this->low_cost)) + (high * exp_sum<REAL>(-this->high_cost));
+            std::tie(this->m,current_max) = t;
 
-            current_max = low_max - this->low_cost;
-            this->m = low_m;
-            if(current_max > -std::numeric_limits<REAL>::infinity())
-                this->m *= std::exp(low_max - current_max -this->low_cost);
-
-            if (std::isfinite(high_max))
-            {
-                if (high_max - this->high_cost < low_max) // corrert?
-                {
-                    this->m += std::exp((high_max - this->high_cost) - current_max) * high_m;
-                }
-                else
-                {
-                    this->m *= std::exp(current_max - (high_max - this->high_cost));
-                    this->m += high_m;
-                    current_max = high_max - this->high_cost;
-                }
-            }
             assert(std::isfinite(this->m));
             assert(std::isfinite(current_max));
         }
@@ -153,6 +130,9 @@ namespace LPMP {
             {
                 auto* low = this->address(this->offset_low);
                 low->check_instruction();
+                low->assign(this->get_exp_sum() * exp_sum<REAL>(- this->low_cost) + low->get_exp_sum());
+                
+                /*
                 if(low->m == 0.0)
                 {
                     assert(low->current_max == -std::numeric_limits<REAL>::infinity());
@@ -169,6 +149,7 @@ namespace LPMP {
                     low->m += this->m;
                     low->current_max = current_max - this->low_cost;
                 }
+                */
                 low->check_instruction();
             }
 
@@ -176,6 +157,9 @@ namespace LPMP {
             {
                 auto* high = this->address(this->offset_high);
                 high->check_instruction();
+                high->assign(this->get_exp_sum() * exp_sum<REAL>(- this->high_cost) + high->get_exp_sum());
+
+                /*
                 if(high->m == 0.0)
                 {
                     assert(high->current_max == -std::numeric_limits<REAL>::infinity());
@@ -192,6 +176,7 @@ namespace LPMP {
                     high->m += this->m;
                     high->current_max = current_max - this->high_cost;
                 }
+                */
                 high->check_instruction();
             }
         }
@@ -278,7 +263,7 @@ namespace LPMP {
                 else
                 {
                     auto* low = this->address(this->offset_low);
-                    return {this->m * low->m, current_max - this->low_cost + low->current_max};
+                    return (this->get_exp_sum() * low->get_exp_sum()) * exp_sum<REAL>(-this->low_cost);
                 }
             }();
 
@@ -290,12 +275,19 @@ namespace LPMP {
                 else
                 {
                     auto* high = this->address(this->offset_high);
-                    return {this->m * high->m, current_max - this->high_cost + high->current_max};
+                    return (this->get_exp_sum() * high->get_exp_sum()) * exp_sum<REAL>(-this->high_cost);
                 }
             }();
 
             return {low_sum, high_sum};
         }
+    template<typename REAL, typename OFFSET_TYPE, typename DERIVED, template<class,class,class> class BASE>
+            bdd_branch_instruction_smooth_base<REAL,OFFSET_TYPE,DERIVED,BASE>& bdd_branch_instruction_smooth_base<REAL,OFFSET_TYPE,DERIVED,BASE>::assign(const exp_sum<REAL> es)
+            {
+                this->m = es.sum;
+                this->current_max = es.max;
+                return *this;
+            }
 
     template<typename REAL, typename OFFSET_TYPE, typename DERIVED, template<class,class,class> class BASE>
         void bdd_branch_instruction_smooth_base<REAL,OFFSET_TYPE,DERIVED,BASE>::check_instruction() const
@@ -339,31 +331,5 @@ namespace LPMP {
 
             this->check_instruction();
         }
-
-    template<typename REAL>
-    void exp_sum<REAL>::update(const exp_sum o)
-    {
-        assert(std::isfinite(sum));
-        assert(sum >= 0.0);
-        assert(!std::isnan(max));
-        
-        if(o.sum == 0.0)
-        {
-            //assert(o.max == -std::numeric_limits<REAL>::infinity());
-            return;
-        }
-        
-        if(max > o.max)
-            sum += o.sum * std::exp(o.max - max);
-        else
-        {
-            sum *= std::exp(max - o.max);
-            sum += o.sum;
-            max = o.max;
-        }
-
-        assert(std::isfinite(sum));
-        assert(!std::isnan(max));
-    }
 
 }

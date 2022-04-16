@@ -81,6 +81,10 @@ namespace LPMP {
         void normalize();
         bool is_normalized() const;
 
+        void fix_variable(const std::string& var, const int val);
+        void fix_variable(const size_t var_idx, const int val);
+        void substitute_fixed_variables();
+
         permutation reorder(variable_order var_ord);
         permutation reorder_bfs();
         permutation reorder_Cuthill_McKee(); 
@@ -99,13 +103,20 @@ namespace LPMP {
         const tsl::robin_map<std::string, size_t>& var_name_to_index() const { return var_name_to_index_; };
         const tsl::robin_map<std::string, size_t>& inequality_identifier_to_index() const { return inequality_identifier_to_index_; };
 
+        double constant() const { return constant_; }
+
         private:
+
             std::vector<constraint> constraints_;
             std::vector<double> objective_;
+            double constant_ = 0.0;
             std::vector<std::string> var_index_to_name_;
             tsl::robin_map<std::string, size_t> var_name_to_index_;
             tsl::robin_map<std::string, size_t> inequality_identifier_to_index_;
             two_dim_variable_array<size_t> coalesce_sets_;
+
+            struct var_fixation { size_t var_index; int val; };
+            std::vector<var_fixation> var_fixations_;
 
             permutation var_permutation_;
 
@@ -172,7 +183,7 @@ namespace LPMP {
             if(!feasible(begin,end))
                 return std::numeric_limits<double>::infinity();
             assert(std::distance(begin,end) >= objective_.size());
-            double cost = 0.0;
+            double cost = constant_;
             for(size_t i=0; i<objective_.size(); ++i) {
                 assert(*(begin+i) == 0 || *(begin+i) == 1);
                 cost += objective_[i] * *(begin+i);

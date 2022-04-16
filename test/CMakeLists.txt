@@ -4,6 +4,10 @@ add_executable(test_avl_tree test_avl_tree.cpp)
 target_link_libraries(test_avl_tree lineq_bdd LPMP-BDD)
 add_test(test_avl_tree test_avl_tree)
 
+add_executable(test_exp_sum test_exp_sum.cpp)
+target_link_libraries(test_exp_sum lineq_bdd LPMP-BDD)
+add_test(test_exp_sum test_exp_sum)
+
 add_executable(test_ILP_parser test_ILP_parser.cpp)
 target_link_libraries(test_ILP_parser ILP_parser LPMP-BDD)
 add_test(test_ILP_parser test_ILP_parser)
@@ -15,6 +19,10 @@ add_test(test_ILP_input_to_bdd test_ILP_input_to_bdd)
 add_executable(test_ILP_input test_ILP_input.cpp)
 target_link_libraries(test_ILP_input LPMP-BDD)
 add_test(test_ILP_input test_ILP_input)
+
+add_executable(test_ILP_input_variable_fixation test_ILP_input_variable_fixation.cpp)
+target_link_libraries(test_ILP_input_variable_fixation LPMP-BDD)
+add_test(test_ILP_input_variable_fixation test_ILP_input_variable_fixation)
 
 #add_executable(test_single_bdd_inference test_single_bdd_inference.cpp)
 #target_link_libraries(test_single_bdd_inference ILP_parser LPMP-BDD)
@@ -91,6 +99,10 @@ add_test(test_bdd_sequential_base test_bdd_sequential_base)
 add_executable(test_bdd_parallel_mma test_bdd_parallel_mma.cpp)
 target_link_libraries(test_bdd_parallel_mma LPMP-BDD)
 add_test(test_bdd_parallel_mma test_bdd_parallel_mma)
+
+add_executable(test_bdd_smooth_parallel_mma test_bdd_smooth_parallel_mma.cpp)
+target_link_libraries(test_bdd_smooth_parallel_mma LPMP-BDD)
+add_test(test_bdd_smooth_parallel_mma test_bdd_smooth_parallel_mma)
 
 if(WITH_CUDA)
     add_executable(test_bdd_cuda_base test_bdd_cuda_base.cpp)

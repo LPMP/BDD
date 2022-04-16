@@ -39,8 +39,8 @@ namespace LPMP {
         {
             if(pimpl != nullptr)
             {
-                pimpl->parallel_mma.distribute_delta();
-                pimpl->parallel_mma.backward_run();
+                //pimpl->parallel_mma.distribute_delta();
+                //pimpl->parallel_mma.backward_run();
                 const double lb = pimpl->parallel_mma.lower_bound();
                 std::cout << "[parallel mma smooth] final original lower bound = " << lb << "\n";
             }
@@ -62,7 +62,7 @@ namespace LPMP {
     template<typename REAL>
         void bdd_parallel_mma_smooth<REAL>::iteration()
         {
-            pimpl->parallel_mma.smooth_parallel_mma();
+            pimpl->parallel_mma.parallel_sma();
         }
 
     template<typename REAL>

@@ -21,7 +21,6 @@ namespace LPMP {
     namespace ILP_parser {
 
         // import basic parsers
-        //using opt_whitespace = tao::pegtl::star<tao::pegtl::sor<parsing::opt_whitespace, tao::pegtl::eol>>;
         using parsing::opt_whitespace;
         using parsing::mand_whitespace;
         using parsing::opt_invisible;
@@ -32,17 +31,8 @@ namespace LPMP {
 
         struct min_line : tao::pegtl::seq<opt_whitespace, tao::pegtl::string<'M','i','n','i','m','i','z','e'>, opt_whitespace, tao::pegtl::eol> {};
 
-        //struct sign : tao::pegtl::sor<tao::pegtl::string<'+'>, tao::pegtl::string<'-'>> {};
-
         struct sign : tao::pegtl::one< '+', '-' > {};
 
-        /*
-        struct variable_name : tao::pegtl::seq< 
-                               tao::pegtl::alpha, 
-                               tao::pegtl::star< tao::pegtl::sor< tao::pegtl::range<'a', 'z'>, tao::pegtl::range<'A','Z'>, tao::pegtl::range<'0','9'>, tao::pegtl::one< '_', '-', '(', ')', '{', '}', ',' > > >
-                               >{};
-                               
-                               */
         struct term_identifier : tao::pegtl::seq<
                                  tao::pegtl::plus<tao::pegtl::sor<tao::pegtl::alnum, tao::pegtl::string<'_'>, tao::pegtl::string<'-'>, tao::pegtl::string<'/'>, tao::pegtl::string<'('>, tao::pegtl::string<')'>, tao::pegtl::string<'{'>, tao::pegtl::string<'}'>, tao::pegtl::string<','>, tao::pegtl::string<';'>, tao::pegtl::string<'@'>, tao::pegtl::string<'['>, tao::pegtl::string<']'>, tao::pegtl::string<'#'>, tao::pegtl::string<'.'>, tao::pegtl::string<'\''> > >
                                  > {};
@@ -99,6 +89,11 @@ namespace LPMP {
 
         struct binaries : tao::pegtl::opt<binaries_begin, list_of_binary_variables> {};
 
+        struct bounds_var_fixation_line : tao::pegtl::seq<opt_whitespace, variable_name, opt_whitespace, tao::pegtl::string<'='>, opt_whitespace, tao::pegtl::opt<tao::pegtl::string<'0'>, tao::pegtl::string<'1'>>, opt_whitespace, tao::pegtl::eol> {};
+        struct bounds_var_smaller_equal_line : tao::pegtl::seq<opt_whitespace, variable_name, opt_whitespace, tao::pegtl::string<'<','='>, opt_whitespace, tao::pegtl::opt<tao::pegtl::string<'0'>, tao::pegtl::string<'1'>>, opt_whitespace, tao::pegtl::eol> {};
+        struct bounds_var_greater_equal_line : tao::pegtl::seq<opt_whitespace, tao::pegtl::opt<tao::pegtl::string<'0'>, tao::pegtl::string<'1'>>, opt_whitespace, tao::pegtl::string<'<','='>, opt_whitespace,  variable_name, opt_whitespace, tao::pegtl::eol> {};
+        struct bounds_var_lb_ub_line : tao::pegtl::seq<opt_whitespace, tao::pegtl::opt<tao::pegtl::string<'0'>, tao::pegtl::string<'1'>>, opt_whitespace, tao::pegtl::string<'<','='>, opt_whitespace,  variable_name, opt_whitespace, tao::pegtl::opt<tao::pegtl::string<'0'>, tao::pegtl::string<'1'>>, tao::pegtl::string<'<','='>, opt_whitespace, opt_whitespace, tao::pegtl::eol> {};
+
         struct end_line : tao::pegtl::seq<opt_whitespace, tao::pegtl::string<'E','n','d'>, opt_whitespace, tao::pegtl::eolf> {};
 
         struct grammar : tao::pegtl::seq<
@@ -109,6 +104,12 @@ namespace LPMP {
                          tao::pegtl::star<inequality_line>,
                          //tao::pegtl::opt<coalesce_begin, tao::pegtl::star<coalesce_line>>,
                          bounds_begin, // ignore everything after bounds (variables are assumed to be binary)
+                         tao::pegtl::star<tao::pegtl::sor<
+                            bounds_var_fixation_line,
+                            bounds_var_smaller_equal_line,
+                            bounds_var_greater_equal_line,
+                            bounds_var_lb_ub_line
+                         >>,
                          //binaries,
                          //end_line> {};
                          tao::pegtl::until<end_line>> {};
@@ -248,6 +249,100 @@ namespace LPMP {
                 }
         };
 
+        template<> struct action< bounds_var_fixation_line > {
+            template<typename INPUT>
+                static void apply(const INPUT & in, ILP_input& i, tmp_storage& tmp)
+                {
+                    std::istringstream iss(in.string());
+
+                    std::string var; iss >> var;
+                    assert(i.var_exists(var));
+
+                    std::string equality; iss >> equality;
+                    assert(equality == "=");
+
+                    std::string val_str; iss >> val_str;
+                    const int val = std::stoi(val_str);
+                    assert(val == 0 || val == 1);
+
+                    i.fix_variable(var, val);
+                }
+        };
+
+        template<> struct action< bounds_var_smaller_equal_line > {
+            template<typename INPUT>
+                static void apply(const INPUT & in, ILP_input& i, tmp_storage& tmp)
+                {
+                    std::istringstream iss(in.string());
+
+                    std::string var; iss >> var;
+                    assert(i.var_exists(var));
+
+                    std::string equality; iss >> equality;
+                    assert(equality == "<=");
+
+                    std::string val_str; iss >> val_str;
+                    const int val = std::stoi(val_str);
+                    assert(val == 0 || val == 1);
+
+                    if(val == 0)
+                        i.fix_variable(var, val);
+                }
+        };
+
+        template<> struct action< bounds_var_greater_equal_line > {
+            template<typename INPUT>
+                static void apply(const INPUT & in, ILP_input& i, tmp_storage& tmp)
+                {
+                    std::istringstream iss(in.string());
+
+                    std::string val_str; iss >> val_str;
+                    const int val = std::stoi(val_str);
+                    assert(val == 0 || val == 1);
+
+                    std::string equality; iss >> equality;
+                    assert(equality == "<=");
+
+                    std::string var; iss >> var;
+                    assert(i.var_exists(var));
+
+                    if(val == 1)
+                        i.fix_variable(var, val);
+                }
+        };
+
+        template<> struct action< bounds_var_lb_ub_line > {
+            template<typename INPUT>
+                static void apply(const INPUT & in, ILP_input& i, tmp_storage& tmp)
+                {
+                    std::istringstream iss(in.string());
+
+                    std::string lb_str; iss >> lb_str;
+                    const int lb = std::stoi(lb_str);
+                    assert(lb == 0 || lb == 1);
+
+                    std::string first_inequality; iss >> first_inequality;
+                    assert(first_inequality == "<=");
+
+                    std::string var; iss >> var;
+                    assert(i.var_exists(var));
+
+                    std::string second_inequality; iss >> second_inequality;
+                    assert(second_inequality == "<=");
+
+                    std::string ub_str; iss >> ub_str;
+                    const int ub = std::stoi(ub_str);
+                    assert(ub == 0 || ub == 1);
+
+                    assert(lb <= ub);
+
+                    if(lb == 1)
+                        i.fix_variable(var, lb);
+                    if(ub == 0)
+                        i.fix_variable(var, ub);
+                }
+        };
+
         ILP_input parse_file(const std::string& filename)
         {
             MEASURE_FUNCTION_EXECUTION_TIME;
@@ -256,6 +351,7 @@ namespace LPMP {
             tao::pegtl::file_input input(filename);
             if(!tao::pegtl::parse<grammar, action>(input, ilp, tmp))
                 throw std::runtime_error("could not read input file " + filename);
+            ilp.substitute_fixed_variables();
             return ilp;
         }
 
@@ -268,6 +364,7 @@ namespace LPMP {
 
             if(!tao::pegtl::parse<grammar, action>(input, ilp, tmp))
                 throw std::runtime_error("could not read input:\n" + input_string);
+            ilp.substitute_fixed_variables();
             return ilp;
         }
 

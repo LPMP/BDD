@@ -56,7 +56,7 @@ void run_smooth_instance(const std::string& input)
 
     for(size_t iter=0; iter<100; ++iter)
     {
-        parallel_solver.smooth_parallel_mma();
+        parallel_solver.parallel_sma();
         const double parallel_solver_lb = parallel_solver.smooth_lower_bound();
         std::cout << "[parallel smooth mma] iteration = " << iter << " smooth lb = " << parallel_solver_lb << "\n";
     }
