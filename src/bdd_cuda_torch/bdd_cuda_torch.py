@@ -7,6 +7,16 @@ def validate_input_format(*args):
         assert arg.dtype == torch.float32, 'argument not in FP32 format'
         assert arg.is_contiguous(), 'argument not contiguous'
 
+def ComputePrimalSolution(solvers, lo_costs_batch, hi_costs_batch, def_mm_batch, init_delta, delta_growth_rate, num_itr_lb):
+    validate_input_format(lo_costs_batch, hi_costs_batch, def_mm_batch)
+    layer_start = 0
+    solutions_cpu = []
+    for (b, solver) in enumerate(solvers):
+        solver.set_solver_costs(lo_costs_batch[layer_start].data_ptr(), hi_costs_batch[layer_start].data_ptr(), def_mm_batch[layer_start].data_ptr())
+        solutions_cpu.append(solver.primal_rounding_incremental(init_delta, delta_growth_rate, num_itr_lb))
+        layer_start += solver.nr_layers()
+    return solutions_cpu
+
 def ComputePerBDDSolutions(solvers, lo_costs_batch, hi_costs_batch):
     validate_input_format(lo_costs_batch, hi_costs_batch)
     per_bdd_solution_hi = torch.zeros_like(lo_costs_batch) # Initialize by 0's to also copy to deferred min-marginals.

@@ -2,6 +2,7 @@
 #include <pybind11/eigen.h>
 #include <pybind11/stl.h>
 #include "bdd_cuda_learned_mma.h"
+#include "incremental_mm_agreement_rounding_cuda.h"
 #include "bdd_branch_instruction.h"
 #include "ILP_input.h"
 #include "two_dimensional_variable_array.hxx"
@@ -407,7 +408,14 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
         }, "During primal rounding calling update_costs(lo_pert, hi_pert) changes the dual costs, the underlying primal objective vector also changes.\n"
             "Here we compute gradients of such pertubation operation assuming that distribution of (lo_pert, hi_pert) was done with isoptropic weights.")
 
-        
+        .def("primal_rounding_incremental", [](bdd_type& solver, double init_delta, const double delta_growth_rate, const int num_itr_lb)
+        {
+            std::vector<char> sol = incremental_mm_agreement_rounding_cuda(solver, init_delta, delta_growth_rate, num_itr_lb, false);
+            std::vector<float> solution_f(sol.size());
+            for (int i = 0; i < sol.size(); i++)
+                solution_f[i] = (float) sol[i];
+            return solution_f;
+        })
     ;
 }
 

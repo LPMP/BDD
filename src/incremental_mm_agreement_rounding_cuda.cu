@@ -9,6 +9,7 @@
 #include "time_measure_util.h"
 
 #include "bdd_cuda_parallel_mma.h"
+#include "bdd_cuda_learned_mma.h"
 #include "run_solver_util.h"
 
 namespace LPMP {
@@ -255,7 +256,7 @@ struct mm_type_to_sol {
 };
 
     template<typename SOLVER>
-        std::vector<char> incremental_mm_agreement_rounding_cuda(SOLVER& s, double init_delta, const double delta_growth_rate, const int num_itr_lb)
+        std::vector<char> incremental_mm_agreement_rounding_cuda(SOLVER& s, double init_delta, const double delta_growth_rate, const int num_itr_lb, const bool verbose)
         {
             assert(delta_growth_rate > 0);
             assert(init_delta > 0);
@@ -264,9 +265,11 @@ struct mm_type_to_sol {
             const auto start_time = std::chrono::steady_clock::now();
             s.distribute_delta();
             const double lb = s.lower_bound();
-            std::cout<<"Lower bound after distributing delta: "<<lb<<"\n";
-
-            std::cout << "[incremental primal rounding cuda] initial perturbation delta = " << init_delta << ", growth rate for perturbation " << delta_growth_rate << "\n";
+            if (verbose)
+            {
+                std::cout<<"Lower bound after distributing delta: "<<lb<<"\n";
+                std::cout << "[incremental primal rounding cuda] initial perturbation delta = " << init_delta << ", growth rate for perturbation " << delta_growth_rate << "\n";
+            }
 
             double cur_delta = 1.0/delta_growth_rate * init_delta;
 
@@ -275,7 +278,7 @@ struct mm_type_to_sol {
                 cur_delta = min(cur_delta*delta_growth_rate, 1e6);
                 const auto time = std::chrono::steady_clock::now();
                 const double time_elapsed = (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000;
-                std::cout << "[incremental primal rounding cuda] round " << round << ", cost delta " << cur_delta << ", time elapsed = " << time_elapsed << "\n";
+                if (verbose) std::cout << "[incremental primal rounding cuda] round " << round << ", cost delta " << cur_delta << ", time elapsed = " << time_elapsed << "\n";
                 
                 s.distribute_delta();
                 const auto mms = s.min_marginals_cuda();
@@ -290,26 +293,27 @@ struct mm_type_to_sol {
                 if (nr_inconsistent_mms == 1)
                 {
                     const size_t incon_index = thrust::distance(mm_types.begin(), thrust::find(mm_types.begin(), mm_types.end(), mm_type::inconsistent));
-                    std::cout<<"Inconsistent index: "<<incon_index<<"\n";
+                    if (verbose) std::cout<<"Inconsistent index: "<<incon_index<<"\n";
                 }
 
-                std::cout << "[incremental primal rounding cuda] " <<
+                if (verbose)
+                {
+                    std::cout << "[incremental primal rounding cuda] " <<
                     "#one min-marg diffs = " << nr_one_mms << " " << u8"\u2258" << " " << double(100*nr_one_mms)/double(s.nr_variables()) << "%, " <<
                     "#zero min-marg diffs = " << nr_zero_mms << " " << u8"\u2258" << " " << double(100*nr_zero_mms)/double(s.nr_variables()) << "%, " <<
                     "#equal min-marg diffs = " << nr_equal_mms << " " << u8"\u2258" << " " << double(100*nr_equal_mms)/double(s.nr_variables()) << "%, " <<
                     "#inconsistent min-marg diffs = " << nr_inconsistent_mms << " " << u8"\u2258" << " " << double(100*nr_inconsistent_mms)/double(s.nr_variables()) << "%\n";
-
+                }
                 // reconstruct solution from min-marginals
                 if(nr_one_mms + nr_zero_mms == s.nr_variables())
                 {
-                    std::cout << "[incremental primal rounding cuda] reconstruct solution\n";
+                    if (verbose) std::cout << "[incremental primal rounding cuda] reconstruct solution\n";
                     assert(mm_types.size() == s.nr_variables());
                     thrust::device_vector<char> device_sol(s.nr_variables());
                     thrust::transform(mm_types.begin(), mm_types.end(), device_sol.begin(), mm_type_to_sol{});
                     std::vector<char> sol(s.nr_variables());
                     thrust::copy(device_sol.begin(), device_sol.end(), sol.begin());
-                    std::cout << "[incremental primal rounding cuda] reconstructed solution\n";
-                    std::cout << "[incremental primal rounding cuda] Lower bound with 0 delta: "<<lb<<"\n";
+                    if (verbose) std::cout << "[incremental primal rounding cuda] reconstructed solution\n"<<"[incremental primal rounding cuda] Lower bound with 0 delta: "<<lb<<"\n";
                     return sol;
                 }
 
@@ -329,13 +333,15 @@ struct mm_type_to_sol {
 
                 s.update_costs(cost_delta_0, cost_delta_1);
                 run_solver(s, num_itr_lb, 1e-7, 0.0001, std::numeric_limits<double>::max(), false);
-                std::cout << "[incremental primal rounding cuda] lower bound = " << s.lower_bound() << "\n";
+                if (verbose) std::cout << "[incremental primal rounding cuda] lower bound = " << s.lower_bound() << "\n";
             }
 
-            std::cout << "[incremental primal rounding cuda] No solution found\n";
+            if (verbose) std::cout << "[incremental primal rounding cuda] No solution found\n";
             return {};
         }
 
-    template std::vector<char> incremental_mm_agreement_rounding_cuda(bdd_cuda_parallel_mma<float>& , double , const double, const int );
-    template std::vector<char> incremental_mm_agreement_rounding_cuda(bdd_cuda_parallel_mma<double>& , double , const double, const int );
+    template std::vector<char> incremental_mm_agreement_rounding_cuda(bdd_cuda_parallel_mma<float>& , double , const double, const int, const bool );
+    template std::vector<char> incremental_mm_agreement_rounding_cuda(bdd_cuda_parallel_mma<double>& , double , const double, const int, const bool );
+    template std::vector<char> incremental_mm_agreement_rounding_cuda(bdd_cuda_learned_mma<float>& , double , const double, const int, const bool );
+    template std::vector<char> incremental_mm_agreement_rounding_cuda(bdd_cuda_learned_mma<double>& , double , const double, const int, const bool );
 }
