@@ -1,6 +1,7 @@
 #include "ILP_input.h"
 #include "ILP_parser.h"
 #include "OPB_parser.h"
+#include "specialized_solvers/mrf_input.h"
 #include <pybind11/pybind11.h>
 #include <pybind11/eigen.h>
 #include <pybind11/stl.h>
@@ -116,4 +117,5 @@ PYBIND11_MODULE(ILP_instance_py, m) {
         m.def("read_ILP", [](const std::string& filename) -> LPMP::ILP_input { return LPMP::ILP_parser::parse_file(filename); }); 
         m.def("parse_ILP", [](const char* instance) -> LPMP::ILP_input { return LPMP::ILP_parser::parse_string(instance); }); 
         m.def("read_OPB", [](const std::string& filename) -> LPMP::ILP_input { return LPMP::OPB_parser::parse_file(filename); }); 
+        m.def("read_MRF_UAI", [](const std::string& filename) -> LPMP::ILP_input { return LPMP::parse_mrf_uai_file(filename).convert_to_ilp(); });
 }

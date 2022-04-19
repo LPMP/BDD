@@ -147,11 +147,18 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
                     [](const py::bytes& s) {
                         return create_solver(s);
                 }))
-        .def(py::init([](const LPMP::ILP_input& ilp, const bool compute_bdd_to_constraint_map = true) {
+        .def(py::init([](const LPMP::ILP_input& ilp, const bool compute_bdd_to_constraint_map = true, const double objective_multiplier = 1.0) {
                     LPMP::bdd_preprocessor bdd_pre;
                     const auto constraint_to_bdd_map = bdd_pre.add_ilp(ilp);
                     auto* base = new bdd_type(bdd_pre.get_bdd_collection());
-                    base->update_costs(ilp.objective().begin(), ilp.objective().begin(), ilp.objective().begin(), ilp.objective().end());
+                    std::vector<double> rescaled_objective = ilp.objective();
+                    if (objective_multiplier != 1.0)
+                    {
+                        for (int i = 0; i != rescaled_objective.size(); ++i)
+                            rescaled_objective[i] = objective_multiplier * rescaled_objective[i];
+                    }
+
+                    base->update_costs(rescaled_objective.begin(), rescaled_objective.begin(), rescaled_objective.begin(), rescaled_objective.end());
                     if (compute_bdd_to_constraint_map)
                         base->compute_bdd_to_constraint_map(constraint_to_bdd_map);
                     return base;

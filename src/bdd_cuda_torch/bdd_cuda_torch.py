@@ -381,5 +381,5 @@ class ComputeLowerBoundperBDD(torch.autograd.Function):
 
             bdd_start += solver.nr_bdds()
             layer_start += solver.nr_layers()
-        
+
         return None, grad_lo_costs_in, grad_hi_costs_in, None
