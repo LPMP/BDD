@@ -10,7 +10,7 @@
 
 namespace py=pybind11;
 
-using bdd_type = LPMP::bdd_cuda_parallel_mma<float>;
+using bdd_type = LPMP::bdd_cuda_parallel_mma<double>;
 
 bdd_type create_solver(const py::bytes& s)
 {

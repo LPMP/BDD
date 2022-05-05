@@ -26,6 +26,26 @@ namespace cereal {
         ar >> host_vec;
         dev_vector = thrust::device_vector<T>(host_vec);
     }
+
+    // // Save and load REAL data type as float. Not strictly necessary only because currently
+    // // the saved bdd representations are in float and we would like to load it into double.
+    // template<class Archive>
+    // void save(Archive& ar, const thrust::device_vector<double>& dev_vector)
+    // {
+    //     std::vector<double> host_vec(dev_vector.size());
+    //     thrust::copy(dev_vector.begin(), dev_vector.end(), host_vec.begin());
+    //     std::vector<float> host_vec_float(host_vec.begin(), host_vec.end());
+    //     ar << host_vec_float;
+    // }
+
+    // template<class Archive>
+    // void load(Archive& ar, thrust::device_vector<double>& dev_vector)
+    // {
+    //     std::vector<float> host_vec;
+    //     ar >> host_vec;
+    //     thrust::device_vector<float> dev_vector_float(host_vec.begin(), host_vec.end());
+    //     dev_vector = thrust::device_vector<double>(dev_vector_float.begin(), dev_vector_float.end());
+    // }
 }
 
 namespace LPMP {
