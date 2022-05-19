@@ -19,6 +19,8 @@ namespace LPMP {
             template<typename ITERATOR>
                 void update_costs(ITERATOR cost_lo_begin, ITERATOR cost_lo_end, ITERATOR cost_hi_begin, ITERATOR cost_hi_end);
 
+            size_t nr_variables() const;
+            size_t nr_bdds(const size_t var) const;
             double lower_bound();
             void iteration();
             void distribute_delta();

@@ -3,6 +3,7 @@
 #include "bdd_branch_instruction.h"
 #include "bdd_tightening.h"
 #include "time_measure_util.h"
+#include "two_dimensional_variable_array.hxx"
 
 namespace LPMP {
 
@@ -40,6 +41,24 @@ namespace LPMP {
     {}
 
     template<typename REAL>
+        size_t bdd_mma_vec<REAL>::nr_variables() const
+        {
+            return pimpl->mma.nr_variables();
+        }
+
+    template<typename REAL>
+        size_t bdd_mma_vec<REAL>::nr_bdds(const size_t var) const
+        {
+            return pimpl->mma.nr_bdds(var);
+        }
+
+    template<typename REAL>
+    void bdd_mma_vec<REAL>::update_costs(const two_dim_variable_array<std::array<double,2>>& delta)
+    {
+        pimpl->mma.update_costs(delta);
+    }
+
+    template<typename REAL>
     void bdd_mma_vec<REAL>::update_cost(const double lo_cost, const double hi_cost, const size_t var)
     {
         pimpl->mma.update_cost(lo_cost, hi_cost, var);
@@ -70,6 +89,13 @@ namespace LPMP {
     }
 
     template<typename REAL>
+        template<typename ITERATOR>
+        two_dim_variable_array<char> bdd_mma_vec<REAL>::bdd_feasibility(ITERATOR sol_begin, ITERATOR sol_end)
+        {
+            return pimpl->mma.bdd_feasibility(sol_begin, sol_end);
+        }
+
+    template<typename REAL>
     void bdd_mma_vec<REAL>::fix_variable(const size_t var, const bool value)
     {
         pimpl->mma.fix_variable(var, value);
@@ -84,4 +110,12 @@ namespace LPMP {
     // explicitly instantiate templates
     template class bdd_mma_vec<float>;
     template class bdd_mma_vec<double>;
+
+    template two_dim_variable_array<char> bdd_mma_vec<double>::bdd_feasibility(char*, char*);
+    template two_dim_variable_array<char> bdd_mma_vec<double>::bdd_feasibility(std::vector<char>::iterator, std::vector<char>::iterator);
+    template two_dim_variable_array<char> bdd_mma_vec<double>::bdd_feasibility(std::vector<char>::const_iterator, std::vector<char>::const_iterator);
+
+    template two_dim_variable_array<char> bdd_mma_vec<float>::bdd_feasibility(char*, char*);
+    template two_dim_variable_array<char> bdd_mma_vec<float>::bdd_feasibility(std::vector<char>::iterator, std::vector<char>::iterator);
+    template two_dim_variable_array<char> bdd_mma_vec<float>::bdd_feasibility(std::vector<char>::const_iterator, std::vector<char>::const_iterator);
 }

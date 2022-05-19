@@ -17,14 +17,19 @@ namespace LPMP {
             bdd_mma_vec(bdd_mma_vec&&);
             bdd_mma_vec& operator=(bdd_mma_vec&&);
             ~bdd_mma_vec();
+            size_t nr_variables() const;
+            size_t nr_bdds(const size_t var) const;
+            void update_costs(const two_dim_variable_array<std::array<double,2>>& delta);
             void update_cost(const double lo_cost, const double hi_cost, const size_t var);
             template<typename COST_ITERATOR>
                 void update_costs(COST_ITERATOR cost_lo_begin, COST_ITERATOR cost_lo_end, COST_ITERATOR cost_hi_begin, COST_ITERATOR cost_hi_end);
             void set_avg_type(const averaging_type avg_type);
             double lower_bound();
             void iteration();
-            void backward_run(); 
+            void backward_run();  // to do: remove, internals should not be exposed outside!
             two_dim_variable_array<std::array<double,2>> min_marginals();
+            template<typename ITERATOR>
+                two_dim_variable_array<char> bdd_feasibility(ITERATOR sol_begin, ITERATOR sol_end);
             void fix_variable(const size_t var, const bool value);
 
             void tighten();

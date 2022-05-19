@@ -159,6 +159,14 @@ add_executable(test_bdd_preprocessor test_bdd_preprocessor.cpp)
 target_link_libraries(test_bdd_preprocessor LPMP-BDD)
 add_test(test_bdd_preprocessor test_bdd_preprocessor)
 
+add_executable(test_bdd_solvers_update_costs test_bdd_solvers_update_costs.cpp)
+target_link_libraries(test_bdd_solvers_update_costs LPMP-BDD)
+add_test(test_bdd_solvers_update_costs test_bdd_solvers_update_costs)
+
+add_executable(test_bdd_solver_feasibility test_bdd_solver_feasibility.cpp)
+target_link_libraries(test_bdd_solver_feasibility LPMP-BDD)
+add_test(test_bdd_solver_feasibility test_bdd_solver_feasibility)
+
 add_subdirectory(specialized_solvers)
 
 # regression test

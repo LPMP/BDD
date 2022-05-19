@@ -22,6 +22,9 @@ target_link_libraries(bdd_preprocessor ILP_input convert_pb_to_bdd lineq_bdd LPM
 add_library(bdd_storage bdd_storage.cpp)
 target_link_libraries(bdd_storage bdd_preprocessor LPMP-BDD)
 
+add_library(mm_primal_decoder mm_primal_decoder.cpp)
+target_link_libraries(mm_primal_decoder LPMP-BDD)
+
 add_library(decomposition_bdd_mma_base decomposition_bdd_mma_base.cpp)
 target_link_libraries(decomposition_bdd_mma_base LPMP-BDD)
 
@@ -64,7 +67,7 @@ add_library(bdd_fix bdd_fix.cpp)
 target_link_libraries(bdd_fix LPMP-BDD) 
 
 add_library(bdd_solver bdd_solver.cpp)
-target_link_libraries(bdd_solver bdd_mma_vec bdd_mma_smooth decomposition_bdd_mma bdd_parallel_mma bdd_parallel_mma_smooth bdd_cuda bdd_fix bdd_preprocessor ILP_parser OPB_parser bdd_storage ILP_input LPMP-BDD pthread)
+target_link_libraries(bdd_solver bdd_mma_vec bdd_mma_smooth decomposition_bdd_mma bdd_parallel_mma bdd_parallel_mma_smooth bdd_cuda bdd_fix bdd_preprocessor ILP_parser OPB_parser bdd_storage ILP_input mm_primal_decoder LPMP-BDD pthread)
 if(WITH_CUDA)
     target_link_libraries(bdd_solver bdd_cuda_base bdd_cuda_parallel_mma incremental_mm_agreement_rounding_cuda)
     target_compile_options(bdd_solver PRIVATE "$<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CUDA>>:--generate-line-info>")

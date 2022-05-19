@@ -46,6 +46,18 @@ namespace LPMP {
     }
 
     template<typename REAL>
+        size_t bdd_parallel_mma<REAL>::nr_variables() const
+        {
+            return pimpl->base.nr_variables();
+        }
+
+    template<typename REAL>
+        size_t bdd_parallel_mma<REAL>::nr_bdds(const size_t var) const
+        {
+            return pimpl->base.nr_bdds(var);
+        }
+
+    template<typename REAL>
     void bdd_parallel_mma<REAL>::backward_run()
     {
         pimpl->base.backward_run();

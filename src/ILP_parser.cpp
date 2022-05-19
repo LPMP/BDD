@@ -1,5 +1,6 @@
 #include "ILP_parser.h"
 #include <tao/pegtl.hpp>
+#include <unordered_set>
 #include "pegtl_parse_rules.h"
 #include "ILP_input.h"
 #include "time_measure_util.h" 
@@ -124,6 +125,8 @@ namespace LPMP {
             std::vector<size_t> constraint_monomial;
             std::string inequality_identifier = "";
             std::vector<std::string> coalesce_identifiers;
+            std::unordered_set<size_t> zero_fixations;
+            std::unordered_set<size_t> one_fixations;
         };
 
         template<> struct action< sign > {
@@ -265,7 +268,10 @@ namespace LPMP {
                     const int val = std::stoi(val_str);
                     assert(val == 0 || val == 1);
 
-                    i.fix_variable(var, val);
+                    if(val == 0)
+                        tmp.zero_fixations.insert(i.get_var_index(var));
+                    else if(val == 1)
+                        tmp.one_fixations.insert(i.get_var_index(var));
                 }
         };
 
@@ -286,7 +292,7 @@ namespace LPMP {
                     assert(val == 0 || val == 1);
 
                     if(val == 0)
-                        i.fix_variable(var, val);
+                        tmp.zero_fixations.insert(i.get_var_index(var));
                 }
         };
 
@@ -307,7 +313,7 @@ namespace LPMP {
                     assert(i.var_exists(var));
 
                     if(val == 1)
-                        i.fix_variable(var, val);
+                        tmp.one_fixations.insert(i.get_var_index(var));
                 }
         };
 
@@ -337,9 +343,9 @@ namespace LPMP {
                     assert(lb <= ub);
 
                     if(lb == 1)
-                        i.fix_variable(var, lb);
+                        tmp.one_fixations.insert(i.get_var_index(var));
                     if(ub == 0)
-                        i.fix_variable(var, ub);
+                        tmp.zero_fixations.insert(i.get_var_index(var));
                 }
         };
 
@@ -351,7 +357,8 @@ namespace LPMP {
             tao::pegtl::file_input input(filename);
             if(!tao::pegtl::parse<grammar, action>(input, ilp, tmp))
                 throw std::runtime_error("could not read input file " + filename);
-            ilp.substitute_fixed_variables();
+            if(tmp.one_fixations.size() > 0 || tmp.zero_fixations.size() > 0)
+                ilp = ilp.reduce(tmp.zero_fixations, tmp.one_fixations);
             return ilp;
         }
 
@@ -364,7 +371,8 @@ namespace LPMP {
 
             if(!tao::pegtl::parse<grammar, action>(input, ilp, tmp))
                 throw std::runtime_error("could not read input:\n" + input_string);
-            ilp.substitute_fixed_variables();
+            if(tmp.one_fixations.size() > 0 || tmp.zero_fixations.size() > 0)
+                ilp = ilp.reduce(tmp.zero_fixations, tmp.one_fixations);
             return ilp;
         }
 

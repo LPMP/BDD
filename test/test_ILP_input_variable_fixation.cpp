@@ -1,4 +1,5 @@
 #include "ILP_input.h"
+#include <unordered_set>
 #include "test.h"
 
 using namespace LPMP;
@@ -25,12 +26,14 @@ int main(int argc, char** argv)
         ilp.add_new_variable("x2");
         ilp.add_constraint(simplex);
 
-        ilp.fix_variable("x1",0);
-        ilp.substitute_fixed_variables();
+        std::unordered_set<size_t> zero_fixations;
+        std::unordered_set<size_t> one_fixations;
+        zero_fixations.insert(ilp.get_var_index("x1"));
+        ILP_input reduced_ilp = ilp.reduce(zero_fixations, one_fixations);
 
-        test(ilp.nr_variables() == 2);
-        test(ilp.constraints()[0].is_linear());
-        test(ilp.constraints()[0].is_simplex());
+        test(reduced_ilp.nr_variables() == 2);
+        test(reduced_ilp.constraints()[0].is_linear());
+        test(reduced_ilp.constraints()[0].is_simplex());
 
     }
 

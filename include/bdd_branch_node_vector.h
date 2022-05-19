@@ -70,6 +70,8 @@ namespace LPMP {
                             VARIABLE_ITERATOR variable_begin, VARIABLE_ITERATOR variable_end);
                 //template<typename COST_ITERATOR>
                 //    void update_costs(COST_ITERATOR cost_begin, COST_ITERATOR cost_end);
+                template<typename REAL>
+                    void update_costs(const two_dim_variable_array<std::array<REAL,2>>& delta);
 
                 template<typename ITERATOR>
                     void update_arc_costs(const size_t first_node, ITERATOR begin, ITERATOR end);
@@ -78,6 +80,10 @@ namespace LPMP {
 
                 std::array<size_t,2> bdd_branch_node_offset(const size_t var, const size_t bdd_index) const;
                 size_t variable(const size_t bdd_offset) const;
+
+                // record for each bdd and each of its variables whether the solution is feasible for it
+                template<typename ITERATOR>
+                    two_dim_variable_array<char> bdd_feasibility(ITERATOR sol_begin, ITERATOR sol_end) const;
 
                 void export_graphviz(const char* filename);
                 void export_graphviz(const std::string& filename);
@@ -618,6 +624,28 @@ namespace LPMP {
         message_passing_state_ = message_passing_state::after_forward_pass;
         return mms;
     }
+
+    template<typename BDD_BRANCH_NODE>
+        template<typename REAL>
+        void bdd_mma_base<BDD_BRANCH_NODE>::update_costs(const two_dim_variable_array<std::array<REAL,2>>& delta)
+        {
+            lower_bound_state_ = lower_bound_state::invalid;
+            message_passing_state_ = message_passing_state::none;
+
+            assert(delta.size() == nr_variables());
+
+            for(size_t var=0; var<delta.size(); ++var)
+            {
+                assert(delta.size(var) == nr_bdds(var));
+                for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
+                {
+                    auto& bdd = bdd_branch_nodes_[i];
+                    const size_t idx = bdd.bdd_index;
+                    bdd.low_cost += delta(var,idx)[0];
+                    bdd.high_cost += delta(var,idx)[1];
+                }
+            }
+        }
 
     template<typename BDD_BRANCH_NODE>
     std::vector<size_t> bdd_mma_base<BDD_BRANCH_NODE>::compute_bdd_branch_instruction_variables() const
@@ -1436,6 +1464,134 @@ namespace LPMP {
             const double lb = lower_bound();
             std::cout << "lb = " << lb << "\n";
             return new_bdd_nrs;
+        }
+
+    template<typename BDD_BRANCH_NODE>
+        template<typename ITERATOR>
+        two_dim_variable_array<char> bdd_mma_base<BDD_BRANCH_NODE>::bdd_feasibility(ITERATOR sol_begin, ITERATOR sol_end) const
+        {
+            assert(std::distance(sol_begin, sol_end) == nr_variables());
+
+            std::vector<size_t> bdd_feas_size;
+            bdd_feas_size.reserve(nr_variables());
+            for(size_t i=0; i<nr_variables(); ++i)
+                bdd_feas_size.push_back(nr_bdds(i));
+            two_dim_variable_array<char> bdd_feas(bdd_feas_size);
+            for(size_t i=0; i<bdd_feas.size(); ++i)
+                for(size_t j=0; j<bdd_feas.size(i); ++j)
+                    bdd_feas(i,j) = true;
+
+
+            std::unordered_set<size_t> forward_instr_ptrs; // TODO: possibly remove for vector?
+            struct i_var { size_t i, var; }; // bdd_branch_nodes_ offset and variable
+            std::unordered_map<size_t, i_var> backward_instr_ptrs; // for backtracking and setting corresponding elements to false
+
+            for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
+            {
+                assert(first_bdd_node_indices_.size(bdd_nr) == 1);
+                const size_t i = first_bdd_node_indices_(bdd_nr,0);
+                forward_instr_ptrs.insert(i);
+            }
+
+            // todo: there might be additional (var, bdd_index) tuples corresponding to current bdd that must be set to false!
+            auto backtrack = [&](const size_t i, const size_t var) -> void {
+                auto backtrack_impl = [&](const size_t i, const size_t var, auto& backtrack_ref) -> void {
+                    assert(i < bdd_branch_nodes_.size());
+                    assert(var < nr_variables());
+
+                    const auto& bdd = bdd_branch_nodes_[i];
+                    const size_t bdd_index = bdd.bdd_index;
+
+                    if(bdd_feas(var, bdd_index) == false)
+                        return;
+                    bdd_feas(var, bdd_index) = false;
+
+                    auto prev_it = backward_instr_ptrs.find(i);
+                    if(prev_it != backward_instr_ptrs.end())
+                    {
+                        const auto [prev_i, prev_var] = prev_it->second;
+                        backtrack_ref(prev_i, prev_var, backtrack_ref);
+                    }
+                };
+                return backtrack_impl(i, var, backtrack_impl);
+            };
+
+            // insert into doubly linked list
+            auto insert_list = [&](const size_t i, const size_t var, const size_t offset) {
+                assert(i < bdd_branch_nodes_.size());
+                assert(var < nr_variables());
+                const auto& bdd = bdd_branch_nodes_[i];
+                assert(offset == bdd.offset_low || offset == bdd.offset_high);
+                const size_t total_offset = std::distance(&bdd_branch_nodes_[0], bdd.address(offset));
+
+                forward_instr_ptrs.insert(total_offset);
+                backward_instr_ptrs.insert({total_offset, i_var{i,var}});
+            };
+
+            // see whether previous BDD node
+            auto set_from_previous = [&](const size_t i, const size_t var) {
+                assert(i < bdd_branch_nodes_.size());
+                assert(var < nr_variables());
+
+                // get pointer to previous
+                auto prev_it = backward_instr_ptrs.find(i);
+                if(prev_it != backward_instr_ptrs.end())
+                {
+                    // if it is set to false, set current entry to false as well
+                    const auto [prev_i, prev_var] = prev_it->second;
+                    const auto& bdd_prev = bdd_branch_nodes_[prev_i];
+                    if(bdd_feas(prev_var, bdd_prev.bdd_index) == false)
+                    {
+                        const auto& bdd = bdd_branch_nodes_[i];
+                        bdd_feas(var, bdd.bdd_index) = false;
+                    }
+                }
+            };
+
+            for(size_t var=0; var<nr_variables(); ++var)
+            {
+                assert(sol_begin[var] == 0 || sol_begin[var] == 1);
+                const bool x = sol_begin[var];
+
+                for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
+                {
+                    const auto& bdd = bdd_branch_nodes_[i];
+
+                    set_from_previous(i, var);
+
+                    if(forward_instr_ptrs.count(i) > 0)
+                    {
+                        if(x == false)
+                        {
+                            if(bdd.offset_low == bdd.terminal_0_offset)
+                            {
+                                backtrack(i, var);
+                                if(bdd.offset_high != bdd.terminal_1_offset)
+                                    insert_list(i, var, bdd.offset_high);
+                            }
+                            else if(bdd.offset_low != bdd.terminal_1_offset)
+                            {
+                                insert_list(i, var, bdd.offset_low);
+                            }
+                        }
+                        else
+                        {
+                            if(bdd.offset_high == bdd.terminal_0_offset)
+                            {
+                                backtrack(i, var);
+                                if(bdd.offset_low != bdd.terminal_1_offset)
+                                    insert_list(i, var, bdd.offset_low);
+                            }
+                            else if(bdd.offset_high != bdd.terminal_1_offset)
+                            {
+                                insert_list(i, var, bdd.offset_high);
+                            }
+                        }
+                    }
+                }
+            }
+
+            return bdd_feas;
         }
 
     template<typename BDD_BRANCH_NODE>

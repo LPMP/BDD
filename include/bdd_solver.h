@@ -56,10 +56,23 @@ namespace LPMP {
 
         bool tighten = false;
 
+        // incremental perturbation rounding //
         bool incremental_primal_rounding = false;
         double incremental_initial_perturbation = std::numeric_limits<double>::infinity();
         double incremental_growth_rate = 1.2;
         int incremental_primal_num_itr_lb = 500;
+        //////////////////////////////////////
+
+        // Wedelin rounding //
+        // value ranges are taken from "Learning parameters of the Wedelin heuristic with application to crew and bus driver scheduling"
+        bool wedelin_primal_rounding = false;
+        double wedelin_alpha = 0.5; // [0,2]
+        double wedelin_delta = 0.001; // 10^-3, 10^-1]
+        double wedelin_theta = 0.8; // [0,1]
+        double wedelin_kappa_min = 0.1; // [0,0.5]
+        double wedelin_kappa_max = 0.95; // [0.6,1]
+        double wedelin_kappa_step = 0.0001; // [10^-4, 10^-2]
+        //////////////////////
 
         bool diving_primal_rounding = false;
         bdd_fix_options fixing_options_;
@@ -69,6 +82,10 @@ namespace LPMP {
         std::string export_bdd_graph_file = "";
 
         bool constraint_groups = true; // allow constraint groups to be formed e.g. from indicators in the input lp files
+
+        // export difficult part of the problems including zero and undecided min-marginals 
+        std::string export_difficult_core = "";
+        double export_difficult_core_th = 1e-6;
     };
 
     class bdd_solver {
@@ -85,6 +102,7 @@ namespace LPMP {
             void fix_variable(const size_t var, const bool value);
             void fix_variable(const std::string& var, const bool value);
             two_dim_variable_array<std::array<double,2>> min_marginals();
+            void export_difficult_core();
 
         private:
             //bdd_preprocessor preprocess(ILP_input& ilp);
@@ -118,13 +136,12 @@ namespace LPMP {
         input_group->require_option(1); // either as string or as filename
 
         app.add_flag("--logarithms", take_cost_logarithms, "");
-        std::unordered_map<std::string, optimization_type> optimization_type_map{
-            {"maximization", optimization_type::maximization},
-            {"minimization", optimization_type::minimization}
-        };
-        app.add_option("--optimization", optimization, "minimization/maximization of objective")
-            ->transform(CLI::CheckedTransformer(optimization_type_map, CLI::ignore_case));
 
+        auto optimization_group = app.add_option_group("optimization type", "{maximization|minimization}");
+        optimization_group->add_flag("--minimization", [this](const size_t count) { assert(count > 0); this->optimization = optimization_type::minimization; }, "minimize problem");
+        optimization_group->add_flag("--maximization", [this](const size_t count) { assert(count > 0); this->optimization = optimization_type::maximization; }, "maximization problem");
+        optimization_group->require_option(0,1);
+        
         std::unordered_map<std::string, ILP_input::variable_order> variable_order_map{
             {"input", ILP_input::variable_order::input},
             {"bfs", ILP_input::variable_order::bfs},
@@ -179,6 +196,7 @@ namespace LPMP {
         auto primal_group = app.add_option_group("primal rounding", "method for obtaining a primal solution from the dual optimization");
         auto diving_primal_arg = primal_group->add_flag("--diving_primal", diving_primal_rounding, "diving primal rounding flag");
         auto incremental_primal_arg = primal_group->add_flag("--incremental_primal", incremental_primal_rounding, "incremental primal rounding flag");
+        auto wedelin_primal_arg = primal_group->add_flag("--wedelin_primal", wedelin_primal_rounding, "Wedelin primal rounding flag");
         primal_group->require_option(0,1); 
 
         auto primal_param_group = app.add_option_group("primal diving parameters", "parameters for rounding a primal solution");
@@ -197,16 +215,33 @@ namespace LPMP {
             ->transform(CLI::CheckedTransformer(fixing_var_value_map, CLI::ignore_case));
 
         auto incremental_rounding_param_group = app.add_option_group("incremental primal rounding parameters", "parameters for rounding a primal solution");
+        incremental_rounding_param_group->needs(incremental_primal_arg);
 
         incremental_rounding_param_group->add_option("--incremental_initial_perturbation", incremental_initial_perturbation, "value for initial perturbation for obtaining primal solutions by incremental primal rounding")
             ->check(CLI::PositiveNumber);
-       incremental_rounding_param_group->needs(incremental_primal_arg);
 
         incremental_rounding_param_group->add_option("--incremental_perturbation_growth_rate", incremental_growth_rate, "growth rate for increasing the perturbation for obtaining primal solutions by incremental primal rounding")
             ->check(CLI::Range(1.0,std::numeric_limits<double>::max()));
 
         incremental_rounding_param_group->add_option("--incremental_primal_num_itr_lb", incremental_primal_num_itr_lb, "number of iterations of dual optimization during incremental primal rounding")
             ->check(CLI::Range(1,std::numeric_limits<int>::max()));
+
+        auto wedelin_rounding_param_group = app.add_option_group("Wedelin primal rounding parameters", "parameters for rounding a primal solution");
+        wedelin_rounding_param_group->needs(wedelin_primal_arg);
+
+        wedelin_rounding_param_group->add_option("--wedelin_kappa_min", wedelin_kappa_min, "starting value of perturbation strength")
+            ->check(CLI::Range(0.0,1.0));
+        wedelin_rounding_param_group->add_option("--wedelin_kappa_max", wedelin_kappa_max, "maximum value of perturbation strength")
+            ->check(CLI::Range(0.0,1.0));
+        wedelin_rounding_param_group->add_option("--wedelin_kappa_step", wedelin_kappa_step, "increment value for perturbation")
+            ->check(CLI::Range(0.0,1.0));
+        wedelin_rounding_param_group->add_option("--wedelin_alpha", wedelin_alpha, "increment exponent value for perturbation")
+            ->check(CLI::PositiveNumber);
+        wedelin_rounding_param_group->add_option("--wedelin_delta", wedelin_delta, "constant perturbation value")
+            ->check(CLI::PositiveNumber);
+        wedelin_rounding_param_group->add_option("--wedelin_theta", wedelin_theta, "exponential decay factor for perturbation")
+            ->check(CLI::Range(0.0,1.0));
+
 
         auto tighten_arg = app.add_flag("--tighten", tighten, "tighten relaxation flag");
         
@@ -217,6 +252,12 @@ namespace LPMP {
         solver_group->add_option("--export_bdd_graph", export_bdd_graph_file, "filename for export of BDD representation in .dot format");
 
         solver_group->require_option(1); // either a solver or statistics
+
+        auto export_difficult_core_param = app.add_option("--export_difficult_core", export_difficult_core, "filename for export of LP resulting from fixing all variables with zero or one min-marginal");
+        auto export_difficult_core_param_group = app.add_option_group("Difficult core export parameters", "parameters for deciding which variables to exclude from the difficult core");
+        export_difficult_core_param_group->needs(export_difficult_core_param);
+        export_difficult_core_param_group->add_option("--export_difficult_core_th", export_difficult_core_th, "threshold for min-marginals for fixing variables")
+            ->check(CLI::PositiveNumber);
 
         // TODO: replace with needs as for incremental rounding options
         /*

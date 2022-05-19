@@ -4,17 +4,21 @@
 #include "min_marginal_utils.h"
 #include "incremental_mm_agreement_rounding_cuda.h"
 #include "incremental_mm_agreement_rounding.hxx"
+#include "wedelin_primal_heuristic.hxx"
 #include <limits>
 #ifdef _OPENMP
 #include <omp.h>
 #endif
 #include <iomanip>
 #include <memory>
+#include <unordered_set>
 #include <stdlib.h>
 #include <stdexcept>
+#include <filesystem>
 #include <CLI/CLI.hpp>
 #include "time_measure_util.h"
 #include "run_solver_util.h"
+#include "mm_primal_decoder.h"
 #include <string>
 #include <regex>
 
@@ -330,6 +334,9 @@ namespace LPMP {
 
             print_mm(mms);
         }
+
+        if(options.export_difficult_core != "")
+            export_difficult_core();
     }
 
     two_dim_variable_array<std::array<double,2>> bdd_solver::min_marginals()
@@ -410,11 +417,50 @@ namespace LPMP {
             std::cout << "[incremental primal rounding] solution objective = " << obj << "\n";
             return obj;
         }
+        else if(options.wedelin_primal_rounding)
+        {
+            std::cout << "[Wedelin primal rounding] start rounding\n";
+            const auto sol = std::visit([&](auto&& s) {
+                    if constexpr( // CPU rounding
+                            std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_vec<float>>
+                            || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_vec<double>>
+                            //|| std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma<float>>
+                            //|| std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma<double>>
+                            // TODO: remove for cuda rounding again //
+                            //|| std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<float>>
+                            //|| std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<double>>
+                            //////////////////////////////////////////
+                            )
+                    return wedelin_rounding(s, options.ilp,
+                            options.wedelin_theta,
+                            options.wedelin_delta,
+                            options.wedelin_kappa_min, options.wedelin_kappa_max,
+                            options.wedelin_kappa_step, options.wedelin_alpha,
+                            500);
+                    else if constexpr( // GPU rounding
+                            std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<float>>
+                            || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<double>>
+                            )
+                    {
+                    throw std::runtime_error("Wedelin rounding not implemented for GPU solver yet");
+                    }
+
+                    {
+                    throw std::runtime_error("solver not supported for incremental rounding");
+                    return std::vector<char>{};
+                    }
+                    }, *solver);
+
+            const double obj = options.ilp.evaluate(sol.begin(), sol.end());
+            std::cout << "[incremental primal rounding] solution objective = " << obj << "\n";
+            return obj;
+
+        }
         else // no rounding
         {
             return std::numeric_limits<double>::infinity();
         }
-    } 
+    }
 
     void bdd_solver::tighten()
     {
@@ -462,4 +508,36 @@ namespace LPMP {
                 }, *solver);
 
     }
+
+    void bdd_solver::export_difficult_core()
+    {
+        mm_primal_decoder mms(min_marginals());
+        std::unordered_set<size_t> one_fixations, zero_fixations;
+        for(size_t i=0; i<mms.size(); ++i)
+        {
+            const auto mmt = mms.compute_mm_type(i);
+            const auto mm_sum = mms.mm_sum(i);
+            if(mmt == mm_type::one && mm_sum[1] + options.export_difficult_core_th <= mm_sum[0])
+            {
+                //one_fixations.insert(i);
+            }
+            else if(mmt == mm_type::zero && mm_sum[0] + options.export_difficult_core_th <= mm_sum[1])
+                zero_fixations.insert(i);
+        }
+        ILP_input reduced_ilp = options.ilp.reduce(zero_fixations, one_fixations);
+        std::cout << "[bdd solver] Difficult core has " << reduced_ilp.nr_variables() << " variables and " << reduced_ilp.constraints().size() << " constraints left\n";
+
+        std::ofstream f;
+        f.open(options.export_difficult_core);
+        const std::string extension = std::filesystem::path(options.export_difficult_core).extension();
+        if(extension == ".lp")
+            reduced_ilp.write_lp(f);
+        else if(extension == ".opb")
+            reduced_ilp.write_opb(f);
+        else
+            throw std::runtime_error("Cannot recognize file extension " + extension + " for difficult core export file");
+        f.close(); 
+
+    }
+
 }
