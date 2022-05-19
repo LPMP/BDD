@@ -506,7 +506,6 @@ namespace LPMP {
         return std::visit([](auto&& s) {
                 return s.lower_bound(); 
                 }, *solver);
-
     }
 
     void bdd_solver::export_difficult_core()
@@ -518,9 +517,7 @@ namespace LPMP {
             const auto mmt = mms.compute_mm_type(i);
             const auto mm_sum = mms.mm_sum(i);
             if(mmt == mm_type::one && mm_sum[1] + options.export_difficult_core_th <= mm_sum[0])
-            {
-                //one_fixations.insert(i);
-            }
+                one_fixations.insert(i);
             else if(mmt == mm_type::zero && mm_sum[0] + options.export_difficult_core_th <= mm_sum[1])
                 zero_fixations.insert(i);
         }
