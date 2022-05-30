@@ -80,10 +80,6 @@ add_test(test_ILP_input_export test_ILP_input_export)
 #target_link_libraries(test_bdd_preprocessor ILP_parser LPMP bdd)
 #add_test(test_bdd_preprocessor test_bdd_preprocessor)
 
-add_executable(test_decomposition_mma_single_bdd test_decomposition_mma_single_bdd.cpp)
-target_link_libraries(test_decomposition_mma_single_bdd LPMP-BDD)
-add_test(test_decomposition_mma_single_bdd test_decomposition_mma_single_bdd)
-
 add_executable(test_loose_gm_tightening test_loose_gm_tightening.cpp)
 target_link_libraries(test_loose_gm_tightening LPMP-BDD)
 add_test(test_loose_gm_tightening test_loose_gm_tightening)
@@ -92,9 +88,9 @@ add_executable(test_loose_covering_problem test_loose_covering_problem.cpp)
 target_link_libraries(test_loose_covering_problem LPMP-BDD)
 add_test(test_loose_covering_problem test_loose_covering_problem)
 
-add_executable(test_bdd_sequential_base test_bdd_sequential_base.cpp)
-target_link_libraries(test_bdd_sequential_base LPMP-BDD)
-add_test(test_bdd_sequential_base test_bdd_sequential_base)
+add_executable(test_bdd_parallel_mma_base test_bdd_parallel_mma_base.cpp)
+target_link_libraries(test_bdd_parallel_mma_base LPMP-BDD)
+add_test(test_bdd_parallel_mma_base test_bdd_parallel_mma_base)
 
 add_executable(test_bdd_parallel_mma test_bdd_parallel_mma.cpp)
 target_link_libraries(test_bdd_parallel_mma LPMP-BDD)

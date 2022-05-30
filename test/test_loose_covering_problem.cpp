@@ -63,7 +63,7 @@ int main(int argc, char** argv)
     {
         std::vector<std::string> solver_input = {
             "--input_string", test_instance,
-            "-s", "mma_vec",
+            "-s", "mma",
             "--max_iter", "1000"
         };
 
@@ -75,7 +75,7 @@ int main(int argc, char** argv)
     {
         std::vector<std::string> solver_input = {
             "--input_string", test_instance,
-            "-s", "mma_vec",
+            "-s", "mma",
             "--max_iter", "1000",
             "--tighten"
         };
@@ -89,7 +89,7 @@ int main(int argc, char** argv)
     {
         std::vector<std::string> solver_input = {
             "--input_string", test_instance_coalesced,
-            "-s", "mma_vec",
+            "-s", "mma",
             "--max_iter", "1000"
         };
 
@@ -101,7 +101,7 @@ int main(int argc, char** argv)
     {
         std::vector<std::string> solver_input = {
             "--input_string", test_instance_tightened,
-            "-s", "mma_vec",
+            "-s", "mma",
             "--max_iter", "1000"
         };
 

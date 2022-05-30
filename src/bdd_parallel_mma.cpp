@@ -1,6 +1,6 @@
 #include "bdd_parallel_mma.h"
-#include "bdd_sequential_base.h"
-#include "bdd_branch_node_vector.h"
+#include "bdd_parallel_mma_base.h"
+#include "bdd_branch_instruction.h"
 #include "time_measure_util.h"
 
 namespace LPMP {
@@ -12,7 +12,7 @@ namespace LPMP {
                 : base(bdd_col)
             {};
 
-            bdd_sequential_base<bdd_branch_instruction<REAL,uint16_t>> base;
+            bdd_parallel_mma_base<bdd_branch_instruction<REAL,uint16_t>> base;
     };
 
     template<typename REAL>
@@ -44,6 +44,12 @@ namespace LPMP {
     {
         pimpl->base.update_costs(cost_lo_begin, cost_lo_end, cost_hi_begin, cost_hi_end);
     }
+
+    template<typename REAL>
+        void bdd_parallel_mma<REAL>::add_to_constant(const double c)
+        {
+            return pimpl->base.add_to_constant(c);
+        }
 
     template<typename REAL>
         size_t bdd_parallel_mma<REAL>::nr_variables() const

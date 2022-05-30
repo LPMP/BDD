@@ -141,7 +141,8 @@ namespace LPMP {
                         if(constraint_groups == true && input.nr_constraint_groups() > 0)
                             throw std::runtime_error("constraint groups and coefficient decomposition conversion not both supported");
 
-                        std::cout << "[bdd preprocessor] convert inequality " << c << " through coefficient decomposition. max coeff: "<<max_coeff<<", nr_vars: "<<nr_vars<<"\n";
+                        std::cout << "[bdd preprocessor] convert inequality " << constraint.identifier << " through coefficient decomposition. max coeff: "<< max_coeff << ", nr_vars: "<<nr_vars<<"\n";
+                        input.write_lp(std::cout, constraint);
                         auto [bdd, var_split] = converter.coefficient_decomposition_convert_to_bdd(constraint.coefficients, constraint.ineq, constraint.right_hand_side);
 
                         if(bdd.is_topsink())

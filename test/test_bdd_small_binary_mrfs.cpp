@@ -31,10 +31,10 @@ int main(int argc, char** arv)
 {
 	std::cout << "--- Short chain shuffled ---" << std::endl;
 
-	test_problem(short_mrf_chain_shuffled, 1.0, {"-s", "mma_vec", "-o", "input", "--max_iter", "5"});
+	test_problem(short_mrf_chain_shuffled, 1.0, {"-s", "mma", "-o", "input", "--max_iter", "5"});
     return 0;
-	test_problem(short_mrf_chain_shuffled, 1.0, {"-s", "mma_vec", "-o", "bfs", "--max_iter", "5"});
-	test_problem(short_mrf_chain_shuffled, 1.0, {"-s", "mma_vec", "-o", "cuthill", "--max_iter", "5"});
+	test_problem(short_mrf_chain_shuffled, 1.0, {"-s", "mma", "-o", "bfs", "--max_iter", "5"});
+	test_problem(short_mrf_chain_shuffled, 1.0, {"-s", "mma", "-o", "cuthill", "--max_iter", "5"});
 	// // test_problem(short_mrf_chain_shuffled, 1.0, {"-s", "mma", "-o", "mindegree", "--max_iter", "5"});
 	// test_problem(short_mrf_chain_shuffled, 1.0, {"-s", "mma_srmp", "-o", "input", "--max_iter", "5"});
 	// // test_problem(short_mrf_chain_shuffled, 1.0, {"-s", "mma_srmp", "-o", "bfs", "--max_iter", "5"});
@@ -66,9 +66,9 @@ int main(int argc, char** arv)
 
 	std::cout << "--- Grid graph ---" << std::endl;
 
-	// test_problem(mrf_grid_graph_3x3, -8.0, {"-s", "mma_vec", "-o", "input", "--max_iter", "20"});
+	// test_problem(mrf_grid_graph_3x3, -8.0, {"-s", "mma", "-o", "input", "--max_iter", "20"});
 	// test_problem(mrf_grid_graph_3x3, -8.0, {"-s", "mma", "-o", "bfs", "--max_iter", "20"});
-	// test_problem(mrf_grid_graph_3x3, -8.0, {"-s", "mma_vec", "-o", "cuthill", "--max_iter", "20"});
+	// test_problem(mrf_grid_graph_3x3, -8.0, {"-s", "mma", "-o", "cuthill", "--max_iter", "20"});
 	// test_problem(mrf_grid_graph_3x3, -8.0, {"-s", "mma", "-o", "mindegree", "--max_iter", "20"});
 	test_problem(mrf_grid_graph_3x3, -8.0, {"-s", "mma_srmp", "-o", "input", "--max_iter", "20"});
 	// test_problem(mrf_grid_graph_3x3, -8.0, {"-s", "mma_srmp", "-o", "bfs", "--max_iter", "20"});

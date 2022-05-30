@@ -1,4 +1,4 @@
-#include "bdd_mma_vec.h"
+#include "bdd_mma.h"
 #include "bdd_parallel_mma.h"
 #include "bdd_cuda.h"
 #include "ILP_input.h"
@@ -43,8 +43,8 @@ void test_bdd_feasibility_on_short_mrf_chain()
 
 int main(int argc, char** argv)
 {
-    test_bdd_feasibility_on_short_mrf_chain<bdd_mma_vec<double>>();
-    test_bdd_feasibility_on_short_mrf_chain<bdd_mma_vec<float>>();
+    test_bdd_feasibility_on_short_mrf_chain<bdd_mma<double>>();
+    test_bdd_feasibility_on_short_mrf_chain<bdd_mma<float>>();
     //test_bdd_feasibility_on_short_mrf_chain<bdd_parallel_mma<double>>();
     //test_bdd_feasibility_on_short_mrf_chain<bdd_parallel_mma<float>>();
     //test_bdd_feasibility_on_short_mrf_chain<bdd_cuda_parallel_mma<double>>();

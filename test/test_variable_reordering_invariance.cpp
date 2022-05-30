@@ -23,7 +23,7 @@ int main(int argc, char** argv)
 {
     std::vector<std::string> args_input_order = {
         "--input_string", short_mrf_chain,
-        "-s", "mma_vec",
+        "-s", "mma",
         "-o", "input"
     };
     bdd_solver solver_input_order((bdd_solver_options(args_input_order)));
@@ -31,7 +31,7 @@ int main(int argc, char** argv)
 
     std::vector<std::string> args_bfs_order = {
         "--input_string", short_mrf_chain,
-        "-s", "mma_vec",
+        "-s", "mma",
         "-o", "bfs"
     };
     bdd_solver solver_bfs_order((bdd_solver_options(args_bfs_order)));

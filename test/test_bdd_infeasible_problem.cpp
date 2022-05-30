@@ -1,7 +1,7 @@
 #include "ILP_parser.h"
 #include "bdd_preprocessor.h"
 #include "bdd_parallel_mma.h"
-#include "bdd_mma_vec.h"
+#include "bdd_mma.h"
 #include "test.h"
 
 using namespace LPMP;
@@ -53,7 +53,7 @@ int main(int argc, char** argv)
     {
         const ILP_input ilp = ILP_parser::parse_string(infeasible_problem);
         bdd_preprocessor pre(ilp, false, true);
-        bdd_mma_vec<float> solver(pre.get_bdd_collection(), ilp.objective().begin(), ilp.objective().end());
+        bdd_mma<float> solver(pre.get_bdd_collection(), ilp.objective().begin(), ilp.objective().end());
         for(size_t i=0; i<10; ++i)
             solver.iteration();
         std::cout << solver.lower_bound() << "\n";
@@ -63,7 +63,7 @@ int main(int argc, char** argv)
     {
         const ILP_input ilp = ILP_parser::parse_string(infeasible_problem_2);
         bdd_preprocessor pre(ilp, false, true);
-        bdd_mma_vec<float> solver(pre.get_bdd_collection(), ilp.objective().begin(), ilp.objective().end());
+        bdd_mma<float> solver(pre.get_bdd_collection(), ilp.objective().begin(), ilp.objective().end());
         for(size_t i=0; i<10; ++i)
             solver.iteration();
         std::cout << solver.lower_bound() << "\n";

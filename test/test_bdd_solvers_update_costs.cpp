@@ -1,4 +1,4 @@
-#include "bdd_mma_vec.h"
+#include "bdd_mma.h"
 #include "bdd_parallel_mma.h"
 #include "bdd_cuda.h"
 #include "ILP_input.h"
@@ -56,7 +56,7 @@ int main(int argc, char** argv)
 {
     for(const std::string problem_str : test_problems)
     {
-        test_update_costs<bdd_mma_vec<double>>(problem_str);
+        test_update_costs<bdd_mma<double>>(problem_str);
         //test_update_costs<bdd_parallel_mma<double>>(problem_str);
         //test_update_costs<bdd_cuda<double>>(problem_str);
 

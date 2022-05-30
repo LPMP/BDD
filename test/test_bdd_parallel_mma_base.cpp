@@ -1,8 +1,7 @@
-#include "bdd_sequential_base.h"
+#include "bdd_parallel_mma_base.h"
 #include "bdd_branch_instruction.h"
 #include "ILP_parser.h"
 #include "bdd_preprocessor.h"
-#include "bdd_storage.h"
 #include "test.h"
 
 using namespace LPMP;
@@ -18,7 +17,7 @@ End)";
 
 int main(int argc, char** argv)
 {
-    using bdd_base_type = bdd_sequential_base<bdd_branch_instruction<float,uint16_t>>;
+    using bdd_base_type = bdd_parallel_mma_base<bdd_branch_instruction<float,uint16_t>>;
     const ILP_input ilp = ILP_parser::parse_string(two_simplex_problem);
     bdd_preprocessor pre(ilp);
     bdd_base_type solver(pre.get_bdd_collection());

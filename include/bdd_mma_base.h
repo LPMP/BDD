@@ -3,6 +3,7 @@
 // TODO: rename file and classes
 
 #include <tsl/robin_map.h>
+#include <tsl/robin_set.h>
 #include <vector>
 #include <array>
 #include <cstddef>
@@ -11,7 +12,6 @@
 #include <filesystem>
 #include <unordered_set>
 #include <queue>
-#include "bdd_storage.h"
 #include "bdd_collection/bdd_collection.h"
 #include "two_dimensional_variable_array.hxx"
 #include "time_measure_util.h"
@@ -589,7 +589,7 @@ namespace LPMP {
     template<typename BDD_BRANCH_NODE>
     two_dim_variable_array<std::array<double,2>> bdd_mma_base<BDD_BRANCH_NODE>::min_marginals()
     {
-        std::cout << "compute min marginals in mma_vec\n";
+        std::cout << "[bdd mma base] compute min marginals\n";
         if(message_passing_state_ != message_passing_state::after_backward_pass)
             this->backward_run();
         message_passing_state_ = message_passing_state::none;
