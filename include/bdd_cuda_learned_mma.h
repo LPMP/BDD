@@ -102,6 +102,13 @@ namespace LPMP {
                 thrust::device_ptr<REAL> grad_hi_cost_out // Gradients w.r.t hi costs
             );
 
+            void set_initial_lb_change(const double val) {
+                if (!std::isfinite(initial_lb_change_))
+                    initial_lb_change_ = val; 
+            }
+
+            double get_initial_lb_change() const { return initial_lb_change_; }
+
         private:
             // last_hop should be equal to nr_hops() - 1 for complete forward pass.
             void forward_iteration_learned_mm_dist(const thrust::device_ptr<const REAL> dist_weights, thrust::device_ptr<REAL> mm_diff_ptr, const REAL omega_scalar, const thrust::device_ptr<const REAL> omega_vec = nullptr);
@@ -188,5 +195,6 @@ namespace LPMP {
                                     const thrust::device_ptr<const REAL> omega_vec = nullptr,
                                     const bool backprop_omega = true
                                     );
+            double initial_lb_change_ = std::numeric_limits<double>::infinity();
     };
 }

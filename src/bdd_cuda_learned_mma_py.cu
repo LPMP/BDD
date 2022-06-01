@@ -221,7 +221,6 @@ template<typename REAL>
 void non_learned_iterations(LPMP::bdd_cuda_learned_mma<REAL>& solver, const float omega, const int max_num_itr, const float improvement_slope) 
 {
     const double lb_initial = solver.lower_bound();
-    double lb_first_iter = std::numeric_limits<double>::max();
     double lb_prev = lb_initial;
     double lb_post = lb_prev;
     for (int itr = 0; itr < max_num_itr; itr++)
@@ -230,8 +229,9 @@ void non_learned_iterations(LPMP::bdd_cuda_learned_mma<REAL>& solver, const floa
         lb_prev = lb_post;
         lb_post = solver.lower_bound();
         if(itr == 0)
-            lb_first_iter = lb_post;
-        if (std::abs(lb_prev - lb_post) < improvement_slope * std::abs(lb_initial - lb_first_iter))
+            solver.set_initial_lb_change(std::abs(lb_initial - lb_post));
+
+        if (std::abs(lb_prev - lb_post) < improvement_slope * solver.get_initial_lb_change())
             break;
     }
 }

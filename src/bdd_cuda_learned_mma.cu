@@ -199,7 +199,6 @@ namespace LPMP {
                                 const thrust::device_ptr<const REAL> omega_vec)
     {
         const double lb_initial = this->lower_bound();
-        double lb_first_iter = std::numeric_limits<double>::max();
         double lb_prev = lb_initial;
         double lb_post = lb_prev;
         int itr = 0;
@@ -262,8 +261,8 @@ namespace LPMP {
             lb_prev = lb_post;
             lb_post = this->lower_bound();
             if(itr == 0)
-                lb_first_iter = lb_post;
-            if (!converged && std::abs(lb_prev - lb_post) < improvement_slope * std::abs(lb_initial - lb_first_iter))
+                this->set_initial_lb_change(std::abs(lb_initial - lb_post));
+            if (!converged && std::abs(lb_prev - lb_post) < improvement_slope * this->get_initial_lb_change())
                 converged = true;
             if (converged && (history_tracked_for == compute_history_for_itr))
                 break;

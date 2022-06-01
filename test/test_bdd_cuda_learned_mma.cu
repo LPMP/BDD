@@ -253,7 +253,7 @@ void test_problem(const char* instance, const double expected_lb, const double t
     thrust::device_vector<double> lb_first_avg(solver.nr_bdds());
     thrust::device_vector<double> lb_second_avg(solver.nr_bdds());
 
-    solver.iterations(dist_weights.data(), 500, 0.5, 1e-9, sol_avg.data(), lb_first_avg.data(), lb_second_avg.data(), 20, true, 0.9);
+    solver.iterations(dist_weights.data(), 500, 0.5, 1e-9, sol_avg.data(), lb_first_avg.data(), lb_second_avg.data(), 20, 0.9);
     print_min_max(sol_avg.data(), "sol_avg", sol_avg.size());
     
     std::cout<<"Lower bound before distribute: "<<solver.lower_bound()<<", Expected: "<<expected_lb<<"\n";
