@@ -1,6 +1,6 @@
 #pragma once
 
-#include "bdd_branch_node_vector.h"
+#include "bdd_mma_base.h"
 #include <limits>
 
 namespace LPMP {

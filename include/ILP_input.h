@@ -81,9 +81,8 @@ namespace LPMP {
         void normalize();
         bool is_normalized() const;
 
-        void fix_variable(const std::string& var, const int val);
-        void fix_variable(const size_t var_idx, const int val);
-        void substitute_fixed_variables();
+        template<typename ZEROS_VAR_SET, typename ONES_VAR_SET>
+            ILP_input reduce(const ZEROS_VAR_SET& zero_vars, const ONES_VAR_SET& one_vars) const;
 
         permutation reorder(variable_order var_ord);
         permutation reorder_bfs();
@@ -103,6 +102,7 @@ namespace LPMP {
         const tsl::robin_map<std::string, size_t>& var_name_to_index() const { return var_name_to_index_; };
         const tsl::robin_map<std::string, size_t>& inequality_identifier_to_index() const { return inequality_identifier_to_index_; };
 
+        void add_to_constant(const double x) { constant_ += x; }
         double constant() const { return constant_; }
 
         private:
@@ -114,9 +114,6 @@ namespace LPMP {
             tsl::robin_map<std::string, size_t> var_name_to_index_;
             tsl::robin_map<std::string, size_t> inequality_identifier_to_index_;
             two_dim_variable_array<size_t> coalesce_sets_;
-
-            struct var_fixation { size_t var_index; int val; };
-            std::vector<var_fixation> var_fixations_;
 
             permutation var_permutation_;
 
@@ -223,6 +220,7 @@ namespace LPMP {
         void ILP_input::write_lp(STREAM& s, const constraint & constr) const
         {
             assert(constr.coefficients.size() == constr.monomials.size());
+            s << constr.identifier << ": ";
             for(size_t monomial_idx=0; monomial_idx<constr.coefficients.size(); ++monomial_idx)
             {
                 const double coeff = constr.coefficients[monomial_idx];
@@ -262,6 +260,8 @@ namespace LPMP {
             s << "Minimize\n";
             for(size_t i=0; i<objective_.size(); ++i)
                 s << (objective_[i] < 0.0 ? " - " : " + ") <<  std::abs(objective_[i]) << " " << var_index_to_name_[i] << "\n";
+            if(constant_ != 0.0)
+                s << " + " << constant_ << "\n";
             s << "Subject To\n";
             for(const auto& constr : constraints()) {
                 write_lp(s, constr);
@@ -292,9 +292,11 @@ namespace LPMP {
     template<typename STREAM>
         void ILP_input::write_opb(STREAM& s) const
         {
+            s << "* #variable= " << nr_variables() << " #constraint= " << nr_constraints() << "\n";
+
             s << "min:";
-            for(const auto& o : var_name_to_index_)
-                s << " " << (objective(o.second) < 0.0 ? " - " : " + ") <<  std::abs(objective(o.second)) << " " << o.first; 
+            for(size_t i=0; i<nr_variables(); ++i)
+                s << " " << (objective(i) < 0.0 ? " -" : " +") <<  std::abs(objective(i)) << " " << "x" << i+1; 
             s << ";\n";
             for(const auto& constr : constraints())
                 write_opb(s, constr);
@@ -318,13 +320,12 @@ namespace LPMP {
                 if(coeff != 0)
                 {
                     assert(constr.monomials.size(monomial_idx) > 0);
-                    s << ((coeff_multiplier * coeff) < 0.0 ? " - " : " + ") <<  std::abs(coeff);
+                    s << ((coeff_multiplier * coeff) < 0.0 ? " -" : " +") <<  std::abs(coeff);
                     for(size_t var_idx=0; var_idx<constr.monomials.size(monomial_idx); ++var_idx)
                     {
                         const size_t var = constr.monomials(monomial_idx, var_idx);
                         assert(var < var_index_to_name_.size());
-                        s << " " << var_index_to_name_[var];
-
+                        s << " x" << var+1;
                     }
                 }
             }

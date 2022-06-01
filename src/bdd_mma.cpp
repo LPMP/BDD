@@ -1,71 +1,121 @@
 #include "bdd_mma.h"
-#include "bdd_mma_base.hxx"
-#include "bdd_branch_node.h"
-#include "bdd_variable.h"
+#include "bdd_mma_base.h"
+#include "bdd_branch_instruction.h"
+#include "bdd_tightening.h"
 #include "time_measure_util.h"
+#include "two_dimensional_variable_array.hxx"
 
 namespace LPMP {
 
-    class bdd_mma::impl {
+    template<typename REAL>
+    class bdd_mma<REAL>::impl {
         public:
-            using bdd_mma_base_type = bdd_mma_base<bdd_opt_base_node_costs<bdd_variable_mma, bdd_branch_node_opt>>;
-
-            impl(bdd_storage& bdd_storage_)
-                : mma(bdd_storage_)
+            impl(BDD::bdd_collection& bdd_col)
+                : mma(bdd_col)
             {};
 
-            bdd_mma_base_type mma;
+            bdd_mma_base<bdd_branch_instruction_bdd_index<REAL,uint32_t>> mma;
     };
 
-    bdd_mma::bdd_mma(bdd_storage& stor)
+    template<typename REAL>
+    bdd_mma<REAL>::bdd_mma(BDD::bdd_collection& bdd_col)
     {
         MEASURE_FUNCTION_EXECUTION_TIME; 
-        pimpl = std::make_unique<impl>(stor);
+        pimpl = std::make_unique<impl>(bdd_col);
     }
 
-    bdd_mma::bdd_mma(bdd_mma&& o)
+    template<typename REAL>
+    bdd_mma<REAL>::bdd_mma(bdd_mma&& o)
         : pimpl(std::move(o.pimpl))
     {}
 
-    bdd_mma& bdd_mma::operator=(bdd_mma&& o)
+    template<typename REAL>
+    bdd_mma<REAL>& bdd_mma<REAL>::operator=(bdd_mma<REAL>&& o)
     { 
         pimpl = std::move(o.pimpl);
         return *this;
     }
 
-    bdd_mma::~bdd_mma()
+    template<typename REAL>
+    bdd_mma<REAL>::~bdd_mma()
     {}
 
-    void bdd_mma::set_cost(const double c, const size_t var)
+    template<typename REAL>
+        size_t bdd_mma<REAL>::nr_variables() const
+        {
+            return pimpl->mma.nr_variables();
+        }
+
+    template<typename REAL>
+        size_t bdd_mma<REAL>::nr_bdds(const size_t var) const
+        {
+            return pimpl->mma.nr_bdds(var);
+        }
+
+    template<typename REAL>
+    void bdd_mma<REAL>::update_costs(const two_dim_variable_array<std::array<double,2>>& delta)
     {
-        pimpl->mma.set_cost(c, var);
+        pimpl->mma.update_costs(delta);
     }
 
-    void bdd_mma::backward_run()
+    template<typename REAL>
+    void bdd_mma<REAL>::update_cost(const double lo_cost, const double hi_cost, const size_t var)
+    {
+        pimpl->mma.update_cost(lo_cost, hi_cost, var);
+    }
+
+    template<typename REAL>
+    void bdd_mma<REAL>::backward_run()
     {
         pimpl->mma.backward_run();
-        pimpl->mma.compute_lower_bound();
     }
 
-    void bdd_mma::solve(const size_t max_iter, const double tolerance, const double time_limit)
+    template<typename REAL>
+    void bdd_mma<REAL>::iteration()
     {
-        MEASURE_FUNCTION_EXECUTION_TIME;
-        pimpl->mma.solve(max_iter, tolerance, time_limit);
+        pimpl->mma.iteration();
     }
 
-    double bdd_mma::lower_bound()
+    template<typename REAL>
+    double bdd_mma<REAL>::lower_bound()
     {
         return pimpl->mma.lower_bound();
-    } 
+    }
 
-    two_dim_variable_array<std::array<double,2>> bdd_mma::min_marginals()
+    template<typename REAL>
+    two_dim_variable_array<std::array<double,2>> bdd_mma<REAL>::min_marginals()
     {
         return pimpl->mma.min_marginals();
     }
 
-    //void bdd_mma::fix_variable(const size_t var, const bool value)
-    //{
-    //    return pimpl->mma.fix_variable(var, value);
-    //} 
+    template<typename REAL>
+        template<typename ITERATOR>
+        two_dim_variable_array<char> bdd_mma<REAL>::bdd_feasibility(ITERATOR sol_begin, ITERATOR sol_end)
+        {
+            return pimpl->mma.bdd_feasibility(sol_begin, sol_end);
+        }
 
+    template<typename REAL>
+    void bdd_mma<REAL>::fix_variable(const size_t var, const bool value)
+    {
+        pimpl->mma.fix_variable(var, value);
+    }
+
+    template<typename REAL>
+    void bdd_mma<REAL>::tighten()
+    {
+        return LPMP::tighten(pimpl->mma, 0.1); 
+    }
+
+    // explicitly instantiate templates
+    template class bdd_mma<float>;
+    template class bdd_mma<double>;
+
+    template two_dim_variable_array<char> bdd_mma<double>::bdd_feasibility(char*, char*);
+    template two_dim_variable_array<char> bdd_mma<double>::bdd_feasibility(std::vector<char>::iterator, std::vector<char>::iterator);
+    template two_dim_variable_array<char> bdd_mma<double>::bdd_feasibility(std::vector<char>::const_iterator, std::vector<char>::const_iterator);
+
+    template two_dim_variable_array<char> bdd_mma<float>::bdd_feasibility(char*, char*);
+    template two_dim_variable_array<char> bdd_mma<float>::bdd_feasibility(std::vector<char>::iterator, std::vector<char>::iterator);
+    template two_dim_variable_array<char> bdd_mma<float>::bdd_feasibility(std::vector<char>::const_iterator, std::vector<char>::const_iterator);
 }

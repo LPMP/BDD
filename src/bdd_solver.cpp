@@ -4,17 +4,21 @@
 #include "min_marginal_utils.h"
 #include "incremental_mm_agreement_rounding_cuda.h"
 #include "incremental_mm_agreement_rounding.hxx"
+#include "wedelin_primal_heuristic.hxx"
 #include <limits>
 #ifdef _OPENMP
 #include <omp.h>
 #endif
 #include <iomanip>
 #include <memory>
+#include <unordered_set>
 #include <stdlib.h>
 #include <stdexcept>
+#include <filesystem>
 #include <CLI/CLI.hpp>
 #include "time_measure_util.h"
 #include "run_solver_util.h"
+#include "mm_primal_decoder.h"
 #include <string>
 #include <regex>
 
@@ -109,7 +113,7 @@ namespace LPMP {
             std::cout << "[bdd solver] ILP has " << options.ilp.nr_variables() << " variables and " << options.ilp.nr_constraints() << " constraints after preprocessing\n";
         else
         {
-            std::cout << "The problem appears to be infeasible." << std::endl;
+            std::cout << "[bdd solver] The problem appears to be infeasible." << std::endl;
             return;
         }
 
@@ -136,8 +140,6 @@ namespace LPMP {
 
         const bool normalize_constraints = [&]() {
             if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::sequential_mma)
-                return true;
-            if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::decomposition_mma)
                 return true;
             return false;
         }();
@@ -197,9 +199,9 @@ namespace LPMP {
             if(options.smoothing == 0)
             {
                 if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::single_prec)
-                    solver = std::move(bdd_mma_vec<float>(bdd_pre.get_bdd_collection(), costs.begin(), costs.end()));
+                    solver = std::move(bdd_mma<float>(bdd_pre.get_bdd_collection(), costs.begin(), costs.end()));
                 else if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::double_prec)
-                    solver = std::move(bdd_mma_vec<double>(bdd_pre.get_bdd_collection(), costs.begin(), costs.end()));
+                    solver = std::move(bdd_mma<double>(bdd_pre.get_bdd_collection(), costs.begin(), costs.end()));
                 else
                     throw std::runtime_error("only float and double precision allowed");
                 std::cout << "[bdd solver] constructed sequential mma solver\n"; 
@@ -213,12 +215,6 @@ namespace LPMP {
                 std::cout << "[bdd solver] constructed sequential smooth mma solver\n"; 
             }
         } 
-        else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::decomposition_mma)
-        {
-            //solver = std::move(decomposition_bdd_mma(stor, costs.begin(), costs.end(), options.decomposition_mma_options_));
-            throw std::runtime_error("not currently supported");
-            std::cout << "[bdd solver] constructed decomposition mma solver\n";
-        }
         else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::parallel_mma)
         {
             if(options.smoothing == 0)
@@ -273,14 +269,19 @@ namespace LPMP {
                     throw std::runtime_error("smoothing not implemented for chosen solver");
                     }, *solver);
 
-
-        if(options.diving_primal_rounding)
-        {
-            std::cout << options.fixing_options_.var_order << ", " << options.fixing_options_.var_value << "\n";
-            throw std::runtime_error("not usable now");
-            //primal_heuristic = std::move(bdd_fix(stor, options.fixing_options_));
-            std::cout << "[bdd solver] constructed primal heuristic\n";
-        }
+        // set constant
+        if(options.ilp.constant() != 0.0)
+            std::visit([&](auto&& s) { 
+                    if constexpr(false
+                            //std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_smooth<float>>
+                            //|| std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_smooth<double>>
+                            //|| std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma_smooth<float>>
+                            //|| std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma_smooth<double>>
+                            )
+                    s.add_to_constant(options.ilp.constant());
+                    else
+                    throw std::runtime_error("constants not implemented for chosen solver");
+            }, *solver);
 
         auto setup_time = (double) std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_time).count() / 1000;
         std::cout << "[bdd solver] setup time = " << setup_time << " s" << "\n";
@@ -330,6 +331,9 @@ namespace LPMP {
 
             print_mm(mms);
         }
+
+        if(options.export_difficult_core != "")
+            export_difficult_core();
     }
 
     two_dim_variable_array<std::array<double,2>> bdd_solver::min_marginals()
@@ -342,48 +346,13 @@ namespace LPMP {
 
     double bdd_solver::round()
     {
-        if(options.diving_primal_rounding)
-        {
-            assert(options.diving_primal_rounding == bool(primal_heuristic));
-            if(!options.diving_primal_rounding)
-                return std::numeric_limits<double>::infinity();
-
-            MEASURE_FUNCTION_EXECUTION_TIME;
-
-            if(options.time_limit < 0)
-            {
-                std::cout << "Time limit exceeded, aborting rounding." << std::endl;
-                return std::numeric_limits<double>::infinity();
-            }
-
-            if(!primal_heuristic)
-            {
-                std::cout << "no primal heuristic intialized\n";
-                return std::numeric_limits<double>::infinity();
-            }
-
-            std::cout << "Retrieving total min-marginals..." << std::endl;
-
-            const std::vector<double> total_min_marginals = min_marginal_differences(min_marginals(), 0.0);
-            bool success = primal_heuristic->round(total_min_marginals);
-
-            if (!success)
-                return std::numeric_limits<double>::infinity();
-
-            std::vector<char> primal_solution = primal_heuristic->primal_solution();
-            assert(std::all_of(primal_solution.begin(), primal_solution.end(), [](char x){ return (x >= 0) && (x <= 1);}));
-            assert(primal_solution.size() == costs.size());
-            double upper_bound = std::inner_product(primal_solution.begin(), primal_solution.end(), costs.begin(), 0.0);
-            std::cout << "Primal solution value: " << upper_bound << std::endl;
-            return upper_bound;
-        }
-        else if(options.incremental_primal_rounding)
+        if(options.incremental_primal_rounding)
         {
             std::cout << "[incremental primal rounding] start rounding\n";
             const auto sol = std::visit([&](auto&& s) {
                     if constexpr( // CPU rounding
-                            std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_vec<float>>
-                            || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_vec<double>>
+                            std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma<float>>
+                            || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma<double>>
                             || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma<float>>
                             || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma<double>>
                             // TODO: remove for cuda rounding again //
@@ -410,11 +379,50 @@ namespace LPMP {
             std::cout << "[incremental primal rounding] solution objective = " << obj << "\n";
             return obj;
         }
+        else if(options.wedelin_primal_rounding)
+        {
+            std::cout << "[Wedelin primal rounding] start rounding\n";
+            const auto sol = std::visit([&](auto&& s) {
+                    if constexpr( // CPU rounding
+                            std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma<float>>
+                            || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma<double>>
+                            //|| std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma<float>>
+                            //|| std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma<double>>
+                            // TODO: remove for cuda rounding again //
+                            //|| std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<float>>
+                            //|| std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<double>>
+                            //////////////////////////////////////////
+                            )
+                    return wedelin_rounding(s, options.ilp,
+                            options.wedelin_theta,
+                            options.wedelin_delta,
+                            options.wedelin_kappa_min, options.wedelin_kappa_max,
+                            options.wedelin_kappa_step, options.wedelin_alpha,
+                            500);
+                    else if constexpr( // GPU rounding
+                            std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<float>>
+                            || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<double>>
+                            )
+                    {
+                    throw std::runtime_error("Wedelin rounding not implemented for GPU solver yet");
+                    }
+
+                    {
+                    throw std::runtime_error("solver not supported for incremental rounding");
+                    return std::vector<char>{};
+                    }
+                    }, *solver);
+
+            const double obj = options.ilp.evaluate(sol.begin(), sol.end());
+            std::cout << "[incremental primal rounding] solution objective = " << obj << "\n";
+            return obj;
+
+        }
         else // no rounding
         {
             return std::numeric_limits<double>::infinity();
         }
-    } 
+    }
 
     void bdd_solver::tighten()
     {
@@ -428,7 +436,7 @@ namespace LPMP {
 
         std::cout << "Tighten...\n";
         std::visit([](auto&& s) {
-            if constexpr(std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_vec<float>>)
+            if constexpr(std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma<float>>)
             s.tighten();
             else
                 throw std::runtime_error("tighten not implemented");
@@ -439,7 +447,7 @@ namespace LPMP {
     {
         std::visit([var, value](auto&& s) {
             if constexpr(
-                    std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_vec<float>> || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_vec<double>>
+                    std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma<float>> || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma<double>>
                     ||
                     std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma<float>> || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma<double>>
                     )
@@ -460,6 +468,35 @@ namespace LPMP {
         return std::visit([](auto&& s) {
                 return s.lower_bound(); 
                 }, *solver);
+    }
+
+    void bdd_solver::export_difficult_core()
+    {
+        mm_primal_decoder mms(min_marginals());
+        std::unordered_set<size_t> one_fixations, zero_fixations;
+        for(size_t i=0; i<mms.size(); ++i)
+        {
+            const auto mmt = mms.compute_mm_type(i);
+            const auto mm_sum = mms.mm_sum(i);
+            if(mmt == mm_type::one && mm_sum[1] + options.export_difficult_core_th <= mm_sum[0])
+                one_fixations.insert(i);
+            else if(mmt == mm_type::zero && mm_sum[0] + options.export_difficult_core_th <= mm_sum[1])
+                zero_fixations.insert(i);
+        }
+        ILP_input reduced_ilp = options.ilp.reduce(zero_fixations, one_fixations);
+        std::cout << "[bdd solver] Difficult core has " << reduced_ilp.nr_variables() << " variables and " << reduced_ilp.constraints().size() << " constraints left\n";
+
+        std::ofstream f;
+        f.open(options.export_difficult_core);
+        const std::string extension = std::filesystem::path(options.export_difficult_core).extension();
+        if(extension == ".lp")
+            reduced_ilp.write_lp(f);
+        else if(extension == ".opb")
+            reduced_ilp.write_opb(f);
+        else
+            throw std::runtime_error("Cannot recognize file extension " + extension + " for difficult core export file");
+        f.close(); 
 
     }
+
 }

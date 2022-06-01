@@ -45,6 +45,13 @@ namespace LPMP {
         }
 
     template<typename REAL>
+        void bdd_mma_smooth<REAL>::add_to_constant(const double c)
+        {
+            throw std::runtime_error("not implemented yet");
+            //pimpl->mma.add_to_constant(c);
+        }
+
+    template<typename REAL>
         void bdd_mma_smooth<REAL>::backward_run()
         {
             pimpl->mma.smooth_backward_run();

@@ -1,14 +1,14 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/eigen.h>
 #include <pybind11/stl.h>
-#include "bdd_sequential_base.h"
+#include "bdd_parallel_mma_base.h"
 #include "bdd_branch_instruction.h"
 #include "ILP_input.h"
 #include "bdd_preprocessor.h"
 
 namespace py=pybind11;
 
-using bdd_base_type = LPMP::bdd_sequential_base<LPMP::bdd_branch_instruction<float,uint16_t>>;
+using bdd_base_type = LPMP::bdd_parallel_mma_base<LPMP::bdd_branch_instruction<float,uint16_t>>;
 
 PYBIND11_MODULE(bdd_mp_py, m) {
     m.doc() = "Python binding for solution of bdd-based message passing";

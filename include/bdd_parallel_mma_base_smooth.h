@@ -1,6 +1,6 @@
 #pragma once
 
-#include "bdd_sequential_base.h"
+#include "bdd_parallel_mma_base.h"
 #include "bdd_branch_instruction_smooth.h"
 #include "exp_sum.h"
 #include <limits>
@@ -9,12 +9,12 @@
 namespace LPMP {
 
     template<typename BDD_BRANCH_NODE>
-        class bdd_parallel_mma_base_smooth : public bdd_sequential_base<BDD_BRANCH_NODE> {
+        class bdd_parallel_mma_base_smooth : public bdd_parallel_mma_base<BDD_BRANCH_NODE> {
             public:
                 using value_type = typename BDD_BRANCH_NODE::value_type;
-                using base_type = bdd_sequential_base<BDD_BRANCH_NODE>;
+                using base_type = bdd_parallel_mma_base<BDD_BRANCH_NODE>;
 
-                using bdd_sequential_base<BDD_BRANCH_NODE>::bdd_sequential_base;
+                using bdd_parallel_mma_base<BDD_BRANCH_NODE>::bdd_parallel_mma_base;
 
                 void smooth_forward_run();
                 void smooth_backward_run();

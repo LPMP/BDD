@@ -4,83 +4,32 @@
 #include <array>
 #include <vector>
 #include <limits>
+#include <cmath>
 #include <chrono>
 #include <iostream>
 #include <iomanip>
+#include "mm_primal_decoder.h"
+#include "time_measure_util.h"
 #include "two_dimensional_variable_array.hxx"
 #include "run_solver_util.h"
 
 namespace LPMP {
 
-    namespace {
-        enum class mm_type {
-            zero,
-            one,
-            equal,
-            inconsistent
-        }; 
-
-        template<typename REAL>
-            std::vector<mm_type> compute_mm_types(const two_dim_variable_array<std::array<REAL,2>>& mms)
+    template<typename REAL>
+        double compute_initial_delta(const two_dim_variable_array<std::array<REAL,2>>& mms)
+        {
+            std::vector<double> mm_diffs(mms.size());;
+            for(size_t i=0; i<mms.size(); ++i)
             {
-                std::vector<mm_type> diffs(mms.size(),mm_type::inconsistent);
-
-                for(size_t i=0; i<mms.size(); ++i)
-                {
-                    assert(mms.size(i) > 0);
-
-                    const bool all_equal = [&]() { // all min-marginals are equal
-                        for(size_t j=0; j<mms.size(i); ++j)
-                            if(std::abs(mms(i,j)[1] - mms(i,j)[0]) > 1e-6)
-                                return false;
-                        return true;
-                    }();
-
-                    const bool all_one = [&]() { // min-marginals indicate one variable should be taken
-                        for(size_t j=0; j<mms.size(i); ++j)
-                            if(!(mms(i,j)[1] + 1e-6 < mms(i,j)[0]))
-                                return false;
-                        return true;
-                    }();
-
-                    const bool all_zero = [&]() { // min-marginals indicate zero variable should be taken
-                        for(size_t j=0; j<mms.size(i); ++j)
-                            if(!(mms(i,j)[0] + 1e-6 < mms(i,j)[1]))
-                                return false;
-                        return true;
-                    }();
-
-                    assert(int(all_zero) + int(all_one) + int(all_equal) <= 1);
-
-                    if(all_zero)
-                        diffs[i] = mm_type::zero;
-                    else if(all_one)
-                        diffs[i] = mm_type::one;
-                    else if(all_equal)
-                        diffs[i] = mm_type::equal;
-                    else
-                        diffs[i] = mm_type::inconsistent;
-                }
-
-                return diffs;
+                for(size_t j=0; j<mms.size(i); ++j)
+                    mm_diffs[i] += mms(i,j)[1] - mms(i,j)[0];
+                mm_diffs[i] = std::abs(mm_diffs[i])/double(mms.size(i));
             }
-
-        template<typename REAL>
-            double compute_initial_delta(const two_dim_variable_array<std::array<REAL,2>>& mms)
-            {
-                std::vector<double> mm_diffs(mms.size());;
-                for(size_t i=0; i<mms.size(); ++i)
-                {
-                    for(size_t j=0; j<mms.size(i); ++j)
-                        mm_diffs[i] += mms(i,j)[1] - mms(i,j)[0];
-                    mm_diffs[i] = std::abs(mm_diffs[i])/double(mms.size(i));
-                }
-                nth_element(mm_diffs.begin(), mm_diffs.begin() + 0.1*mms.size(), mm_diffs.end());
-                const double computed_delta = mm_diffs[0.1*mms.size()];
-                std::cout << "[incremental primal rounding] computed delta = " << computed_delta << "\n";
-                return computed_delta;
-            }
-    }
+            nth_element(mm_diffs.begin(), mm_diffs.begin() + 0.1*mms.size(), mm_diffs.end());
+            const double computed_delta = mm_diffs[0.1*mms.size()];
+            std::cout << "[incremental primal rounding] computed delta = " << computed_delta << "\n";
+            return computed_delta;
+        }
 
     namespace detail {
         // test whether solver has distribute_delta function
@@ -97,6 +46,7 @@ namespace LPMP {
     template<typename SOLVER>
         std::vector<char> incremental_mm_agreement_rounding_iter(SOLVER& s, double init_delta = std::numeric_limits<double>::infinity(), const double delta_growth_rate = 1.1, const int num_itr_lb = 100)
         {
+            MEASURE_FUNCTION_EXECUTION_TIME;
             assert(init_delta > 0.0);
             assert(delta_growth_rate >= 1.0);
 
@@ -123,57 +73,43 @@ namespace LPMP {
                 // flush stored computations to get best min marginals
                 detail::distribute_delta(s, 0);
 
-                const auto mms = s.min_marginals();
-                const auto mm_types = compute_mm_types(mms);
-                const size_t nr_one_mms = std::count(mm_types.begin(), mm_types.end(), mm_type::one);
-                const size_t nr_zero_mms = std::count(mm_types.begin(), mm_types.end(), mm_type::zero);
-                const size_t nr_equal_mms = std::count(mm_types.begin(), mm_types.end(), mm_type::equal);
-                const size_t nr_inconsistent_mms = std::count(mm_types.begin(), mm_types.end(), mm_type::inconsistent);
-                assert(nr_one_mms + nr_zero_mms + nr_equal_mms + nr_inconsistent_mms == mms.size());
+                const auto mms = mm_primal_decoder(s.min_marginals());
+                const auto [nr_one_mms, nr_zero_mms, nr_equal_mms, nr_inconsistent_mms] = mms.mm_type_statistics();
+                assert(nr_one_mms + nr_zero_mms + nr_equal_mms + nr_inconsistent_mms == s.nr_variables());
 
                 const int old_precision = std::cout.precision();
                 std::cout << std::setprecision(2);
                 std::cout << "[incremental primal rounding] " <<
-                    "#one min-marg diffs = " << nr_one_mms << " % " << double(100*nr_one_mms)/double(mms.size()) << ", " <<  
-                    "#zero min-marg diffs = " << nr_zero_mms << " % " << double(100*nr_zero_mms)/double(mms.size()) << ", " << 
-                    "#equal min-marg diffs = " << nr_equal_mms << " % " << double(100*nr_equal_mms)/double(mms.size()) << ", " << 
-                    "#inconsistent min-marg diffs = " << nr_inconsistent_mms << " % " << double(100*nr_inconsistent_mms)/double(mms.size()) << "\n";
+                    "#one min-marg diffs = " << nr_one_mms << " % " << double(100*nr_one_mms)/double(s.nr_variables()) << ", " <<  
+                    "#zero min-marg diffs = " << nr_zero_mms << " % " << double(100*nr_zero_mms)/double(s.nr_variables()) << ", " << 
+                    "#equal min-marg diffs = " << nr_equal_mms << " % " << double(100*nr_equal_mms)/double(s.nr_variables()) << ", " << 
+                    "#inconsistent min-marg diffs = " << nr_inconsistent_mms << " % " << double(100*nr_inconsistent_mms)/double(s.nr_variables()) << "\n";
                 std::cout << std::setprecision(old_precision);
 
                 std::uniform_real_distribution<> dis(-cur_delta, cur_delta);
 
-                if(nr_one_mms + nr_zero_mms == mms.size())
+                if(nr_one_mms + nr_zero_mms == s.nr_variables())
                 {
-                    std::vector<char> sol(mms.size(),0);
-                    for(size_t i=0; i<sol.size(); ++i)
-                    {
-                        if(mm_types[i] == mm_type::one)
-                            sol[i] = 1;
-                        else
-                        {
-                            assert(mm_types[i] == mm_type::zero);
-                            sol[i] = 0;
-                        }
-                    }
                     std::cout << "[incremental primal rounding] Found feasible solution\n";
-                    return sol;
+                    return mms.solution_from_mms();
                 }
 
-                std::vector<double> cost_lo_updates(mms.size(), 0.0);
-                std::vector<double> cost_hi_updates(mms.size(), 0.0);
-                for(size_t i=0; i<mms.size(); ++i)
+                std::vector<double> cost_lo_updates(s.nr_variables(), 0.0);
+                std::vector<double> cost_hi_updates(s.nr_variables(), 0.0);
+                for(size_t i=0; i<s.nr_variables(); ++i)
                 {
-                    if(mm_types[i] == mm_type::one)
+                    const mm_type mmt = mms.compute_mm_type(i);
+                    if(mmt == mm_type::one)
                     {
                         cost_lo_updates[i] = cur_delta;
                         cost_hi_updates[i] = 0.0;
                     }
-                    else if(mm_types[i] == mm_type::zero)
+                    else if(mmt == mm_type::zero)
                     {
                         cost_lo_updates[i] = 0.0;
                         cost_hi_updates[i] = cur_delta;
                     }
-                    else if(mm_types[i] == mm_type::equal)
+                    else if(mmt == mm_type::equal)
                     {
                         const double r = dis(gen);
                         assert(-cur_delta <= r && r <= cur_delta);
@@ -190,16 +126,8 @@ namespace LPMP {
                     }
                     else
                     {
-                        assert(mm_types[i] == mm_type::inconsistent);
-                        const auto mm_sum = [&]() {
-                            std::array<double,2> s = {0.0,0.0};
-                            for(size_t j=0; j<mms.size(i); ++j)
-                            {
-                                s[0] += mms(i,j)[0];
-                                s[1] += mms(i,j)[1];
-                            }
-                            return s;
-                        }();
+                        assert(mmt == mm_type::inconsistent);
+                        const std::array<double,2> mm_sum = mms.mm_sum(i);
                         //const double r = 5.0*dis(gen);
                         const double r = dis(gen);
                         if(mm_sum[0] < mm_sum[1])
@@ -220,6 +148,135 @@ namespace LPMP {
             }
 
             std::cout << "[incremental primal rounding] No solution found\n";
+            return {};
+        }
+        
+
+    // rounding inspired by Wedelin's algorithm and its refinement in "Learning parameters of the Wedelin heuristic with application to crew and bus driver scheduling"
+    // this implementation does not follow the original sequential 
+    template<typename SOLVER>
+        std::vector<char> wedelin_rounding(
+                SOLVER& s, 
+                const double theta, // exponential perturbation decay rate
+                const double delta, // fixed perturbation strength
+                const double kappa_min, const double kappa_max, // proportional perturbation strength w.r.t. min-marginal difference
+                const double kappa_step, const double alpha, // adjustment rate for kappa
+                const size_t num_itr_lb
+                )
+        {
+            MEASURE_FUNCTION_EXECUTION_TIME;
+            constexpr static size_t num_outer_iterations = 500;
+
+            std::cout << "[Wedelin primal rounding] parameters:\n";
+            std::cout << "\t\t\ttheta = " << theta << "\n";
+            std::cout << "\t\t\tdelta = " << delta << "\n";
+            std::cout << "\t\t\tkappa min = " << kappa_min << ", kappa max = " << kappa_max << ", kappa step = " << kappa_step << ", alpha = " << alpha << "\n";
+            assert(theta >= 0.0 && theta <= 1.0);
+            assert(delta >= 0.0);
+            assert(0.0 <= kappa_min && kappa_min < kappa_max && kappa_max < 1.0);
+            assert(kappa_step >= 0.0 && kappa_step <= 1.0);
+            assert(alpha >= 0.0);
+
+            std::default_random_engine gen{static_cast<long unsigned int>(0)}; // deterministic seed for repeatable experiments
+            std::uniform_real_distribution<> dis(-delta, delta);
+
+            const auto mms = s.min_marginals();
+            std::vector<size_t> nr_bdds;
+            nr_bdds.reserve(s.nr_variables());
+            for(size_t i=0; i<s.nr_variables(); ++i)
+                nr_bdds.push_back(s.nr_bdds(i));
+            two_dim_variable_array<std::array<double,2>> p(nr_bdds.begin(), nr_bdds.end());
+            for(size_t i=0; i<p.size(); ++i)
+                for(size_t j=0; j<p.size(i); ++j)
+                    p(i,j) = {0.0, 0.0};
+            two_dim_variable_array<std::array<double,2>> p_delta = p;
+
+            double kappa = kappa_min;
+            for(size_t iter=0; iter<num_outer_iterations && kappa <= kappa_max; ++iter)
+            {
+                // reset perturbation
+                // decay perturbtations
+                for(size_t i=0; i<p.size(); ++i)
+                {
+                    for(size_t j=0; j<p.size(i); ++j)
+                    {
+                        // remove exponential decay
+                        p_delta(i,j)[0] = -(1-theta)*p(i,j)[0];
+                        p_delta(i,j)[1] = -(1-theta)*p(i,j)[1];
+                    }
+                }
+
+                mm_primal_decoder mms(s.min_marginals());
+
+                const auto [nr_one_mms, nr_zero_mms, nr_equal_mms, nr_inconsistent_mms] = mms.mm_type_statistics();
+
+                if(mms.can_reconstruct_solution())
+                {
+                    std::cout << "[Wedelin primal rounding] found primal solution\n";
+                    return mms.solution_from_mms();
+                }
+
+                std::cout << "[Wedelin primal rounding] iteration " << iter << ", kappa = " << kappa << "\n";
+                const int old_precision = std::cout.precision();
+                std::cout << std::setprecision(2);
+                std::cout << "[Wedelin primal rounding] " <<
+                    "#one min-marg diffs = " << nr_one_mms << " % " << double(100*nr_one_mms)/double(s.nr_variables()) << ", " <<  
+                    "#zero min-marg diffs = " << nr_zero_mms << " % " << double(100*nr_zero_mms)/double(s.nr_variables()) << ", " << 
+                    "#equal min-marg diffs = " << nr_equal_mms << " % " << double(100*nr_equal_mms)/double(s.nr_variables()) << ", " << 
+                    "#inconsistent min-marg diffs = " << nr_inconsistent_mms << " % " << double(100*nr_inconsistent_mms)/double(s.nr_variables()) << "\n";
+                std::cout << std::setprecision(old_precision);
+
+                double sum_Deltas = 0.0;
+                for(size_t i=0; i<p.size(); ++i)
+                {
+                    const double r = dis(gen);
+                    assert(-delta <= r && r <= delta);
+                    for(size_t j=0; j<p.size(i); ++j)
+                    {
+                        const double Delta = kappa / (1-kappa) * std::abs(mms(i,j)[1] - mms(i,j)[0]) + delta;
+                        assert(Delta > 0.0);
+                        const mm_type mmt = mms.compute_mm_type(i);
+                        if(mmt == mm_type::zero)
+                            p_delta(i,j)[1] += Delta;
+                        else if(mmt == mm_type::zero)
+                            p_delta(i,j)[0] -= Delta;
+                        else
+                        {
+                            if(r < 0.0)
+                                p_delta(i,j)[0] += Delta;
+                            else
+                                p_delta(i,j)[1] += Delta;
+                        }
+
+                        //if(mms(i,j)[0] < mms(i,j)[1])
+                        //    p_delta(i,j)[1] += Delta;
+                        //else
+                        //    p_delta(i,j)[0] -= Delta;
+                        sum_Deltas += Delta;
+                    }
+                }
+                std::cout << "[Wedelin primal rounding] Sum of all Delta perturbations = " << sum_Deltas << "\n";
+
+                s.update_costs(p_delta);
+                for(size_t i=0; i<p.size(); ++i)
+                {
+                    for(size_t j=0; j<p.size(i); ++j)
+                    {
+                        // this also takes into account the exponential decay
+                        p(i,j)[0] += p_delta(i,j)[0];
+                        p(i,j)[1] += p_delta(i,j)[1];
+                        p_delta(i,j)[0] = 0.0;
+                        p_delta(i,j)[1] = 0.0;
+                    }
+                }
+
+                run_solver(s, num_itr_lb, 1e-7, 0.0001, std::numeric_limits<double>::max(), false);
+                std::cout << "[Wedelin primal rounding] lower bound = " << s.lower_bound() << "\n";
+
+                kappa += kappa_step * std::exp( alpha * std::log(double(nr_equal_mms + nr_inconsistent_mms)/double(s.nr_variables())) );
+            }
+
+            std::cout << "[Wedelin primal rounding] did not find a primal solution\n";
             return {};
         }
 

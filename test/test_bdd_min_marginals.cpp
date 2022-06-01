@@ -1,4 +1,4 @@
-#include "bdd_mma_vec.h"
+#include "bdd_mma.h"
 #include "bdd_parallel_mma.h"
 #include "ILP_parser.h"
 #include "bdd_preprocessor.h"
@@ -40,6 +40,6 @@ void test_min_marginals()
 
 int main(int argc, char** argv)
 {
-    test_min_marginals<bdd_mma_vec<float>>();
+    test_min_marginals<bdd_mma<float>>();
     test_min_marginals<bdd_parallel_mma<float>>();
 }

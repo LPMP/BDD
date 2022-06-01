@@ -1,4 +1,4 @@
-#include "bdd_sequential_base.h"
+#include "bdd_parallel_mma_base.h"
 #include "bdd_branch_instruction.h"
 #include "ILP_parser.h"
 #include "bdd_preprocessor.h"
@@ -18,7 +18,7 @@ End)";
 
 std::vector<std::array<float,2>> test_mm(const ILP_input& ilp, const std::string direction = "forward")
 {
-    using bdd_base_type = bdd_sequential_base<bdd_branch_instruction<float,uint16_t>>;
+    using bdd_base_type = bdd_parallel_mma_base<bdd_branch_instruction<float,uint16_t>>;
 
     bdd_preprocessor pre(ilp);
     bdd_base_type solver(pre.get_bdd_collection());
@@ -85,7 +85,7 @@ std::vector<std::array<float,2>> test_mm(const ILP_input& ilp, const std::string
 
 int main(int argc, char** argv)
 {
-    using bdd_base_type = bdd_sequential_base<bdd_branch_instruction<float,uint16_t>>;
+    using bdd_base_type = bdd_parallel_mma_base<bdd_branch_instruction<float,uint16_t>>;
     const ILP_input ilp = ILP_parser::parse_string(two_simplex_problem);
     bdd_preprocessor pre(ilp);
 

@@ -1,5 +1,7 @@
 #include "ILP_parser.h"
 #include <tao/pegtl.hpp>
+#include <unordered_set>
+#include <algorithm>
 #include "pegtl_parse_rules.h"
 #include "ILP_input.h"
 #include "time_measure_util.h" 
@@ -43,17 +45,32 @@ namespace LPMP {
                                tao::pegtl::star< tao::pegtl::sor< tao::pegtl::alnum, tao::pegtl::string<'_'>, tao::pegtl::string<'-'>, tao::pegtl::string<'/'>, tao::pegtl::string<'('>, tao::pegtl::string<')'>, tao::pegtl::string<'{'>, tao::pegtl::string<'}'>, tao::pegtl::string<','>, tao::pegtl::string<'#'>, tao::pegtl::string<';'>, tao::pegtl::string<'['>, tao::pegtl::string<']'>, tao::pegtl::string<'.'>, tao::pegtl::string<'\''> > > 
                                    > {};
 
-        // TODO: remove?
-        struct coefficient : tao::pegtl::opt<real_number> {};
-
-        struct coefficient_variable : tao::pegtl::seq<coefficient, opt_whitespace, variable_name> {};
-
-        struct objective_coefficient : real_number {};
+        // TODO: allow for case that no objective or just a constant is given.
         struct objective_variable : variable_name {};
-        struct objective_term : tao::pegtl::seq< tao::pegtl::opt<sign, opt_whitespace, tao::pegtl::opt<tao::pegtl::eol>, opt_whitespace >, tao::pegtl::opt<objective_coefficient, opt_whitespace, tao::pegtl::opt<tao::pegtl::string<'*'>>, opt_whitespace>, objective_variable> {};
-        struct objective_constant : real_number {};
+
+        struct first_objective_coefficient : tao::pegtl::seq<tao::pegtl::opt<sign>, opt_whitespace, tao::pegtl::opt<real_number> > {};
+        struct first_objective_term : tao::pegtl::seq< tao::pegtl::opt<first_objective_coefficient, opt_whitespace, tao::pegtl::opt<tao::pegtl::string<'*'>>>, opt_whitespace, objective_variable> {};
+
+        struct subsequent_objective_coefficient_1 : tao::pegtl::seq<sign, opt_whitespace, real_number > {};
+        struct subsequent_objective_term_1 : tao::pegtl::seq< subsequent_objective_coefficient_1, opt_whitespace, tao::pegtl::opt<tao::pegtl::string<'*'>>, opt_whitespace, objective_variable> {};
+
+        struct subsequent_objective_coefficient_2 : sign {};
+        struct subsequent_objective_term_2 : tao::pegtl::seq< subsequent_objective_coefficient_2, opt_whitespace, objective_variable > {};
+
+        struct subsequent_objective_term : tao::pegtl::sor< subsequent_objective_term_1, subsequent_objective_term_2 > {};
+
+        struct objective_constant : tao::pegtl::seq<sign, opt_whitespace, real_number> {};
+
         struct subject_to : tao::pegtl::istring<'S','u','b','j','e','c','t',' ','T','o'> {};
-        struct objective_line : tao::pegtl::seq< tao::pegtl::not_at<subject_to>, opt_whitespace, tao::pegtl::seq<tao::pegtl::opt<tao::pegtl::seq<term_identifier, tao::pegtl::string<':'>>>, opt_whitespace, tao::pegtl::star<opt_whitespace, objective_term>, opt_whitespace, tao::pegtl::opt<objective_constant>>, opt_whitespace, tao::pegtl::eol> {};
+
+        // TODO: use not_at instead of until
+        struct objective : tao::pegtl::until< subject_to, 
+                                              tao::pegtl::seq< opt_invisible, first_objective_term, 
+                                                               tao::pegtl::star< opt_invisible, subsequent_objective_term >
+                                                             >,
+                                              opt_invisible, tao::pegtl::opt< objective_constant, opt_invisible > 
+                                            >
+        {};
 
         struct subject_to_line : tao::pegtl::seq<opt_whitespace, subject_to, opt_whitespace, tao::pegtl::eol> {};
 
@@ -63,15 +80,36 @@ namespace LPMP {
 
         struct new_inequality : tao::pegtl::seq<opt_whitespace, tao::pegtl::not_at<tao::pegtl::sor<tao::pegtl::string<'E','n','d'>, tao::pegtl::string<'B','o','u','n','d','s'>, tao::pegtl::string<'B','i','n','a','r','i','e','s'>, tao::pegtl::string<'C','o','a','l','e','s','c','e'>>>, tao::pegtl::opt<new_inequality_identifier>, opt_whitespace> {};
 
-        struct inequality_coefficient : real_number {};
+        // TODO: fix whitespace issue with monomial
         struct inequality_variable : variable_name {};
-        struct inequality_monomial : tao::pegtl::seq<inequality_variable, tao::pegtl::star<opt_whitespace, tao::pegtl::sor<tao::pegtl::string<'*'>, mand_whitespace>, opt_whitespace, inequality_variable>> {};
-        struct inequality_term : tao::pegtl::seq< tao::pegtl::opt<sign, opt_whitespace>, tao::pegtl::opt<inequality_coefficient, opt_whitespace, tao::pegtl::opt<tao::pegtl::string<'*'>>, opt_whitespace>, inequality_monomial> {};
-        struct right_hand_side : real_number {};
+        struct inequality_monomial : tao::pegtl::seq<inequality_variable, tao::pegtl::star<opt_whitespace, tao::pegtl::sor<tao::pegtl::string<'*'> >, opt_whitespace, inequality_variable>> {};
 
-        struct inequality_line : tao::pegtl::seq< new_inequality, 
-            tao::pegtl::star<opt_whitespace, inequality_term, opt_whitespace, tao::pegtl::opt<tao::pegtl::eol>>,
-            opt_whitespace, inequality_type, opt_whitespace, right_hand_side, opt_whitespace, tao::pegtl::eol> {};
+        // TODO: replace real_number by integer for inequalities
+        // TODO: first term has * only if coefficient is present, same for objective
+        struct first_inequality_coefficient : tao::pegtl::seq<tao::pegtl::opt<sign>, opt_whitespace, tao::pegtl::opt<real_number>> {};
+        struct first_inequality_term : tao::pegtl::seq<first_inequality_coefficient, opt_whitespace, tao::pegtl::opt<tao::pegtl::string<'*'>>, opt_whitespace, inequality_monomial> {};
+
+        struct subsequent_inequality_coefficient_1 : sign {};
+        struct subsequent_inequality_coefficient_2 : tao::pegtl::seq<sign, opt_whitespace, real_number> {};
+        struct subsequent_inequality_term_1 : tao::pegtl::seq< subsequent_inequality_coefficient_1, opt_whitespace, inequality_monomial> {};
+        struct subsequent_inequality_term_2 : tao::pegtl::seq< subsequent_inequality_coefficient_2, opt_whitespace, tao::pegtl::opt<tao::pegtl::string<'*'>>, opt_whitespace, inequality_monomial> {};
+        struct subsequent_inequality_term : tao::pegtl::sor<subsequent_inequality_term_1, subsequent_inequality_term_2> {};
+
+        struct lhs_inequality : tao::pegtl::seq<first_inequality_term, tao::pegtl::star<opt_whitespace, subsequent_inequality_term>> {};
+
+        struct rhs_inequality : tao::pegtl::seq<tao::pegtl::opt<sign>, opt_whitespace, real_number> {};
+
+        struct inequality_line : tao::pegtl::seq<
+                                 new_inequality, 
+                                 opt_whitespace,
+                                 lhs_inequality,
+                                 opt_whitespace,
+                                 inequality_type,
+                                 opt_whitespace,
+                                 rhs_inequality,
+                                 opt_whitespace,
+                                 tao::pegtl::eol
+                                 > {};
 
         struct coalesce_begin : tao::pegtl::seq<opt_whitespace, tao::pegtl::string<'C','o','a','l','e','s','c','e'>, opt_whitespace, tao::pegtl::eol> {};
 
@@ -94,14 +132,16 @@ namespace LPMP {
         struct bounds_var_greater_equal_line : tao::pegtl::seq<opt_whitespace, tao::pegtl::opt<tao::pegtl::string<'0'>, tao::pegtl::string<'1'>>, opt_whitespace, tao::pegtl::string<'<','='>, opt_whitespace,  variable_name, opt_whitespace, tao::pegtl::eol> {};
         struct bounds_var_lb_ub_line : tao::pegtl::seq<opt_whitespace, tao::pegtl::opt<tao::pegtl::string<'0'>, tao::pegtl::string<'1'>>, opt_whitespace, tao::pegtl::string<'<','='>, opt_whitespace,  variable_name, opt_whitespace, tao::pegtl::opt<tao::pegtl::string<'0'>, tao::pegtl::string<'1'>>, tao::pegtl::string<'<','='>, opt_whitespace, opt_whitespace, tao::pegtl::eol> {};
 
-        struct end_line : tao::pegtl::seq<opt_whitespace, tao::pegtl::string<'E','n','d'>, opt_whitespace, tao::pegtl::eolf> {};
+        struct end_line : tao::pegtl::seq<opt_whitespace, tao::pegtl::string<'E','n','d'>, opt_invisible, tao::pegtl::eolf> {};
 
         struct grammar : tao::pegtl::seq<
                          tao::pegtl::star<comment_line>,
                          min_line,
-                         tao::pegtl::star<objective_line>,
-                         subject_to_line,
-                         tao::pegtl::star<inequality_line>,
+                         objective,
+                         opt_invisible,
+                         //subject_to_line,
+                         opt_invisible,
+                         tao::pegtl::star<inequality_line, opt_whitespace>,
                          //tao::pegtl::opt<coalesce_begin, tao::pegtl::star<coalesce_line>>,
                          bounds_begin, // ignore everything after bounds (variables are assumed to be binary)
                          tao::pegtl::star<tao::pegtl::sor<
@@ -124,26 +164,45 @@ namespace LPMP {
             std::vector<size_t> constraint_monomial;
             std::string inequality_identifier = "";
             std::vector<std::string> coalesce_identifiers;
+            std::unordered_set<size_t> zero_fixations;
+            std::unordered_set<size_t> one_fixations;
         };
 
-        template<> struct action< sign > {
+        template<> struct action< first_objective_coefficient > {
             template<typename INPUT>
                 static void apply(const INPUT & in, ILP_input& i, tmp_storage& tmp)
                 {
-                    if(in.string() == "+") {
-                    } else if(in.string() == "-") {
-                        tmp.objective_coeff *= -1.0;
-                        tmp.constraint_coeff *= -1;
-                    } else
-                        throw std::runtime_error("sign not recognized");
+                    std::string stripped = in.string();
+                    stripped.erase(std::remove_if(stripped.begin(), stripped.end(), ::isspace), stripped.end());
+                    if(stripped == "-")
+                        tmp.objective_coeff = -1.0;
+                    else if(stripped == "+" || stripped == "")
+                        tmp.objective_coeff = 1.0;
+                    else
+                        tmp.objective_coeff = std::stod(stripped);
                 }
         };
 
-        template<> struct action< objective_coefficient > {
+        template<> struct action< subsequent_objective_coefficient_1 > {
             template<typename INPUT>
                 static void apply(const INPUT & in, ILP_input& i, tmp_storage& tmp)
                 {
-                    tmp.objective_coeff *= std::stod(in.string());
+                    std::string stripped = in.string();
+                    stripped.erase(std::remove_if(stripped.begin(), stripped.end(), ::isspace), stripped.end());
+                    tmp.objective_coeff = std::stod(stripped);
+                }
+        };
+
+        template<> struct action< subsequent_objective_coefficient_2 > {
+            template<typename INPUT>
+                static void apply(const INPUT & in, ILP_input& i, tmp_storage& tmp)
+                {
+                    if(in.string() == "-")
+                        tmp.objective_coeff = -1.0;
+                    else if(in.string() == "+")
+                        tmp.objective_coeff = 1.0;
+                    else
+                        throw std::runtime_error("only {+|-} allowed");
                 }
         };
 
@@ -154,6 +213,18 @@ namespace LPMP {
                     const std::string var = in.string();
                     i.add_to_objective(tmp.objective_coeff, var);
                     tmp = tmp_storage{};
+                }
+        };
+
+        template<> struct action< objective_constant > {
+            template<typename INPUT>
+                static void apply(const INPUT & in, ILP_input& i, tmp_storage& tmp)
+                {
+                    std::string stripped = in.string();
+                    stripped.erase(std::remove_if(stripped.begin(), stripped.end(), ::isspace), stripped.end());
+                    const double constant = std::stod(stripped);
+                    std::cout << "constant = " << constant << "\n";
+                    i.add_to_constant(constant);
                 }
         };
 
@@ -177,11 +248,41 @@ namespace LPMP {
                 }
         };
 
-        template<> struct action< inequality_coefficient > {
+        template<> struct action< first_inequality_coefficient > {
             template<typename INPUT>
                 static void apply(const INPUT & in, ILP_input& i, tmp_storage& tmp)
                 {
-                    tmp.constraint_coeff *= std::stoi(in.string());
+                    std::string stripped = in.string();
+                    stripped.erase(std::remove_if(stripped.begin(), stripped.end(), ::isspace), stripped.end());
+                    if(stripped == "" || stripped == "+")
+                        tmp.constraint_coeff = 1;
+                    else if(stripped == "-")
+                        tmp.constraint_coeff = -1;
+                    else
+                        tmp.constraint_coeff = std::stoi(stripped);
+                }
+        };
+
+        template<> struct action< subsequent_inequality_coefficient_1 > {
+            template<typename INPUT>
+                static void apply(const INPUT & in, ILP_input& i, tmp_storage& tmp)
+                {
+                    if(in.string() == "-")
+                        tmp.constraint_coeff = -1;
+                    else if(in.string() == "+" || in.string() == "")
+                        tmp.constraint_coeff = 1;
+                    else
+                        throw std::runtime_error("only recognize {-|+}");
+                }
+        };
+
+        template<> struct action< subsequent_inequality_coefficient_2 > {
+            template<typename INPUT>
+                static void apply(const INPUT & in, ILP_input& i, tmp_storage& tmp)
+                {
+                    std::string stripped = in.string();
+                    stripped.erase(std::remove_if(stripped.begin(), stripped.end(), ::isspace), stripped.end());
+                    tmp.constraint_coeff = std::stoi(stripped);
                 }
         };
 
@@ -222,12 +323,13 @@ namespace LPMP {
                 }
         };
 
-        template<> struct action< right_hand_side > {
+        template<> struct action< rhs_inequality > {
             template<typename INPUT>
                 static void apply(const INPUT & in, ILP_input& i, tmp_storage& tmp)
                 {
-                    const double val = std::stod(in.string());
-                    i.set_right_hand_side(val);
+                    std::string stripped = in.string();
+                    stripped.erase(std::remove_if(stripped.begin(), stripped.end(), ::isspace), stripped.end());
+                    i.set_right_hand_side(std::stoi(stripped));
                 }
         };
 
@@ -265,7 +367,10 @@ namespace LPMP {
                     const int val = std::stoi(val_str);
                     assert(val == 0 || val == 1);
 
-                    i.fix_variable(var, val);
+                    if(val == 0)
+                        tmp.zero_fixations.insert(i.get_var_index(var));
+                    else if(val == 1)
+                        tmp.one_fixations.insert(i.get_var_index(var));
                 }
         };
 
@@ -286,7 +391,7 @@ namespace LPMP {
                     assert(val == 0 || val == 1);
 
                     if(val == 0)
-                        i.fix_variable(var, val);
+                        tmp.zero_fixations.insert(i.get_var_index(var));
                 }
         };
 
@@ -307,7 +412,7 @@ namespace LPMP {
                     assert(i.var_exists(var));
 
                     if(val == 1)
-                        i.fix_variable(var, val);
+                        tmp.one_fixations.insert(i.get_var_index(var));
                 }
         };
 
@@ -337,9 +442,9 @@ namespace LPMP {
                     assert(lb <= ub);
 
                     if(lb == 1)
-                        i.fix_variable(var, lb);
+                        tmp.one_fixations.insert(i.get_var_index(var));
                     if(ub == 0)
-                        i.fix_variable(var, ub);
+                        tmp.zero_fixations.insert(i.get_var_index(var));
                 }
         };
 
@@ -351,7 +456,8 @@ namespace LPMP {
             tao::pegtl::file_input input(filename);
             if(!tao::pegtl::parse<grammar, action>(input, ilp, tmp))
                 throw std::runtime_error("could not read input file " + filename);
-            ilp.substitute_fixed_variables();
+            if(tmp.one_fixations.size() > 0 || tmp.zero_fixations.size() > 0)
+                ilp = ilp.reduce(tmp.zero_fixations, tmp.one_fixations);
             return ilp;
         }
 
@@ -364,7 +470,8 @@ namespace LPMP {
 
             if(!tao::pegtl::parse<grammar, action>(input, ilp, tmp))
                 throw std::runtime_error("could not read input:\n" + input_string);
-            ilp.substitute_fixed_variables();
+            if(tmp.one_fixations.size() > 0 || tmp.zero_fixations.size() > 0)
+                ilp = ilp.reduce(tmp.zero_fixations, tmp.one_fixations);
             return ilp;
         }
 
