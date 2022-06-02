@@ -20,6 +20,7 @@
 #include "bdd_manager/bdd.h"
 #include "min_marginal_utils.h"
 #include <iostream>
+#include <stack>
 
 namespace LPMP {
 
