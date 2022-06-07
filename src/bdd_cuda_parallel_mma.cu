@@ -1,4 +1,5 @@
 #include "bdd_cuda_parallel_mma.h"
+#include "lbfgs_cuda.h"
 #include "cuda_utils.h"
 #include <chrono>
 
@@ -8,6 +9,7 @@ namespace LPMP {
     bdd_cuda_parallel_mma<REAL>::bdd_cuda_parallel_mma(const BDD::bdd_collection& bdd_col) : bdd_cuda_base<REAL>(bdd_col)
     {
         init();
+        // lbfgs_solver_ = lbfgs_cuda<REAL>(this->nr_layers(), 10);
     }
 
     template<typename REAL>
@@ -134,13 +136,59 @@ namespace LPMP {
         min_marginals_from_directional_costs(hop_index, omega, this->deffered_mm_diff_.data());
     }
 
+    template<typename REAL>
+    struct grad_step
+    {
+        const REAL step_size;
+        const int* primal_var_indices;
+        REAL* hi_costs;
+        REAL* grad;
+        __host__ __device__ void operator()(const int idx)
+        {
+            if (primal_var_indices[idx] == INT_MAX)
+            {
+                grad[idx] = 0;
+                return; // terminal node.
+            }
+
+            const REAL cur_grad = grad[idx];
+            grad[idx] = step_size * cur_grad;
+            hi_costs[idx] += step_size * cur_grad;
+        }
+    };
 
     template<typename REAL>
     void bdd_cuda_parallel_mma<REAL>::iteration(const REAL omega)
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
+
+        // if (itr_count_ > 0 && itr_count_ % 30 == 0)
+        // {
+        //     REAL lb_pre = this->lower_bound();
+        //     thrust::device_vector<REAL> grad_lbfgs(this->nr_layers());
+
+        //     bool projected = this->compute_direction_bfgs(lbfgs_solver_, grad_lbfgs.data());
+
+        //     // perform gradient step
+        //     grad_step<REAL> grad_step_func({step_size_, 
+        //                                     thrust::raw_pointer_cast(this->primal_variable_index_.data()), 
+        //                                     thrust::raw_pointer_cast(this->hi_cost_.data()), 
+        //                                     thrust::raw_pointer_cast(grad_lbfgs.data())});
+        //     thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + this->nr_layers(), grad_step_func);
+
+        //     maintain_feasibility_grad(grad_lbfgs.data()); // now account for feasibility of gradient step.
+        //     REAL lb_post = this->lower_bound();
+        //     if (lb_post < lb_pre)
+        //         step_size_ *= 0.8;
+        // }
+
         forward_iteration(omega);
         backward_iteration(omega);
+        // if (itr_count_ > 0 && (itr_count_ % 30 >= 20))
+        // {
+        //     this->update_bfgs_states(lbfgs_solver_);
+        // }
+        // itr_count_++;
     }
 
     template<typename REAL>
@@ -381,10 +429,58 @@ namespace LPMP {
     }
 
     template<typename REAL>
+    struct normalize_grad_delta_func {
+        __host__ __device__ void operator()(const thrust::tuple<REAL&, int> t) const
+        {
+            const int norm = thrust::get<1>(t);
+            REAL& grad_delta = thrust::get<0>(t);
+            grad_delta *= -1.0;
+        }
+    };
+
+    template<typename REAL>
+    void bdd_cuda_parallel_mma<REAL>::maintain_feasibility_grad(const thrust::device_ptr<const REAL> gradient)
+    {
+        thrust::device_vector<REAL> delta_grad(this->delta_hi_.size());
+        auto first_val = thrust::make_permutation_iterator(gradient, this->primal_variable_sorting_order_.begin());
+        auto first_out_val = delta_grad.begin();
+
+        thrust::equal_to<int> binary_pred;
+        auto new_end = thrust::reduce_by_key(this->primal_variable_index_sorted_.begin(), this->primal_variable_index_sorted_.end() - this->nr_bdds_, first_val, 
+                            thrust::make_discard_iterator(), first_out_val, binary_pred, thrust::plus<REAL>());
+
+        auto first = thrust::make_zip_iterator(thrust::make_tuple(delta_grad.begin(), this->num_bdds_per_var_.begin()));
+        auto last = thrust::make_zip_iterator(thrust::make_tuple(delta_grad.end(), this->num_bdds_per_var_.end()));
+        thrust::for_each(first, last, normalize_grad_delta_func<REAL>());
+
+        this->update_costs(thrust::device_vector<REAL>(0), delta_grad);
+    }
+
+
+    template<typename REAL>
     void bdd_cuda_parallel_mma<REAL>::flush_mm(thrust::device_ptr<REAL> mm_diff_ptr)
     {   // Makes min marginals INF so that they can be populated again by in-place minimization
         thrust::fill(mm_lo_local_.begin(), mm_lo_local_.end(), CUDART_INF_F_HOST);
         thrust::fill(mm_diff_ptr, mm_diff_ptr + this->nr_layers(), CUDART_INF_F_HOST);
+    }
+
+    template<typename REAL>
+    void bdd_cuda_parallel_mma<REAL>::update_bfgs_states(lbfgs_cuda<REAL>& lbfgs_solver)
+    {
+        thrust::device_vector<REAL> sol(this->nr_layers());
+        this->bdds_solution_cuda(sol.data());
+
+        thrust::device_vector<REAL> net_cost(this->nr_layers());
+        thrust::transform(this->hi_cost_.begin(), this->hi_cost_.end(), this->lo_cost_.begin(), net_cost.begin(), thrust::minus<REAL>());
+
+        lbfgs_solver.store_next_itr(net_cost, sol);
+    }
+
+    template<typename REAL>
+    bool bdd_cuda_parallel_mma<REAL>::compute_direction_bfgs(lbfgs_cuda<REAL>& lbfgs_solver, thrust::device_ptr<REAL> grad_f)
+    {
+        this->bdds_solution_cuda(grad_f);
+        return lbfgs_solver.project_gradient(grad_f);
     }
 
     template class bdd_cuda_parallel_mma<float>;

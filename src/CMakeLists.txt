@@ -38,11 +38,14 @@ if(WITH_CUDA)
     add_library(incremental_mm_agreement_rounding_cuda incremental_mm_agreement_rounding_cuda.cu)
     target_link_libraries(incremental_mm_agreement_rounding_cuda LPMP-BDD)
 
+    add_library(lbfgs_cuda lbfgs_cuda.cu)
+    target_link_libraries(lbfgs_cuda LPMP-BDD)
+
     add_library(bdd_cuda_base bdd_cuda_base.cu)
     target_link_libraries(bdd_cuda_base LPMP-BDD)
 
     add_library(bdd_cuda_parallel_mma bdd_cuda_parallel_mma.cu)
-    target_link_libraries(bdd_cuda_parallel_mma bdd_cuda_base incremental_mm_agreement_rounding_cuda LPMP-BDD) 
+    target_link_libraries(bdd_cuda_parallel_mma bdd_cuda_base incremental_mm_agreement_rounding_cuda lbfgs_cuda LPMP-BDD) 
 
     add_library(bdd_cuda_learned_mma bdd_cuda_learned_mma.cu)
     target_link_libraries(bdd_cuda_learned_mma bdd_cuda_parallel_mma LPMP-BDD) 

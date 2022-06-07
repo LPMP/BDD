@@ -240,28 +240,34 @@ template<typename REAL>
 int iterations(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long dist_weights_ptr, const int num_itr, 
                 const float omega_scalar, const double improvement_slope, const long omega_vec_ptr,
                 const bool omega_vec_valid, const int compute_history_for_itr, const float beta,
-                const long sol_avg_ptr, const long lb_first_order_avg_ptr, const long lb_second_order_avg_ptr) 
+                const long sol_avg_ptr, const long lb_first_order_avg_ptr, const long lb_second_order_avg_ptr,
+                const int compute_lbfgs_for_itr, const long lbfgs_direction) 
 {
     thrust::device_ptr<REAL> distw_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<REAL*>(dist_weights_ptr));
-    thrust::device_ptr<REAL> omega_vec_thrust, sol_avg_ptr_thrust, lb_first_ptr_thrust, lb_second_ptr_thrust;
+    thrust::device_ptr<REAL> omega_vec_thrust, sol_avg_ptr_thrust, lb_first_ptr_thrust, lb_second_ptr_thrust, lbfgs_direction_thrust;
     if (compute_history_for_itr)
     {
         sol_avg_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<REAL*>(sol_avg_ptr)); 
         lb_first_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<REAL*>(lb_first_order_avg_ptr)); 
         lb_second_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<REAL*>(lb_second_order_avg_ptr)); 
     }
+
+    if (compute_lbfgs_for_itr)
+        lbfgs_direction_thrust = thrust::device_pointer_cast(reinterpret_cast<REAL*>(lbfgs_direction));
     
     if (omega_vec_valid)
     {
         omega_vec_thrust = thrust::device_pointer_cast(reinterpret_cast<REAL*>(omega_vec_ptr));
         return solver.iterations(distw_ptr_thrust, num_itr, 1.0, improvement_slope, 
                                 sol_avg_ptr_thrust, lb_first_ptr_thrust, lb_second_ptr_thrust,
-                                compute_history_for_itr, beta, omega_vec_thrust);
+                                compute_history_for_itr, beta, omega_vec_thrust, 
+                                compute_lbfgs_for_itr, lbfgs_direction_thrust);
     }
     else
         return solver.iterations(distw_ptr_thrust, num_itr, omega_scalar, improvement_slope, 
                                 sol_avg_ptr_thrust, lb_first_ptr_thrust, lb_second_ptr_thrust, 
-                                compute_history_for_itr, beta);
+                                compute_history_for_itr, beta, nullptr,
+                                compute_lbfgs_for_itr, lbfgs_direction_thrust);
 }
 
 template<typename REAL>
@@ -461,10 +467,12 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
                             const float beta,
                             const long sol_avg_ptr,
                             const long lb_first_order_avg_ptr,
-                            const long lb_second_order_avg_ptr) 
+                            const long lb_second_order_avg_ptr,
+                            const int compute_lbfgs_for_itr,
+                            const long lbfgs_direction_ptr) 
         {
             return iterations(solver, dist_weights_ptr, num_itr, omega_scalar, improvement_slope, omega_vec_ptr,
-                omega_vec_valid, compute_history_for_itr, beta, sol_avg_ptr, lb_first_order_avg_ptr, lb_second_order_avg_ptr);
+                omega_vec_valid, compute_history_for_itr, beta, sol_avg_ptr, lb_first_order_avg_ptr, lb_second_order_avg_ptr, compute_lbfgs_for_itr, lbfgs_direction_ptr);
         }, "Runs solver for num_itr many iterations using distribution weights *dist_weights_ptr and sets the min-marginals to distribute in *mm_diff_ptr.\n"
         "dist_weights_ptr, mm_diff_ptr and sol_avg_ptr should point to a memory containing nr_layers() many elements in FP32 format.\n"
         "lb_first_order_avg_ptr and lb_second_order_avg_ptr should point to a memory containing nr_bdds() many elements in FP32 format.\n"
@@ -652,10 +660,12 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
                             const float beta,
                             const long sol_avg_ptr,
                             const long lb_first_order_avg_ptr,
-                            const long lb_second_order_avg_ptr) 
+                            const long lb_second_order_avg_ptr,
+                            const int compute_lbfgs_for_itr, 
+                            const long lbfgs_direction_ptr) 
         {
             return iterations(solver, dist_weights_ptr, num_itr, omega_scalar, improvement_slope, omega_vec_ptr,
-                omega_vec_valid, compute_history_for_itr, beta, sol_avg_ptr, lb_first_order_avg_ptr, lb_second_order_avg_ptr);
+                omega_vec_valid, compute_history_for_itr, beta, sol_avg_ptr, lb_first_order_avg_ptr, lb_second_order_avg_ptr, compute_lbfgs_for_itr, lbfgs_direction_ptr);
         }, "Runs solver for num_itr many iterations using distribution weights *dist_weights_ptr and sets the min-marginals to distribute in *mm_diff_ptr.\n"
         "dist_weights_ptr, mm_diff_ptr and sol_avg_ptr should point to a memory containing nr_layers() many elements in FP32 format.\n"
         "lb_first_order_avg_ptr and lb_second_order_avg_ptr should point to a memory containing nr_bdds() many elements in FP32 format.\n"

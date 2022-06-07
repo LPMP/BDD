@@ -196,7 +196,9 @@ namespace LPMP {
                                 thrust::device_ptr<REAL> lb_second_diff_avg,
                                 const int compute_history_for_itr,
                                 const REAL history_avg_beta,
-                                const thrust::device_ptr<const REAL> omega_vec)
+                                const thrust::device_ptr<const REAL> omega_vec,
+                                const int compute_lbfgs_grad_for_itr,
+                                thrust::device_ptr<REAL> grad_lbfgs)
     {
         const double lb_initial = this->lower_bound();
         double lb_prev = lb_initial;
@@ -212,11 +214,17 @@ namespace LPMP {
             second_last_lb = thrust::device_vector<REAL>(this->nr_bdds());
             third_last_lb = thrust::device_vector<REAL>(this->nr_bdds());
         }
+        
+        if (compute_lbfgs_grad_for_itr > 0 && this->lbfgs_solver_.get_m() == -1)
+            this->lbfgs_solver_ = lbfgs_cuda<REAL>(this->nr_layers(), compute_lbfgs_grad_for_itr);
         int history_tracked_for = 0;
         for(itr = 0; itr < num_itr; itr++)
         {
+            if (compute_lbfgs_grad_for_itr && !converged && compute_lbfgs_grad_for_itr >= num_itr - itr)
+                this->update_bfgs_states(this->lbfgs_solver_);
             forward_iteration_learned_mm_dist(dist_weights, this->deffered_mm_diff_.data(), omega_scalar, omega_vec);
             backward_iteration_learned_mm_dist(dist_weights, this->deffered_mm_diff_.data(), omega_scalar, omega_vec);
+
             if (compute_history_for_itr && (compute_history_for_itr >= num_itr - itr || converged))
             {
                 this->bdds_solution_cuda(last_sol.data());
@@ -267,6 +275,9 @@ namespace LPMP {
             if (converged && (history_tracked_for == compute_history_for_itr))
                 break;
         }
+
+        if (compute_lbfgs_grad_for_itr)
+            this->compute_direction_bfgs(this->lbfgs_solver_, grad_lbfgs);
         return itr;
     }
 

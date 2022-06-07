@@ -56,7 +56,9 @@ namespace LPMP {
                             thrust::device_ptr<REAL> lb_second_diff_avg = nullptr,
                             const int compute_history_for_itr = 0,
                             const REAL history_avg_beta = 0.9,
-                            const thrust::device_ptr<const REAL> omega_vec = nullptr);
+                            const thrust::device_ptr<const REAL> omega_vec = nullptr,
+                            const int compute_lbfgs_grad_for_itr = 0,
+                            thrust::device_ptr<REAL> grad_lbfgs = nullptr);
 
             // Assumes that deffered_mm_diff_ contains the mm's containing the values before iterations() was called.
             void grad_iterations(

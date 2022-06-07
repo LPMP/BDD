@@ -1,6 +1,7 @@
 #pragma once
 
 #include "bdd_cuda_base.h"
+#include "lbfgs_cuda.h"
 
 namespace LPMP {
 
@@ -28,13 +29,21 @@ namespace LPMP {
             void flush_mm(thrust::device_ptr<REAL> mm_diff_ptr);
             thrust::device_vector<REAL> hi_cost_out_, lo_cost_out_; // One entry per BDD layer.
 
+            void maintain_feasibility_grad(const thrust::device_ptr<const REAL> gradient);
+            void update_bfgs_states(lbfgs_cuda<REAL>& lbfgs_solver);
+            bool compute_direction_bfgs(lbfgs_cuda<REAL>& lbfgs_solver, thrust::device_ptr<REAL> grad_f);
+
             // Deferred min-marginal sums.
             thrust::device_vector<REAL> delta_lo_, delta_hi_; // One entry in each per primal variable.
+            lbfgs_cuda<REAL> lbfgs_solver_;
 
         private:
             void forward_iteration(const REAL omega);
             void backward_iteration(const REAL omega);
 
             thrust::device_vector<REAL> mm_lo_local_; // Contains mm_lo for last computed hop. Memory allocated is as per max(cum_nr_layers_per_hop_dist_).
+
+            int itr_count_ = 0;
+            REAL step_size_ = 1e-3;
     };
 }
