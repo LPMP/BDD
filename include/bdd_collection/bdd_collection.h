@@ -328,7 +328,10 @@ namespace BDD {
             const size_t nr_bdds_remove = std::distance(bdd_it_begin, bdd_it_end);
             assert(std::distance(bdd_it_begin, bdd_it_end) <= nr_bdds());
             assert(std::is_sorted(bdd_it_begin, bdd_it_end));
-            assert(std::unique(bdd_it_begin, bdd_it_end) == bdd_it_end);
+            for(size_t i=0; i+1<std::distance(bdd_it_begin, bdd_it_end); ++i)
+            {
+                assert(*(bdd_it_begin+i) < *(bdd_it_begin+i+1));
+            }
 
             if(nr_bdds_remove == 0)
                 return;

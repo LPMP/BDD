@@ -12,10 +12,10 @@
 #include <filesystem>
 #include <unordered_set>
 #include <queue>
+#include <stack>
 #include "bdd_collection/bdd_collection.h"
 #include "two_dimensional_variable_array.hxx"
 #include "time_measure_util.h"
-#include "kahan_summation.hxx"
 #include "bdd_filtration.hxx"
 #include "bdd_manager/bdd.h"
 #include "min_marginal_utils.h"
@@ -38,6 +38,7 @@ namespace LPMP {
                 size_t nr_bdd_nodes() const { return bdd_branch_nodes_.size(); }
                 size_t nr_bdd_nodes(const size_t v) const { assert(v < nr_variables()); return bdd_branch_node_offsets_[v+1] - bdd_branch_node_offsets_[v]; }
                 size_t nr_bdds() const { return first_bdd_node_indices_.size(); }
+                const std::vector<size_t> nr_bdds_vector() const { return nr_bdds_; }
 
                 void forward_step(const size_t var_group);
                 void min_marginal_averaging_forward();
@@ -73,6 +74,9 @@ namespace LPMP {
                 //    void update_costs(COST_ITERATOR cost_begin, COST_ITERATOR cost_end);
                 template<typename REAL>
                     void update_costs(const two_dim_variable_array<std::array<REAL,2>>& delta);
+
+                void add_to_constant(const double c) { constant_ += c; }
+                double constant() const { return constant_; }
 
                 template<typename ITERATOR>
                     void update_arc_costs(const size_t first_node, ITERATOR begin, ITERATOR end);
@@ -111,6 +115,8 @@ namespace LPMP {
                     after_backward_pass,
                     none 
                 } message_passing_state_ = message_passing_state::none;
+
+                double constant_ = 0.0;
 
             private:
                 std::vector<size_t> compute_bdd_branch_instruction_variables() const;
@@ -320,7 +326,7 @@ namespace LPMP {
     double bdd_mma_base<BDD_BRANCH_NODE>::lower_bound()
     {
         if(lower_bound_state_ == lower_bound_state::valid)
-            return lower_bound_;
+            return lower_bound_ + constant_;
         if(message_passing_state_ == message_passing_state::after_forward_pass)
             compute_lower_bound_after_forward_pass();
         else if(message_passing_state_ == message_passing_state::after_backward_pass)
@@ -331,7 +337,7 @@ namespace LPMP {
             compute_lower_bound_after_backward_pass();
         }
         lower_bound_state_ = lower_bound_state::valid;
-        return lower_bound_;
+        return lower_bound_ + constant_;
     }
 
     template<typename BDD_BRANCH_NODE>

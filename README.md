@@ -25,17 +25,15 @@ where ${solver} is one of
 * `mma` for sequential min-marginal averaging.
 * `parallel_mma` for parallel CPU deferred min-marginal averaging.
 * `mma_cuda` for parallel deferred min-marginal averaging on GPU (available if built with `WITH_CUDA=ON`).
+* `hybrid_parallel_mma` for parallel deferred min-marginal averaging on CPU and GPU simultaneously (available if built with `WITH_CUDA=ON`). This solver might be faster when a few long constraints are present that would constitute a sequential bottleneck for the pure GPU solver.
 
 ### Primal Rounding
 
-In order to compute a primal solution from the dual one obtained through a min-marginal averaging scheme, we provide two heuristics:
+In order to compute a primal solution from the dual one obtained through a min-marginal averaging scheme, we provide a perturbation based rounding heuristic
 
 * `--incremental_primal`: Perturb costs iteratively to drive variables towards integrality. Parameters for this scheme are
     * `--incremental_initial_perturbation ${p}`: The initial perturbation magnitude.
     * `--incremental_perturbation_growth_rate ${x}`: The growth rate for increasing the perturbation after each round.
-* `--diving_primal`: Traverse depth-first the solution space search tree for finding a feasible solution. Variables are propagated using the BDDs of the decomposition. The variable order for the search tree is determined by the min-marginals computed by the min-marginal averaging scheme. Parameters are
-    * `--fixing_order`: Values are `marg_up`, `marg_abs` and `marg_down`.
-    * `--fixing_value`: Possible values are `marg`, `red`, `one`, `zero`.
 
 ### Termination Criteria
 

@@ -105,6 +105,12 @@ namespace LPMP {
         void add_to_constant(const double x) { constant_ += x; }
         double constant() const { return constant_; }
 
+        // sanity checks on instance
+        // is every variable contained in at least one constraint?
+        bool every_variable_in_some_ineq() const;
+        // does variable/constraint matrix form a single connected component or can problem be decomposed
+        size_t nr_disconnected_subproblems() const;
+
         private:
 
             std::vector<constraint> constraints_;

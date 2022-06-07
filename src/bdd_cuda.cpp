@@ -24,7 +24,7 @@ namespace LPMP {
 #endif
     {
 #ifndef WITH_CUDA
-        throw std::runtime_error("bdd_solver not compiled with CUDA support");
+        throw std::runtime_error("bdd solver not compiled with CUDA support");
 #endif
     }
 
@@ -54,13 +54,6 @@ namespace LPMP {
     template<typename REAL>
     bdd_cuda<REAL>::~bdd_cuda()
     {}
-
-    //void bdd_cuda::set_cost(const double c, const size_t var)
-    //{
-#ifdef WITH_CUDA
-    //    pimpl->pmma.set_cost(c, var);
-#endif
-    //}
 
     template<typename REAL>
     template<typename COST_ITERATOR>

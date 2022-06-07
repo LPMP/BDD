@@ -20,6 +20,7 @@ namespace LPMP {
         class bdd_parallel_mma_base {
             public:
             using value_type = typename BDD_BRANCH_NODE::value_type;
+            bdd_parallel_mma_base() {}
             bdd_parallel_mma_base(BDD::bdd_collection& bdd_col) { add_bdds(bdd_col); }
 
             void add_bdds(BDD::bdd_collection& bdd_col);
@@ -62,8 +63,10 @@ namespace LPMP {
 
             // compute incremental min marginals and perform min-marginal averaging subsequently
             void parallel_mma();
-            void forward_mm(const size_t bdd_nr, const typename BDD_BRANCH_NODE::value_type omega, std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& delta_out, std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& delta_in);
-            value_type backward_mm(const size_t bdd_nr, const typename BDD_BRANCH_NODE::value_type omega, std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& delta_out, std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& delta_in);
+            void forward_mm(const size_t bdd_nr, const typename BDD_BRANCH_NODE::value_type omega, std::vector<std::array<value_type,2>>& delta_out, std::vector<std::array<value_type,2>>& delta_in);
+            value_type backward_mm(const size_t bdd_nr, const typename BDD_BRANCH_NODE::value_type omega, std::vector<std::array<value_type,2>>& delta_out, std::vector<std::array<value_type,2>>& delta_in);
+            void forward_mm(const value_type omega, std::vector<std::array<value_type,2>>& delta_out, std::vector<std::array<value_type,2>>& delta_in);
+            double backward_mm(const value_type omega, std::vector<std::array<value_type,2>>& delta_out, std::vector<std::array<value_type,2>>& delta_in);
             void distribute_delta();
 
             // Both operations below are inverses of each other
@@ -287,7 +290,7 @@ namespace LPMP {
             }
 
             lower_bound_state_ = lower_bound_state::valid; 
-            return lower_bound_;
+            return lower_bound_ + constant_;
         }
 
     template<typename BDD_BRANCH_NODE>
@@ -978,6 +981,30 @@ namespace LPMP {
         }
 
     template<typename BDD_BRANCH_NODE>
+        void bdd_parallel_mma_base<BDD_BRANCH_NODE>::forward_mm(
+                const typename BDD_BRANCH_NODE::value_type omega,
+                std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& delta_out,
+                std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& delta_in)
+        {
+#pragma omp parallel for schedule(static,256)
+            for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
+                forward_mm(bdd_nr, 0.5, delta_out_, delta_in_);
+        }
+
+    template<typename BDD_BRANCH_NODE>
+        double bdd_parallel_mma_base<BDD_BRANCH_NODE>::backward_mm(
+                const typename BDD_BRANCH_NODE::value_type omega,
+                std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& delta_out,
+                std::vector<std::array<typename BDD_BRANCH_NODE::value_type,2>>& delta_in)
+        {
+            double lb = 0.0;
+#pragma omp parallel for schedule(static,256) reduction(+:lb)
+            for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
+                lb += backward_mm(bdd_nr, 0.5, delta_out_, delta_in_);
+            return lb;
+        }
+
+    template<typename BDD_BRANCH_NODE>
         void bdd_parallel_mma_base<BDD_BRANCH_NODE>::parallel_mma()
         {
             backward_run();
@@ -1009,25 +1036,17 @@ namespace LPMP {
             init_mms(delta_out_);
             init_mms(delta_in_);
 
-            double lb = constant_;
-
             {
                 MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME2("parallel mma incremental marginal computation");
-#pragma omp parallel for schedule(static,256)
-                for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
-                    forward_mm(bdd_nr, 0.5, delta_out_, delta_in_);
+                forward_mm(0.5, delta_out_, delta_in_);
                 average_mms(delta_out_);
                 reset_mms(delta_in_);
                 std::swap(delta_out_, delta_in_);
-#pragma omp parallel for schedule(static,256) reduction(+:lb)
-                for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
-                    lb += backward_mm(bdd_nr, 0.5, delta_out_, delta_in_);
+                lower_bound_ = backward_mm(0.5, delta_out_, delta_in_);
                 average_mms(delta_out_);
                 reset_mms(delta_in_);
                 std::swap(delta_out_, delta_in_);
             }
-
-            lower_bound_ = lb;
 
             message_passing_state_ = message_passing_state::after_backward_pass;
             lower_bound_state_ = lower_bound_state::valid; 

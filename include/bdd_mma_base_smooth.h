@@ -220,7 +220,7 @@ namespace LPMP {
         double bdd_mma_base_smooth<BDD_BRANCH_NODE>::smooth_lower_bound()
         {
             if(smooth_lower_bound_state_ == base_type::lower_bound_state::valid)
-                return smooth_lower_bound_;
+                return smooth_lower_bound_ + this->constant_;
             if(smooth_message_passing_state_ == base_type::message_passing_state::after_forward_pass)
                 compute_smooth_lower_bound_after_forward_pass();
             else if(smooth_message_passing_state_ == base_type::message_passing_state::after_backward_pass)
@@ -231,7 +231,7 @@ namespace LPMP {
                 compute_smooth_lower_bound_after_backward_pass();
             }
             assert(smooth_lower_bound_state_ == base_type::lower_bound_state::valid);
-            return smooth_lower_bound_;
+            return smooth_lower_bound_ + this->constant_;
         }
 
     template<typename BDD_BRANCH_NODE>

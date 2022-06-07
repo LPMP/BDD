@@ -65,6 +65,12 @@ namespace LPMP {
     }
 
     template<typename REAL>
+    void bdd_mma<REAL>::add_to_constant(const double c)
+    {
+        pimpl->mma.add_to_constant(c);
+    }
+
+    template<typename REAL>
     void bdd_mma<REAL>::backward_run()
     {
         pimpl->mma.backward_run();

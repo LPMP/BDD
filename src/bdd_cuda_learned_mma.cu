@@ -59,7 +59,7 @@ namespace LPMP {
         if(!this->backward_state_valid_)
             this->backward_run(false); //For the first iteration need to have costs from terminal. 
         
-        this->compute_delta(mm_diff_ptr);
+        this->compute_delta(mm_diff_ptr, this->delta_lo_.data(), this->delta_hi_.data());
         this->flush_mm(mm_diff_ptr);
         // Clear states.
         this->flush_costs_from_root();
@@ -143,7 +143,7 @@ namespace LPMP {
     {
         assert(this->forward_state_valid_);
 
-        this->compute_delta(mm_diff_ptr);
+        this->compute_delta(mm_diff_ptr, this->delta_lo_.data(), this->delta_hi_.data());
         this->flush_mm(mm_diff_ptr);
         for (int s = this->nr_hops() - 1; s >= 0; s--)
         {

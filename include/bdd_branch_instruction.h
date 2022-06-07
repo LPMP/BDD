@@ -4,6 +4,9 @@
 #include <array>
 #include <limits>
 #include <type_traits>
+#include <cstdint>
+#include <cassert>
+#include <cstddef>
 
 namespace LPMP {
 
