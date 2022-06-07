@@ -398,7 +398,7 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
         .def("nr_primal_variables", [](const bdd_type_default& solver) { return solver.nr_variables(); })
         .def("nr_layers", [](const bdd_type_default& solver) { return solver.nr_layers(); })
         .def("nr_layers", [](const bdd_type_default& solver, const int hop_index) { return solver.nr_layers(hop_index); })
-        .def("nr_bdds", &bdd_type_default::nr_bdds)
+        .def("nr_bdds", [](const bdd_type_default& solver) { return solver.nr_bdds(); })
         .def("constraint_matrix_coeffs", [](const bdd_type_default& solver, const LPMP::ILP_input& ilp)
         {
             return get_constraint_matrix_coeffs(ilp, solver);
@@ -591,7 +591,7 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
         .def("nr_primal_variables", [](const bdd_type_double& solver) { return solver.nr_variables(); })
         .def("nr_layers", [](const bdd_type_double& solver) { return solver.nr_layers(); })
         .def("nr_layers", [](const bdd_type_double& solver, const int hop_index) { return solver.nr_layers(hop_index); })
-        .def("nr_bdds", &bdd_type_double::nr_bdds)
+        .def("nr_bdds", [](const bdd_type_double& solver) { return solver.nr_bdds(); })
         .def("constraint_matrix_coeffs", [](const bdd_type_double& solver, const LPMP::ILP_input& ilp)
         {
             return get_constraint_matrix_coeffs(ilp, solver);

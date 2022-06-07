@@ -90,22 +90,22 @@ namespace LPMP {
         struct first_inequality_term : tao::pegtl::seq<first_inequality_coefficient, opt_whitespace, tao::pegtl::opt<tao::pegtl::string<'*'>>, opt_whitespace, inequality_monomial> {};
 
         struct subsequent_inequality_coefficient_1 : sign {};
-        struct subsequent_inequality_coefficient_2 : tao::pegtl::seq<sign, opt_whitespace, real_number> {};
-        struct subsequent_inequality_term_1 : tao::pegtl::seq< subsequent_inequality_coefficient_1, opt_whitespace, inequality_monomial> {};
-        struct subsequent_inequality_term_2 : tao::pegtl::seq< subsequent_inequality_coefficient_2, opt_whitespace, tao::pegtl::opt<tao::pegtl::string<'*'>>, opt_whitespace, inequality_monomial> {};
+        struct subsequent_inequality_coefficient_2 : tao::pegtl::seq<sign, opt_invisible, real_number> {};
+        struct subsequent_inequality_term_1 : tao::pegtl::seq< subsequent_inequality_coefficient_1, opt_invisible, inequality_monomial> {};
+        struct subsequent_inequality_term_2 : tao::pegtl::seq< subsequent_inequality_coefficient_2, opt_invisible, tao::pegtl::opt<tao::pegtl::string<'*'>>, opt_whitespace, inequality_monomial> {};
         struct subsequent_inequality_term : tao::pegtl::sor<subsequent_inequality_term_1, subsequent_inequality_term_2> {};
 
-        struct lhs_inequality : tao::pegtl::seq<first_inequality_term, tao::pegtl::star<opt_whitespace, subsequent_inequality_term>> {};
+        struct lhs_inequality : tao::pegtl::seq<first_inequality_term, tao::pegtl::star<opt_invisible, subsequent_inequality_term>> {};
 
-        struct rhs_inequality : tao::pegtl::seq<tao::pegtl::opt<sign>, opt_whitespace, real_number> {};
+        struct rhs_inequality : tao::pegtl::seq<tao::pegtl::opt<sign>, opt_invisible, real_number> {};
 
         struct inequality_line : tao::pegtl::seq<
                                  new_inequality, 
-                                 opt_whitespace,
+                                 opt_invisible,
                                  lhs_inequality,
-                                 opt_whitespace,
+                                 opt_invisible,
                                  inequality_type,
-                                 opt_whitespace,
+                                 opt_invisible,
                                  rhs_inequality,
                                  opt_whitespace,
                                  tao::pegtl::eol
@@ -458,6 +458,15 @@ namespace LPMP {
                 throw std::runtime_error("could not read input file " + filename);
             if(tmp.one_fixations.size() > 0 || tmp.zero_fixations.size() > 0)
                 ilp = ilp.reduce(tmp.zero_fixations, tmp.one_fixations);
+
+#ifndef NDEBUG
+            if(!ilp.every_variable_in_some_ineq());
+            std::cout << "[ILP parser] ILP has variables that are not present in any constraint\n";
+
+            const size_t nr_subproblems = ilp.nr_disconnected_subproblems();
+            if(nr_subproblems != 1)
+                std::cout << "[ILP parser] ILP can bedivided into " << nr_subproblems << " subproblems\n";
+#endif
             return ilp;
         }
 
@@ -472,6 +481,15 @@ namespace LPMP {
                 throw std::runtime_error("could not read input:\n" + input_string);
             if(tmp.one_fixations.size() > 0 || tmp.zero_fixations.size() > 0)
                 ilp = ilp.reduce(tmp.zero_fixations, tmp.one_fixations);
+
+#ifndef NDEBUG
+            if(!ilp.every_variable_in_some_ineq());
+            std::cout << "[ILP parser] ILP has variables that are not present in any constraint\n";
+
+            const size_t nr_subproblems = ilp.nr_disconnected_subproblems();
+            if(nr_subproblems != 1)
+                std::cout << "[ILP parser] ILP can bedivided into " << nr_subproblems << " subproblems\n";
+#endif
             return ilp;
         }
 

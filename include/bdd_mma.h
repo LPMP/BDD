@@ -23,6 +23,7 @@ namespace LPMP {
             void update_cost(const double lo_cost, const double hi_cost, const size_t var);
             template<typename COST_ITERATOR>
                 void update_costs(COST_ITERATOR cost_lo_begin, COST_ITERATOR cost_lo_end, COST_ITERATOR cost_hi_begin, COST_ITERATOR cost_hi_end);
+            void add_to_constant(const double c);
             void set_avg_type(const averaging_type avg_type);
             double lower_bound();
             void iteration();

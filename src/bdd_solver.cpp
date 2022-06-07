@@ -250,6 +250,18 @@ namespace LPMP {
                 throw std::runtime_error("only float and double precision allowed");
             std::cout << "[bdd solver] constructed CUDA based mma solver\n"; 
         }
+        else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::hybrid_parallel_mma)
+        {
+            if(options.smoothing != 0)
+                throw std::runtime_error("no smoothing implemented for hybrid parallel mma");
+            if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::single_prec)
+                solver = std::move(bdd_multi_parallel_mma<float>(bdd_pre.get_bdd_collection(), costs.begin(), costs.end()));
+            else if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::double_prec)
+                solver = std::move(bdd_multi_parallel_mma<double>(bdd_pre.get_bdd_collection(), costs.begin(), costs.end()));
+            else
+                throw std::runtime_error("only float and double precision allowed");
+            std::cout << "[bdd solver] constructed CUDA based mma solver\n"; 
+        }
         else
         {
             throw std::runtime_error("no solver nor output of statistics or export of lp selected");
@@ -272,11 +284,11 @@ namespace LPMP {
         // set constant
         if(options.ilp.constant() != 0.0)
             std::visit([&](auto&& s) { 
-                    if constexpr(false
-                            //std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_smooth<float>>
-                            //|| std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_smooth<double>>
-                            //|| std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma_smooth<float>>
-                            //|| std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma_smooth<double>>
+                    if constexpr(
+                            std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma<float>> || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma<double>>
+                            || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_smooth<float>> || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma_smooth<double>>
+                            || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma<float>> || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma<double>>
+                            || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma_smooth<float>> || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma_smooth<double>>
                             )
                     s.add_to_constant(options.ilp.constant());
                     else
