@@ -5,6 +5,7 @@
 #include "minimum_degree_ordering.hxx"
 #include "time_measure_util.h"
 #include "two_dimensional_variable_array.hxx"
+#include "union_find.hxx"
 #include <iostream>
 #include <limits>
 #include <unordered_set>
@@ -743,6 +744,42 @@ namespace LPMP {
         }
 
         return {A,b};
+    }
+
+    bool ILP_input::every_variable_in_some_ineq() const
+    {
+        std::vector<size_t> nr_ineqs_per_var(nr_variables(), 0);
+        for(const auto& c : constraints_)
+        {
+            for(size_t monomial_idx=0; monomial_idx<c.monomials.size(); ++monomial_idx)
+            {
+                for(size_t var_idx=0; var_idx<c.monomials.size(monomial_idx); ++var_idx)
+                {
+                    const size_t& var = c.monomials(monomial_idx, var_idx);
+                    ++nr_ineqs_per_var[var];
+                }
+            }
+        }
+
+        return std::count(nr_ineqs_per_var.begin(), nr_ineqs_per_var.end(), 0) == 0;
+    }
+
+    size_t ILP_input::nr_disconnected_subproblems() const
+    {
+        union_find uf(nr_variables() + nr_constraints());
+        for(size_t c=0; c<nr_constraints(); ++c)
+        {
+            for(size_t monomial_idx=0; monomial_idx<constraints_[c].monomials.size(); ++monomial_idx)
+            {
+                for(size_t var_idx=0; var_idx<constraints_[c].monomials.size(monomial_idx); ++var_idx)
+                {
+                    const size_t& var = constraints_[c].monomials(monomial_idx, var_idx);
+                    uf.merge(var, nr_variables() + c);
+                }
+            }
+        }
+
+        return uf.count();
     }
 
 }

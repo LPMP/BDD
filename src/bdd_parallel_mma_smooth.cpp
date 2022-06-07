@@ -54,6 +54,12 @@ namespace LPMP {
         }
 
     template<typename REAL>
+        void bdd_parallel_mma_smooth<REAL>::add_to_constant(const double c)
+        {
+            pimpl->parallel_mma.add_to_constant(c);
+        }
+
+    template<typename REAL>
         void bdd_parallel_mma_smooth<REAL>::backward_run()
         {
             pimpl->parallel_mma.smooth_backward_run();

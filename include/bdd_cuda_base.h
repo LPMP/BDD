@@ -88,7 +88,9 @@ namespace LPMP {
             std::vector<REAL> get_primal_objective_vector_host();
 
             size_t nr_variables() const { return nr_vars_; }
+            size_t nr_variables(const size_t bdd_nr) const { assert(bdd_nr < nr_bdds()); return nr_vars_; }
             size_t nr_bdds() const { return nr_bdds_; }
+            size_t nr_bdds(const size_t var) const { assert(var < nr_variables()); return num_bdds_per_var_[var]; }
             size_t nr_layers() const { return cum_nr_layers_per_hop_dist_.back(); }
             size_t nr_layers(const int hop_index) const { 
                 return cum_nr_layers_per_hop_dist_[hop_index] - (hop_index > 0 ? cum_nr_layers_per_hop_dist_[hop_index - 1] : 0); 

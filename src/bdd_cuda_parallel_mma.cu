@@ -138,11 +138,20 @@ namespace LPMP {
     template<typename REAL>
     void bdd_cuda_parallel_mma<REAL>::iteration(const REAL omega)
     {
-        MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
-        forward_iteration(omega);
-        backward_iteration(omega);
+        MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME;
+        forward_mm(omega, delta_lo_, delta_hi_);
+        backward_mm(omega, delta_lo_, delta_hi_);
     }
 
+    // arguments:
+    // in:
+    // delta_lo, delta_hi: values to add to current costs
+    // mm_diff:
+    // lo_cost_in, hi_cost_in: base costs before adding delta
+    // lo_cost_out, hi_cost_out: in costs + delta averaged by mm_diff
+    // out:
+    // cost_from_root: 
+    // analoguously for backward_step_with_solve
     template<typename REAL>
     __global__ void forward_step_with_solve(const int cur_num_bdd_nodes, const int start_offset,
                                 const int* const __restrict__ lo_bdd_node_index, 
@@ -188,17 +197,15 @@ namespace LPMP {
     }
 
     template<typename REAL>
-    void bdd_cuda_parallel_mma<REAL>::forward_iteration(const REAL omega)
-    {
-        MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
-        if(!this->backward_state_valid_)
-            this->backward_run(false); //For the first iteration need to have costs from terminal. 
-        
+        void bdd_cuda_parallel_mma<REAL>::forward_mm(const REAL omega,
+                thrust::device_vector<REAL>& delta_lo, thrust::device_vector<REAL>& delta_hi)
+        {
+            MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME;
+            if(!this->backward_state_valid_)
+                this->backward_run(false); //For the first iteration need to have costs from terminal. 
+
         // Clear states.
         this->flush_costs_from_root();
-
-        compute_delta(this->deffered_mm_diff_.data());
-        normalize_delta(); // Normalize delta by num BDDs to distribute isotropically.
         flush_mm(this->deffered_mm_diff_.data());
 
         const int num_steps = this->cum_nr_bdd_nodes_per_hop_dist_.size() - 1;
@@ -217,17 +224,22 @@ namespace LPMP {
                                                                 thrust::raw_pointer_cast(this->hi_bdd_node_index_.data()),
                                                                 thrust::raw_pointer_cast(this->bdd_node_to_layer_map_.data()),
                                                                 thrust::raw_pointer_cast(this->primal_variable_index_.data()),
-                                                                thrust::raw_pointer_cast(this->delta_lo_.data()),
-                                                                thrust::raw_pointer_cast(this->delta_hi_.data()),
+                                                                // in
+                                                                thrust::raw_pointer_cast(delta_lo.data()),
+                                                                thrust::raw_pointer_cast(delta_hi.data()),
                                                                 thrust::raw_pointer_cast(this->deffered_mm_diff_.data()),
                                                                 thrust::raw_pointer_cast(this->lo_cost_.data()),
                                                                 thrust::raw_pointer_cast(this->hi_cost_.data()),
+                                                                // out
                                                                 thrust::raw_pointer_cast(this->lo_cost_out_.data()),
                                                                 thrust::raw_pointer_cast(this->hi_cost_out_.data()),
                                                                 thrust::raw_pointer_cast(this->cost_from_root_.data()));
         }
         thrust::swap(this->lo_cost_, lo_cost_out_);
         thrust::swap(this->hi_cost_, hi_cost_out_);
+
+        compute_delta(this->deffered_mm_diff_.data(), this->delta_lo_.data(), this->delta_hi_.data());
+        normalize_delta(delta_lo_, delta_hi_);
 
         this->forward_state_valid_ = true;
         this->flush_backward_states();
@@ -281,50 +293,52 @@ namespace LPMP {
     }
 
     template<typename REAL>
-    void bdd_cuda_parallel_mma<REAL>::backward_iteration(const REAL omega)
-    {
-        MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
-        assert(this->forward_state_valid_); 
-
-        compute_delta(this->deffered_mm_diff_.data());
-        normalize_delta(); // Normalize delta by num BDDs to distribute isotropically.
-
-        flush_mm(this->deffered_mm_diff_.data());
-        for (int s = this->cum_nr_bdd_nodes_per_hop_dist_.size() - 2; s >= 0; s--)
+        void bdd_cuda_parallel_mma<REAL>::backward_mm(const REAL omega,
+                thrust::device_vector<REAL>& delta_lo, thrust::device_vector<REAL>& delta_hi)
         {
-            // 1. Compute min-marginals using costs from root, costs from terminal and hi_costs, lo_costs for current hop
-            min_marginals_from_directional_costs(s, omega);
+            MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
+                assert(this->forward_state_valid_); 
 
-            const int start_offset = s > 0 ? this->cum_nr_bdd_nodes_per_hop_dist_[s - 1] : 0;
+            for (int s = this->cum_nr_bdd_nodes_per_hop_dist_.size() - 2; s >= 0; s--)
+            {
+                // 1. Compute min-marginals using costs from root, costs from terminal and hi_costs, lo_costs for current hop
+                min_marginals_from_directional_costs(s, omega);
 
-            const int cur_num_bdd_nodes = this->nr_bdd_nodes(s);
-            const int blockCount = ceil(cur_num_bdd_nodes / (REAL) NUM_THREADS_CUDA);
+                const int start_offset = s > 0 ? this->cum_nr_bdd_nodes_per_hop_dist_[s - 1] : 0;
 
-            // 2. Subtract from hi_costs, update costs from terminal.
-            backward_step_with_solve<<<blockCount, NUM_THREADS_CUDA>>>(cur_num_bdd_nodes, start_offset,
-                                                                thrust::raw_pointer_cast(this->lo_bdd_node_index_.data()),
-                                                                thrust::raw_pointer_cast(this->hi_bdd_node_index_.data()),
-                                                                thrust::raw_pointer_cast(this->bdd_node_to_layer_map_.data()),
-                                                                thrust::raw_pointer_cast(this->primal_variable_index_.data()),
-                                                                thrust::raw_pointer_cast(this->delta_lo_.data()),
-                                                                thrust::raw_pointer_cast(this->delta_hi_.data()),
-                                                                thrust::raw_pointer_cast(this->deffered_mm_diff_.data()),
-                                                                thrust::raw_pointer_cast(this->lo_cost_.data()),
-                                                                thrust::raw_pointer_cast(this->hi_cost_.data()),
-                                                                thrust::raw_pointer_cast(lo_cost_out_.data()),
-                                                                thrust::raw_pointer_cast(hi_cost_out_.data()),
-                                                                thrust::raw_pointer_cast(this->cost_from_terminal_.data()));
-        }
-        thrust::swap(this->lo_cost_, lo_cost_out_);
-        thrust::swap(this->hi_cost_, hi_cost_out_);
+                const int cur_num_bdd_nodes = this->nr_bdd_nodes(s);
+                const int blockCount = ceil(cur_num_bdd_nodes / (REAL) NUM_THREADS_CUDA);
 
-        this->flush_forward_states();
-        this->backward_state_valid_ = true;
+                // 2. Subtract from hi_costs, update costs from terminal.
+                backward_step_with_solve<<<blockCount, NUM_THREADS_CUDA>>>(cur_num_bdd_nodes, start_offset,
+                        thrust::raw_pointer_cast(this->lo_bdd_node_index_.data()),
+                        thrust::raw_pointer_cast(this->hi_bdd_node_index_.data()),
+                        thrust::raw_pointer_cast(this->bdd_node_to_layer_map_.data()),
+                        thrust::raw_pointer_cast(this->primal_variable_index_.data()),
+                        thrust::raw_pointer_cast(delta_lo.data()),
+                        thrust::raw_pointer_cast(delta_hi.data()),
+                        thrust::raw_pointer_cast(this->deffered_mm_diff_.data()),
+                        thrust::raw_pointer_cast(this->lo_cost_.data()),
+                        thrust::raw_pointer_cast(this->hi_cost_.data()),
+                        thrust::raw_pointer_cast(lo_cost_out_.data()),
+                        thrust::raw_pointer_cast(hi_cost_out_.data()),
+                        thrust::raw_pointer_cast(this->cost_from_terminal_.data()));
+            }
+            thrust::swap(this->lo_cost_, lo_cost_out_);
+            thrust::swap(this->hi_cost_, hi_cost_out_);
 
-        #ifndef NDEBUG
+            compute_delta(this->deffered_mm_diff_.data(), delta_lo.data(), delta_hi.data());
+            normalize_delta(delta_lo, delta_hi);
+
+            flush_mm(this->deffered_mm_diff_.data());
+
+            this->flush_forward_states();
+            this->backward_state_valid_ = true;
+
+#ifndef NDEBUG
             cudaDeviceSynchronize();  // Not necessary, only to compute exact timing of this function.
-        #endif
-    }
+#endif
+        }
 
     template<typename REAL> struct pos_part
     {
@@ -336,25 +350,23 @@ namespace LPMP {
         __host__ __device__ REAL operator()(const REAL x) { return -min(x, (REAL) 0); }
     };
 
+    // TODO: use device_vector?
     template<typename REAL>
-    void bdd_cuda_parallel_mma<REAL>::compute_delta()
-    {
-        compute_delta(this->deffered_mm_diff_.data());
-    }
-
-    template<typename REAL>
-    void bdd_cuda_parallel_mma<REAL>::compute_delta(const thrust::device_ptr<const REAL> mm_to_distribute)
+    void bdd_cuda_parallel_mma<REAL>::compute_delta(
+            const thrust::device_ptr<const REAL> mm_to_distribute,
+            thrust::device_ptr<REAL> delta_lo, thrust::device_ptr<REAL> delta_hi
+            ) const
     {
         auto first_val = thrust::make_zip_iterator(thrust::make_tuple(
             thrust::make_permutation_iterator(thrust::make_transform_iterator(mm_to_distribute, pos_part<REAL>()), this->primal_variable_sorting_order_.begin()),
             thrust::make_permutation_iterator(thrust::make_transform_iterator(mm_to_distribute, abs_neg_part<REAL>()), this->primal_variable_sorting_order_.begin())));
 
-        auto first_out_val = thrust::make_zip_iterator(thrust::make_tuple(this->delta_hi_.begin(), this->delta_lo_.begin()));
+        auto first_out_val = thrust::make_zip_iterator(thrust::make_tuple(delta_hi, delta_lo));
 
         thrust::equal_to<int> binary_pred;
         auto new_end = thrust::reduce_by_key(this->primal_variable_index_sorted_.begin(), this->primal_variable_index_sorted_.end() - this->nr_bdds_, first_val, 
                             thrust::make_discard_iterator(), first_out_val, binary_pred, tuple_sum());
-        assert(thrust::distance(first_out_val, new_end.second) == this->delta_hi_.size());
+        //assert(thrust::distance(first_out_val, new_end.second) == delta_hi.size());
         // thrust::reduce_by_key(thrust::make_permutation_iterator(this->primal_variable_index_.begin(), primal_variable_sorting_order_.begin()),
         //                     thrust::make_permutation_iterator(this->primal_variable_index_.end(), primal_variable_sorting_order_.end()), first_val, 
         //                     thrust::make_discard_iterator(), first_out_val, binary_pred, tuple_sum()); // Uses less memory but slower.
@@ -373,10 +385,10 @@ namespace LPMP {
     };
 
     template<typename REAL>
-    void bdd_cuda_parallel_mma<REAL>::normalize_delta()
+    void bdd_cuda_parallel_mma<REAL>::normalize_delta(thrust::device_vector<REAL>& delta_lo, thrust::device_vector<REAL>& delta_hi) const
     {
-        auto first = thrust::make_zip_iterator(thrust::make_tuple(this->delta_hi_.begin(), this->delta_lo_.begin(), this->num_bdds_per_var_.begin()));
-        auto last = thrust::make_zip_iterator(thrust::make_tuple(this->delta_hi_.end(), this->delta_lo_.end(), this->num_bdds_per_var_.end()));
+        auto first = thrust::make_zip_iterator(thrust::make_tuple(delta_hi.begin(), delta_lo.begin(), this->num_bdds_per_var_.begin()));
+        auto last = thrust::make_zip_iterator(thrust::make_tuple(delta_hi.end(), delta_lo.end(), this->num_bdds_per_var_.end()));
         thrust::for_each(first, last, normalize_delta_func<REAL>());
     }
 
