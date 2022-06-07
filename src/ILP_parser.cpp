@@ -90,22 +90,22 @@ namespace LPMP {
         struct first_inequality_term : tao::pegtl::seq<first_inequality_coefficient, opt_whitespace, tao::pegtl::opt<tao::pegtl::string<'*'>>, opt_whitespace, inequality_monomial> {};
 
         struct subsequent_inequality_coefficient_1 : sign {};
-        struct subsequent_inequality_coefficient_2 : tao::pegtl::seq<sign, opt_whitespace, real_number> {};
-        struct subsequent_inequality_term_1 : tao::pegtl::seq< subsequent_inequality_coefficient_1, opt_whitespace, inequality_monomial> {};
-        struct subsequent_inequality_term_2 : tao::pegtl::seq< subsequent_inequality_coefficient_2, opt_whitespace, tao::pegtl::opt<tao::pegtl::string<'*'>>, opt_whitespace, inequality_monomial> {};
+        struct subsequent_inequality_coefficient_2 : tao::pegtl::seq<sign, opt_invisible, real_number> {};
+        struct subsequent_inequality_term_1 : tao::pegtl::seq< subsequent_inequality_coefficient_1, opt_invisible, inequality_monomial> {};
+        struct subsequent_inequality_term_2 : tao::pegtl::seq< subsequent_inequality_coefficient_2, opt_invisible, tao::pegtl::opt<tao::pegtl::string<'*'>>, opt_whitespace, inequality_monomial> {};
         struct subsequent_inequality_term : tao::pegtl::sor<subsequent_inequality_term_1, subsequent_inequality_term_2> {};
 
-        struct lhs_inequality : tao::pegtl::seq<first_inequality_term, tao::pegtl::star<opt_whitespace, subsequent_inequality_term>> {};
+        struct lhs_inequality : tao::pegtl::seq<first_inequality_term, tao::pegtl::star<opt_invisible, subsequent_inequality_term>> {};
 
-        struct rhs_inequality : tao::pegtl::seq<tao::pegtl::opt<sign>, opt_whitespace, real_number> {};
+        struct rhs_inequality : tao::pegtl::seq<tao::pegtl::opt<sign>, opt_invisible, real_number> {};
 
         struct inequality_line : tao::pegtl::seq<
                                  new_inequality, 
-                                 opt_whitespace,
+                                 opt_invisible,
                                  lhs_inequality,
-                                 opt_whitespace,
+                                 opt_invisible,
                                  inequality_type,
-                                 opt_whitespace,
+                                 opt_invisible,
                                  rhs_inequality,
                                  opt_whitespace,
                                  tao::pegtl::eol
