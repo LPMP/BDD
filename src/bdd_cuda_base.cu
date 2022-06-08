@@ -503,7 +503,7 @@ namespace LPMP {
     template<typename REAL_arg>
     void bdd_cuda_base<REAL>::update_costs(const thrust::device_vector<REAL_arg>& cost_delta_0, const thrust::device_vector<REAL_arg>& cost_delta_1)
     {
-        update_costs(cost_delta_0.data(), cost_delta_0.size(), cost_delta_1.data(), cost_delta_0.size());
+        update_costs(cost_delta_0.data(), cost_delta_0.size(), cost_delta_1.data(), cost_delta_1.size());
     }
 
     template<typename REAL>
