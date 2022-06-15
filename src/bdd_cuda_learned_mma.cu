@@ -215,15 +215,19 @@ namespace LPMP {
             third_last_lb = thrust::device_vector<REAL>(this->nr_bdds());
         }
         
-        if (compute_lbfgs_grad_for_itr > 0 && this->lbfgs_solver_.get_m() == -1)
-            this->lbfgs_solver_ = lbfgs_cuda<REAL>(this->nr_layers(), compute_lbfgs_grad_for_itr);
+        if (compute_lbfgs_grad_for_itr > 0)
+        {
+            if (this->lbfgs_solver_.get_m() != compute_lbfgs_grad_for_itr)
+                this->lbfgs_solver_ = lbfgs_cuda<REAL>(this->nr_layers(), compute_lbfgs_grad_for_itr);
+            this->update_bfgs_states(this->lbfgs_solver_);
+        }
         int history_tracked_for = 0;
         for(itr = 0; itr < num_itr; itr++)
         {
-            if (compute_lbfgs_grad_for_itr && !converged && compute_lbfgs_grad_for_itr >= num_itr - itr)
-                this->update_bfgs_states(this->lbfgs_solver_);
             forward_iteration_learned_mm_dist(dist_weights, this->deffered_mm_diff_.data(), omega_scalar, omega_vec);
             backward_iteration_learned_mm_dist(dist_weights, this->deffered_mm_diff_.data(), omega_scalar, omega_vec);
+            if (compute_lbfgs_grad_for_itr && !converged && compute_lbfgs_grad_for_itr * 2 >= num_itr - itr)
+                this->update_bfgs_states(this->lbfgs_solver_);
 
             if (compute_history_for_itr && (compute_history_for_itr >= num_itr - itr || converged))
             {

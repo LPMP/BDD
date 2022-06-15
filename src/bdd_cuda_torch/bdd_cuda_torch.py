@@ -68,9 +68,16 @@ class DualIterations(torch.autograd.Function):
             ctx.mark_non_differentiable(sol_avg_out)
             ctx.mark_non_differentiable(lb_first_order_hist)
             ctx.mark_non_differentiable(lb_sec_order_hist)
+        else:
+            sol_avg_out_ptr = 0
+            lb_first_order_hist_ptr = 0
+            lb_sec_order_hist_ptr = 0
+
         if lbfgs_num_itr > 0:
             grad_lbfgs = torch.empty_like(def_mm_batch)
             ctx.mark_non_differentiable(grad_lbfgs)
+        else:
+            lbfgs_ptr = 0
 
         is_omega_scalar = torch.numel(omega) == 1
         if not is_omega_scalar:
@@ -87,19 +94,21 @@ class DualIterations(torch.autograd.Function):
                 current_num_itr = num_iterations
             if lbfgs_num_itr > 0:
                 lbfgs_ptr = grad_lbfgs[layer_start].data_ptr()
-            else:
-                lbfgs_ptr = 0
+            if compute_history_for_itrs > 0:
+                sol_avg_out_ptr = sol_avg_out[layer_start].data_ptr()
+                lb_first_order_hist_ptr = lb_first_order_hist[bdd_start].data_ptr()
+                lb_sec_order_hist_ptr = lb_sec_order_hist[bdd_start].data_ptr()
             if is_omega_scalar:
                 num_itr = solver.iterations(dist_weights_batch[layer_start].data_ptr(), current_num_itr, 
                                             omega[0].item(), improvement_slope, 0, False,
-                                            compute_history_for_itrs, history_avg_beta, sol_avg_out[layer_start].data_ptr(),
-                                            lb_first_order_hist[bdd_start].data_ptr(), lb_sec_order_hist[bdd_start].data_ptr(),
+                                            compute_history_for_itrs, history_avg_beta, sol_avg_out_ptr,
+                                            lb_first_order_hist_ptr, lb_sec_order_hist_ptr,
                                             lbfgs_num_itr, lbfgs_ptr)
             else:
                 num_itr = solver.iterations(dist_weights_batch[layer_start].data_ptr(), current_num_itr, 
                                             1.0, improvement_slope, omega[layer_start].data_ptr(), True,
-                                            compute_history_for_itrs, history_avg_beta, sol_avg_out[layer_start].data_ptr(),
-                                            lb_first_order_hist[bdd_start].data_ptr(), lb_sec_order_hist[bdd_start].data_ptr(),
+                                            compute_history_for_itrs, history_avg_beta, sol_avg_out_ptr,
+                                            lb_first_order_hist_ptr, lb_sec_order_hist_ptr,
                                             lbfgs_num_itr, lbfgs_ptr)
 
             actual_num_itr.append(num_itr)
@@ -365,4 +374,33 @@ class ComputeLowerBoundperBDD(torch.autograd.Function):
             bdd_start += solver.nr_bdds()
             layer_start += solver.nr_layers()
 
-        return None, grad_lo_costs_in, grad_hi_costs_in, None
+        return None, grad_lo_costs_in, grad_hi_costs_in
+
+class ComputePerBDDSolutionsIdentityBackward(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, solvers, lo_costs_batch, hi_costs_batch, norm_grad):
+        validate_input_format(lo_costs_batch, hi_costs_batch)
+        assert(lo_costs_batch.dim() == 1)
+        assert(lo_costs_batch.shape == hi_costs_batch.shape)
+
+        ctx.set_materialize_grads(False)
+        ctx.save_for_backward(norm_grad)
+        # ctx.solvers = solvers
+        # ctx.save_for_backward(lo_costs_batch, hi_costs_batch)
+        per_bdd_solution_hi = torch.zeros_like(lo_costs_batch) # Initialize by 0's to also copy to deferred min-marginals.
+        # per_bdd_solution_lo = torch.empty_like(lo_costs_batch)
+        layer_start = 0
+        for (b, solver) in enumerate(solvers):
+            solver.set_solver_costs(lo_costs_batch[layer_start].data_ptr(), hi_costs_batch[layer_start].data_ptr(), per_bdd_solution_hi[layer_start].data_ptr())
+            solver.solution_per_bdd(per_bdd_solution_hi[layer_start].data_ptr())
+            layer_start += solver.nr_layers()
+        return per_bdd_solution_hi
+
+    @staticmethod
+    @once_differentiable
+    def backward(ctx, grad_per_bdd_solution_hi):
+        validate_input_format(grad_per_bdd_solution_hi)
+        norm_grad = ctx.saved_tensors
+        # Negative identity as jacobian.
+        print(f"Returning grad: min: {grad_per_bdd_solution_hi.min()}, max: {grad_per_bdd_solution_hi.max()}")
+        return None, grad_per_bdd_solution_hi * norm_grad, -1.0 * grad_per_bdd_solution_hi * norm_grad

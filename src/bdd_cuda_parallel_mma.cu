@@ -345,7 +345,9 @@ namespace LPMP {
                 thrust::device_vector<REAL>& delta_lo, thrust::device_vector<REAL>& delta_hi)
         {
             MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
-                assert(this->forward_state_valid_); 
+            assert(this->forward_state_valid_); 
+
+            flush_mm(this->deffered_mm_diff_.data());
 
             for (int s = this->cum_nr_bdd_nodes_per_hop_dist_.size() - 2; s >= 0; s--)
             {
@@ -377,8 +379,6 @@ namespace LPMP {
 
             compute_delta(this->deffered_mm_diff_.data(), delta_lo.data(), delta_hi.data());
             normalize_delta(delta_lo, delta_hi);
-
-            flush_mm(this->deffered_mm_diff_.data());
 
             this->flush_forward_states();
             this->backward_state_valid_ = true;
