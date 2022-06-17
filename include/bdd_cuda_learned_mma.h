@@ -8,14 +8,19 @@ namespace LPMP {
     class solver_state_cache
     {
         public:
-            solver_state_cache(const int num_caches, const int num_iterations, const int num_layers): 
-                num_caches_(min(num_caches, num_iterations)), num_iterations_(num_iterations), num_layers_(num_layers) 
+            solver_state_cache(const int num_caches, const int num_iterations, const int num_layers)
             {
+                num_iterations_ = num_iterations;
+                num_layers_ = num_layers; 
+                if (num_caches == 0 || num_iterations == 0)
+                    return;
+                cache_interval_ = max(ceil((float) num_iterations / num_caches), 1.0);
+                max_cached_iteration_ = min(cache_interval_ * (num_caches - 1), num_iterations - 1);
+                num_caches_ = 1 + max_cached_iteration_ / cache_interval_;
+                
                 if (num_caches_ == 0)
                     return;
 
-                cache_interval_ = round((float) num_iterations / num_caches_);
-                max_cached_iteration_ = cache_interval_ * (num_caches_ - 1);
                 lo_costs_cache_ = std::vector<std::vector<REAL>>(num_caches_);
                 hi_costs_cache_ = std::vector<std::vector<REAL>>(num_caches_);
                 def_mm_cache_ = std::vector<std::vector<REAL>>(num_caches_);
@@ -30,7 +35,7 @@ namespace LPMP {
                                     thrust::device_ptr<REAL> def_mm_ptr);
             int max_cached_iteration() const {return max_cached_iteration_; }
         private:
-            const int num_caches_, num_iterations_, num_layers_;
+            int num_caches_, num_iterations_, num_layers_;
             int max_cached_iteration_;
             int cache_interval_ = -1;
             std::vector<std::vector<REAL>> lo_costs_cache_, hi_costs_cache_, def_mm_cache_;
