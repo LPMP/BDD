@@ -359,6 +359,27 @@ namespace LPMP {
         __host__ __device__ REAL operator()(const REAL x) { return -min(x, (REAL) 0); }
     };
 
+    template<typename REAL>
+    struct compute_delta_atomic {
+        const int* primal_index;
+        const REAL* mm_to_distribute;
+        REAL* delta_lo;
+        REAL* delta_hi;
+        const unsigned long num_vars;
+        __host__ __device__ void operator()(const int i)
+        {
+            const int cur_primal = primal_index[i];
+            if (cur_primal < num_vars)
+            {
+                const REAL cur_mm = mm_to_distribute[i];
+                if (cur_mm > 0)
+                    atomicAdd(&delta_hi[cur_primal], cur_mm);
+                else if (cur_mm < 0)
+                    atomicAdd(&delta_lo[cur_primal], -cur_mm);
+            }
+        }
+    };
+
     // TODO: use device_vector?
     template<typename REAL>
     void bdd_cuda_parallel_mma<REAL>::compute_delta(
@@ -366,15 +387,28 @@ namespace LPMP {
             thrust::device_ptr<REAL> delta_lo, thrust::device_ptr<REAL> delta_hi
             ) const
     {
-        auto first_val = thrust::make_zip_iterator(thrust::make_tuple(
-            thrust::make_permutation_iterator(thrust::make_transform_iterator(mm_to_distribute, pos_part<REAL>()), this->primal_variable_sorting_order_.begin()),
-            thrust::make_permutation_iterator(thrust::make_transform_iterator(mm_to_distribute, abs_neg_part<REAL>()), this->primal_variable_sorting_order_.begin())));
 
-        auto first_out_val = thrust::make_zip_iterator(thrust::make_tuple(delta_hi, delta_lo));
+        thrust::fill(delta_lo, delta_lo + this->nr_variables(), 0.0);
+        thrust::fill(delta_hi, delta_hi + this->nr_variables(), 0.0);
 
-        thrust::equal_to<int> binary_pred;
-        auto new_end = thrust::reduce_by_key(this->primal_variable_index_sorted_.begin(), this->primal_variable_index_sorted_.end() - this->nr_bdds_, first_val, 
-                            thrust::make_discard_iterator(), first_out_val, binary_pred, tuple_sum());
+        compute_delta_atomic<REAL> compute_delta_atomic_func({
+                                            thrust::raw_pointer_cast(this->primal_variable_index_.data()),
+                                            thrust::raw_pointer_cast(mm_to_distribute),
+                                            thrust::raw_pointer_cast(delta_lo),
+                                            thrust::raw_pointer_cast(delta_hi),
+                                            this->nr_variables()});
+
+        thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + this->nr_layers(), compute_delta_atomic_func);
+
+        // auto first_val = thrust::make_zip_iterator(thrust::make_tuple(
+        //     thrust::make_permutation_iterator(thrust::make_transform_iterator(mm_to_distribute, pos_part<REAL>()), this->primal_variable_sorting_order_.begin()),
+        //     thrust::make_permutation_iterator(thrust::make_transform_iterator(mm_to_distribute, abs_neg_part<REAL>()), this->primal_variable_sorting_order_.begin())));
+
+        // auto first_out_val = thrust::make_zip_iterator(thrust::make_tuple(delta_hi, delta_lo));
+
+        // thrust::equal_to<int> binary_pred;
+        // auto new_end = thrust::reduce_by_key(this->primal_variable_index_sorted_.begin(), this->primal_variable_index_sorted_.end() - this->nr_bdds_, first_val, 
+        //                     thrust::make_discard_iterator(), first_out_val, binary_pred, tuple_sum());
         //assert(thrust::distance(first_out_val, new_end.second) == delta_hi.size());
         // thrust::reduce_by_key(thrust::make_permutation_iterator(this->primal_variable_index_.begin(), primal_variable_sorting_order_.begin()),
         //                     thrust::make_permutation_iterator(this->primal_variable_index_.end(), primal_variable_sorting_order_.end()), first_val, 
