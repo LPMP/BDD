@@ -198,6 +198,11 @@ namespace LPMP {
                                 const REAL history_avg_beta,
                                 const thrust::device_ptr<const REAL> omega_vec)
     {
+        if(this->delta_lo_.size() == 0)
+            this->delta_lo_ = thrust::device_vector<REAL>(this->nr_variables(), 0.0);
+        if(this->delta_hi_.size() == 0)
+            this->delta_hi_ = thrust::device_vector<REAL>(this->nr_variables(), 0.0);
+
         const double lb_initial = this->lower_bound();
         double lb_prev = lb_initial;
         double lb_post = lb_prev;
