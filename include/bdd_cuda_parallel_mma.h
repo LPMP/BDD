@@ -20,6 +20,10 @@ namespace LPMP {
             void backward_mm(const REAL omega,
                     thrust::device_vector<REAL>& delta_lo, thrust::device_vector<REAL>& delta_hi);
 
+            // Normalize delta by num BDDs to distribute isotropically.
+            // delta_lo_ -> delta_hi_/#BDDs, delta_hi_ -> delta_hi_/#BDDs
+            void normalize_delta(thrust::device_vector<REAL>& delta_lo, thrust::device_vector<REAL>& delta_hi) const;
+
         protected:
             void min_marginals_from_directional_costs(const int hop_index, const REAL omega_scalar);
 
@@ -28,9 +32,6 @@ namespace LPMP {
 
             // compute delta_lo_ and delta_hi_ (per variable) from mm_to_distribute (per bdd node)
             void compute_delta(const thrust::device_ptr<const REAL> mm_to_distribute, thrust::device_ptr<REAL> delta_lo, thrust::device_ptr<REAL> delta_hi) const;
-            // Normalize delta by num BDDs to distribute isotropically.
-            // delta_lo_ -> delta_hi_/#BDDs, delta_hi_ -> delta_hi_/#BDDs
-            void normalize_delta(thrust::device_vector<REAL>& delta_lo, thrust::device_vector<REAL>& delta_hi) const;
 
             // set argument to all infinity
             void flush_mm(thrust::device_ptr<REAL> mm_diff_ptr);

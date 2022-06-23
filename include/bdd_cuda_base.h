@@ -125,7 +125,7 @@ namespace LPMP {
 
             const thrust::device_vector<int> get_primal_variable_index() const { return primal_variable_index_; }
             const thrust::device_vector<int> get_bdd_index() const { return bdd_index_; }
-            const thrust::device_vector<int> get_num_bdds_per_var() const {return num_bdds_per_var_; }
+            const thrust::device_vector<int>& get_num_bdds_per_var() const {return num_bdds_per_var_; }
 
             void distribute_delta(thrust::device_ptr<REAL> def_min_marg_diff_ptr);
             void distribute_delta();

@@ -18,8 +18,6 @@ namespace LPMP {
         // Copy from arc costs because it contains infinity for arcs to bot sink
         hi_cost_out_ = thrust::device_vector<REAL>(this->hi_cost_);
         lo_cost_out_ = thrust::device_vector<REAL>(this->lo_cost_);
-        delta_lo_ = thrust::device_vector<REAL>(this->nr_variables(), 0.0);
-        delta_hi_ = thrust::device_vector<REAL>(this->nr_variables(), 0.0);
     }
 
     template<typename REAL>
@@ -139,13 +137,20 @@ namespace LPMP {
     void bdd_cuda_parallel_mma<REAL>::iteration(const REAL omega)
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME;
+        if(delta_lo_.size() == 0)
+            delta_lo_ = thrust::device_vector<REAL>(this->nr_variables(), 0.0);
+        if(delta_hi_.size() == 0)
+            delta_hi_ = thrust::device_vector<REAL>(this->nr_variables(), 0.0);
+
         forward_mm(omega, delta_lo_, delta_hi_);
+        normalize_delta(delta_lo_, delta_hi_);
         backward_mm(omega, delta_lo_, delta_hi_);
+        normalize_delta(delta_lo_, delta_hi_);
     }
 
     // arguments:
     // in:
-    // delta_lo, delta_hi: values to add to current costs
+    // delta_lo, delta_hi: in: values to add to current costs
     // mm_diff:
     // lo_cost_in, hi_cost_in: base costs before adding delta
     // lo_cost_out, hi_cost_out: in costs + delta averaged by mm_diff
@@ -204,6 +209,9 @@ namespace LPMP {
             if(!this->backward_state_valid_)
                 this->backward_run(false); //For the first iteration need to have costs from terminal. 
 
+            assert(delta_lo.size() == this->nr_variables());
+            assert(delta_hi.size() == this->nr_variables());
+
         // Clear states.
         this->flush_costs_from_root();
         flush_mm(this->deffered_mm_diff_.data());
@@ -238,8 +246,7 @@ namespace LPMP {
         thrust::swap(this->lo_cost_, lo_cost_out_);
         thrust::swap(this->hi_cost_, hi_cost_out_);
 
-        compute_delta(this->deffered_mm_diff_.data(), this->delta_lo_.data(), this->delta_hi_.data());
-        normalize_delta(delta_lo_, delta_hi_);
+        compute_delta(this->deffered_mm_diff_.data(), delta_lo.data(), delta_hi.data());
 
         this->forward_state_valid_ = true;
         this->flush_backward_states();
@@ -299,6 +306,9 @@ namespace LPMP {
             MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
             assert(this->forward_state_valid_); 
 
+            assert(delta_lo.size() == this->nr_variables());
+            assert(delta_hi.size() == this->nr_variables());
+
             flush_mm(this->deffered_mm_diff_.data());
 
             for (int s = this->cum_nr_bdd_nodes_per_hop_dist_.size() - 2; s >= 0; s--)
@@ -330,7 +340,6 @@ namespace LPMP {
             thrust::swap(this->hi_cost_, hi_cost_out_);
 
             compute_delta(this->deffered_mm_diff_.data(), delta_lo.data(), delta_hi.data());
-            normalize_delta(delta_lo, delta_hi);
 
             this->flush_forward_states();
             this->backward_state_valid_ = true;
