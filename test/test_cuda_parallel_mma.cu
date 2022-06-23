@@ -24,7 +24,7 @@ void test_problem(const std::string& problem_input)
         for(size_t i=1; i<ilp.nr_variables(); ++i)
             var_map.push_back(var_map.back() + 1 + distrib(gen));
         bdd_col.rebase(var_map.begin(), var_map.end());
-        std::vector<double> mapped_obj(var_map.size(), 0.0);
+        std::vector<double> mapped_obj(var_map.back() + 1, 0.0);
         for(size_t i=0; i<ilp.nr_variables(); ++i)
             mapped_obj[var_map[i]] = ilp.objective()[i];
 
