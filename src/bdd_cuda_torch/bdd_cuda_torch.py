@@ -67,6 +67,10 @@ class DualIterations(torch.autograd.Function):
             ctx.mark_non_differentiable(sol_avg_out)
             ctx.mark_non_differentiable(lb_first_order_hist)
             ctx.mark_non_differentiable(lb_sec_order_hist)
+        else:
+            sol_avg_out_ptr = 0
+            lb_first_order_hist_ptr = 0
+            lb_sec_order_hist_ptr = 0
 
         is_omega_scalar = torch.numel(omega) == 1
         if not is_omega_scalar:
@@ -81,16 +85,20 @@ class DualIterations(torch.autograd.Function):
                 current_num_itr = max(num_iterations - random.randint(0, num_iterations // 2), 3)
             else:
                 current_num_itr = num_iterations
+            if compute_history_for_itrs > 0:
+                sol_avg_out_ptr = sol_avg_out[layer_start].data_ptr()
+                lb_first_order_hist_ptr = lb_first_order_hist[bdd_start].data_ptr()
+                lb_sec_order_hist_ptr = lb_sec_order_hist[bdd_start].data_ptr()
             if is_omega_scalar:
                 num_itr = solver.iterations(dist_weights_batch[layer_start].data_ptr(), current_num_itr, 
                                             omega[0].item(), improvement_slope, 0, False,
-                                            compute_history_for_itrs, history_avg_beta, sol_avg_out[layer_start].data_ptr(),
-                                            lb_first_order_hist[bdd_start].data_ptr(), lb_sec_order_hist[bdd_start].data_ptr())
+                                            compute_history_for_itrs, history_avg_beta, sol_avg_out_ptr,
+                                            lb_first_order_hist_ptr, lb_sec_order_hist_ptr)
             else:
                 num_itr = solver.iterations(dist_weights_batch[layer_start].data_ptr(), current_num_itr, 
                                             1.0, improvement_slope, omega[layer_start].data_ptr(), True,
-                                            compute_history_for_itrs, history_avg_beta, sol_avg_out[layer_start].data_ptr(),
-                                            lb_first_order_hist[bdd_start].data_ptr(), lb_sec_order_hist[bdd_start].data_ptr())
+                                            compute_history_for_itrs, history_avg_beta, sol_avg_out_ptr,
+                                            lb_first_order_hist_ptr, lb_sec_order_hist_ptr)
 
             actual_num_itr.append(num_itr)
             solver.get_solver_costs(lo_costs_out[layer_start].data_ptr(), hi_costs_out[layer_start].data_ptr(), def_mm_out[layer_start].data_ptr()) 
