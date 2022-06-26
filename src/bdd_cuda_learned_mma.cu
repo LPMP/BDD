@@ -328,6 +328,11 @@ namespace LPMP {
         if (track_grad_for_num_itr == 0)
             return;
 
+        if(this->delta_lo_.size() == 0)
+            this->delta_lo_ = thrust::device_vector<REAL>(this->nr_variables(), 0.0);
+        if(this->delta_hi_.size() == 0)
+            this->delta_hi_ = thrust::device_vector<REAL>(this->nr_variables(), 0.0);
+
         thrust::fill(grad_dist_weights_out, grad_dist_weights_out + this->nr_layers(), 0.0);
         if (!omega_vec.get())
             thrust::fill(grad_omega, grad_omega + 1, 0.0); // omega_scalar is used.
