@@ -364,3 +364,32 @@ class ComputeLowerBoundperBDD(torch.autograd.Function):
             layer_start += solver.nr_layers()
 
         return None, grad_lo_costs_in, grad_hi_costs_in, None
+
+class ComputePerBDDSolutionsIdentityBackward(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, solvers, lo_costs_batch, hi_costs_batch, norm_grad):
+        validate_input_format(lo_costs_batch, hi_costs_batch)
+        assert(lo_costs_batch.dim() == 1)
+        assert(lo_costs_batch.shape == hi_costs_batch.shape)
+
+        ctx.set_materialize_grads(False)
+        ctx.save_for_backward(norm_grad)
+        # ctx.solvers = solvers
+        # ctx.save_for_backward(lo_costs_batch, hi_costs_batch)
+        per_bdd_solution_hi = torch.zeros_like(lo_costs_batch) # Initialize by 0's to also copy to deferred min-marginals.
+        # per_bdd_solution_lo = torch.empty_like(lo_costs_batch)
+        layer_start = 0
+        for (b, solver) in enumerate(solvers):
+            solver.set_solver_costs(lo_costs_batch[layer_start].data_ptr(), hi_costs_batch[layer_start].data_ptr(), per_bdd_solution_hi[layer_start].data_ptr())
+            solver.solution_per_bdd(per_bdd_solution_hi[layer_start].data_ptr())
+            layer_start += solver.nr_layers()
+        return per_bdd_solution_hi
+
+    @staticmethod
+    @once_differentiable
+    def backward(ctx, grad_per_bdd_solution_hi):
+        validate_input_format(grad_per_bdd_solution_hi)
+        norm_grad = ctx.saved_tensors
+        # Negative identity as jacobian.
+        print(f"Returning grad: min: {grad_per_bdd_solution_hi.min()}, max: {grad_per_bdd_solution_hi.max()}")
+        return None, grad_per_bdd_solution_hi * norm_grad, -1.0 * grad_per_bdd_solution_hi * norm_grad
