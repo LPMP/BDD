@@ -137,20 +137,18 @@ namespace LPMP {
     void bdd_cuda_parallel_mma<REAL>::iteration(const REAL omega)
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME;
-        if(delta_lo_.size() == 0)
-            delta_lo_ = thrust::device_vector<REAL>(this->nr_variables(), 0.0);
-        if(delta_hi_.size() == 0)
-            delta_hi_ = thrust::device_vector<REAL>(this->nr_variables(), 0.0);
+        if(delta_lo_hi_.size() == 0)
+            delta_lo_hi_ = thrust::device_vector<REAL>(this->nr_variables() * 2, 0.0);
 
-        forward_mm(omega, delta_lo_, delta_hi_);
-        normalize_delta(delta_lo_, delta_hi_);
-        backward_mm(omega, delta_lo_, delta_hi_);
-        normalize_delta(delta_lo_, delta_hi_);
+        forward_mm(omega, delta_lo_hi_);
+        normalize_delta(delta_lo_hi_);
+        backward_mm(omega, delta_lo_hi_);
+        normalize_delta(delta_lo_hi_);
     }
 
     // arguments:
     // in:
-    // delta_lo, delta_hi: in: values to add to current costs
+    // delta_lo_hi: in: values to add to current costs
     // mm_diff:
     // lo_cost_in, hi_cost_in: base costs before adding delta
     // lo_cost_out, hi_cost_out: in costs + delta averaged by mm_diff
@@ -163,8 +161,7 @@ namespace LPMP {
                                 const int* const __restrict__ hi_bdd_node_index, 
                                 const int* const __restrict__ bdd_node_to_layer_map, 
                                 const int* const __restrict__ primal_variable_index, 
-                                const REAL* const __restrict__ delta_lo,
-                                const REAL* const __restrict__ delta_hi,
+                                const REAL* const __restrict__ delta_lo_hi,
                                 const REAL* const __restrict__ mm_diff,
                                 const REAL* const __restrict__ lo_cost_in,
                                 const REAL* const __restrict__ hi_cost_in,
@@ -185,12 +182,12 @@ namespace LPMP {
             assert(isfinite(cur_mm_diff_hi_lo));
             const int cur_primal_idx = primal_variable_index[layer_idx];
 
-            const REAL cur_lo_cost = lo_cost_in[layer_idx] + min(cur_mm_diff_hi_lo, 0.0f) + delta_lo[cur_primal_idx];
+            const REAL cur_lo_cost = lo_cost_in[layer_idx] + min(cur_mm_diff_hi_lo, 0.0f) + delta_lo_hi[2 * cur_primal_idx];
             const REAL cur_c_from_root = cost_from_root[bdd_node_idx];
 
             atomicMin(&cost_from_root[next_lo_node], cur_c_from_root + cur_lo_cost);
 
-            const REAL cur_hi_cost = hi_cost_in[layer_idx] + min(-cur_mm_diff_hi_lo, 0.0f) + delta_hi[cur_primal_idx];
+            const REAL cur_hi_cost = hi_cost_in[layer_idx] + min(-cur_mm_diff_hi_lo, 0.0f) + delta_lo_hi[2 * cur_primal_idx + 1];
             const int next_hi_node = hi_bdd_node_index[bdd_node_idx];
             atomicMin(&cost_from_root[next_hi_node], cur_c_from_root + cur_hi_cost);
 
@@ -202,15 +199,13 @@ namespace LPMP {
     }
 
     template<typename REAL>
-        void bdd_cuda_parallel_mma<REAL>::forward_mm(const REAL omega,
-                thrust::device_vector<REAL>& delta_lo, thrust::device_vector<REAL>& delta_hi)
+        void bdd_cuda_parallel_mma<REAL>::forward_mm(const REAL omega, thrust::device_vector<REAL>& delta_lo_hi)
         {
             MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME;
             if(!this->backward_state_valid_)
                 this->backward_run(false); //For the first iteration need to have costs from terminal. 
 
-            assert(delta_lo.size() == this->nr_variables());
-            assert(delta_hi.size() == this->nr_variables());
+            assert(delta_lo_hi.size() == 2 * this->nr_variables());
 
         // Clear states.
         this->flush_costs_from_root();
@@ -233,8 +228,7 @@ namespace LPMP {
                                                                 thrust::raw_pointer_cast(this->bdd_node_to_layer_map_.data()),
                                                                 thrust::raw_pointer_cast(this->primal_variable_index_.data()),
                                                                 // in
-                                                                thrust::raw_pointer_cast(delta_lo.data()),
-                                                                thrust::raw_pointer_cast(delta_hi.data()),
+                                                                thrust::raw_pointer_cast(delta_lo_hi.data()),
                                                                 thrust::raw_pointer_cast(this->deffered_mm_diff_.data()),
                                                                 thrust::raw_pointer_cast(this->lo_cost_.data()),
                                                                 thrust::raw_pointer_cast(this->hi_cost_.data()),
@@ -246,7 +240,7 @@ namespace LPMP {
         thrust::swap(this->lo_cost_, lo_cost_out_);
         thrust::swap(this->hi_cost_, hi_cost_out_);
 
-        compute_delta(this->deffered_mm_diff_.data(), delta_lo.data(), delta_hi.data());
+        compute_delta(this->deffered_mm_diff_.data(), delta_lo_hi.data());
 
         this->forward_state_valid_ = true;
         this->flush_backward_states();
@@ -262,8 +256,7 @@ namespace LPMP {
                                             const int* const __restrict__ hi_bdd_node_index, 
                                             const int* const __restrict__ bdd_node_to_layer_map, 
                                             const int* const __restrict__ primal_variable_index, 
-                                            const REAL* const __restrict__ delta_lo,
-                                            const REAL* const __restrict__ delta_hi,
+                                            const REAL* const __restrict__ delta_lo_hi,
                                             const REAL* const __restrict__ mm_diff,
                                             const REAL* const __restrict__ lo_cost_in,
                                             const REAL* const __restrict__ hi_cost_in,
@@ -284,8 +277,8 @@ namespace LPMP {
             assert(isfinite(cur_mm_diff_hi_lo));
             const int cur_primal_idx = primal_variable_index[layer_idx];
 
-            const REAL cur_hi_cost = hi_cost_in[layer_idx] + (min(-cur_mm_diff_hi_lo, 0.0f)) + (delta_hi[cur_primal_idx]);
-            const REAL cur_lo_cost = lo_cost_in[layer_idx] + (min(cur_mm_diff_hi_lo, 0.0f)) + (delta_lo[cur_primal_idx]);
+            const REAL cur_hi_cost = hi_cost_in[layer_idx] + (min(-cur_mm_diff_hi_lo, 0.0f)) + (delta_lo_hi[2 * cur_primal_idx + 1]);
+            const REAL cur_lo_cost = lo_cost_in[layer_idx] + (min(cur_mm_diff_hi_lo, 0.0f)) + (delta_lo_hi[2 * cur_primal_idx]);
 
             const int next_hi_node = hi_bdd_node_index[bdd_node_idx];
 
@@ -300,14 +293,12 @@ namespace LPMP {
     }
 
     template<typename REAL>
-        void bdd_cuda_parallel_mma<REAL>::backward_mm(const REAL omega,
-                thrust::device_vector<REAL>& delta_lo, thrust::device_vector<REAL>& delta_hi)
+        void bdd_cuda_parallel_mma<REAL>::backward_mm(const REAL omega, thrust::device_vector<REAL>& delta_lo_hi)
         {
             MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
             assert(this->forward_state_valid_); 
 
-            assert(delta_lo.size() == this->nr_variables());
-            assert(delta_hi.size() == this->nr_variables());
+            assert(delta_lo_hi.size() == 2 * this->nr_variables());
 
             flush_mm(this->deffered_mm_diff_.data());
 
@@ -327,8 +318,7 @@ namespace LPMP {
                         thrust::raw_pointer_cast(this->hi_bdd_node_index_.data()),
                         thrust::raw_pointer_cast(this->bdd_node_to_layer_map_.data()),
                         thrust::raw_pointer_cast(this->primal_variable_index_.data()),
-                        thrust::raw_pointer_cast(delta_lo.data()),
-                        thrust::raw_pointer_cast(delta_hi.data()),
+                        thrust::raw_pointer_cast(delta_lo_hi.data()),
                         thrust::raw_pointer_cast(this->deffered_mm_diff_.data()),
                         thrust::raw_pointer_cast(this->lo_cost_.data()),
                         thrust::raw_pointer_cast(this->hi_cost_.data()),
@@ -339,7 +329,7 @@ namespace LPMP {
             thrust::swap(this->lo_cost_, lo_cost_out_);
             thrust::swap(this->hi_cost_, hi_cost_out_);
 
-            compute_delta(this->deffered_mm_diff_.data(), delta_lo.data(), delta_hi.data());
+            compute_delta(this->deffered_mm_diff_.data(), delta_lo_hi.data());
 
             this->flush_forward_states();
             this->backward_state_valid_ = true;
@@ -363,8 +353,7 @@ namespace LPMP {
     struct compute_delta_atomic {
         const int* primal_index;
         const REAL* mm_to_distribute;
-        REAL* delta_lo;
-        REAL* delta_hi;
+        REAL* delta_lo_hi;
         const unsigned long num_vars;
         __host__ __device__ void operator()(const int i)
         {
@@ -373,9 +362,9 @@ namespace LPMP {
             {
                 const REAL cur_mm = mm_to_distribute[i];
                 if (cur_mm > 0)
-                    atomicAdd(&delta_hi[cur_primal], cur_mm);
+                    atomicAdd(&delta_lo_hi[2 * cur_primal + 1], cur_mm);
                 else if (cur_mm < 0)
-                    atomicAdd(&delta_lo[cur_primal], -cur_mm);
+                    atomicAdd(&delta_lo_hi[2 * cur_primal], -cur_mm);
             }
         }
     };
@@ -384,18 +373,15 @@ namespace LPMP {
     template<typename REAL>
     void bdd_cuda_parallel_mma<REAL>::compute_delta(
             const thrust::device_ptr<const REAL> mm_to_distribute,
-            thrust::device_ptr<REAL> delta_lo, thrust::device_ptr<REAL> delta_hi
-            ) const
+            thrust::device_ptr<REAL> delta_lo_hi) const
     {
 
-        thrust::fill(delta_lo, delta_lo + this->nr_variables(), 0.0);
-        thrust::fill(delta_hi, delta_hi + this->nr_variables(), 0.0);
+        thrust::fill(delta_lo_hi, delta_lo_hi + 2 * this->nr_variables(), 0.0);
 
         compute_delta_atomic<REAL> compute_delta_atomic_func({
                                             thrust::raw_pointer_cast(this->primal_variable_index_.data()),
                                             thrust::raw_pointer_cast(mm_to_distribute),
-                                            thrust::raw_pointer_cast(delta_lo),
-                                            thrust::raw_pointer_cast(delta_hi),
+                                            thrust::raw_pointer_cast(delta_lo_hi),
                                             this->nr_variables()});
 
         thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + this->nr_layers(), compute_delta_atomic_func);
@@ -416,23 +402,24 @@ namespace LPMP {
     }
 
     template<typename REAL>
-    struct normalize_delta_func {
-        __host__ __device__ void operator()(const thrust::tuple<REAL&, REAL&, int> t) const
+    struct normalize_delta_st {
+        const int* num_bdds_per_primal_var;
+        REAL* delta_lo_hi;
+        __host__ __device__ void operator()(const int i) const
         {
-            const int norm = thrust::get<2>(t);
-            REAL& hi_cost = thrust::get<0>(t);
-            hi_cost /= norm;
-            REAL& lo_cost = thrust::get<1>(t);
-            lo_cost /= norm;
+            const int norm = num_bdds_per_primal_var[i / 2];
+            delta_lo_hi[i] /= norm;
         }
     };
 
     template<typename REAL>
-    void bdd_cuda_parallel_mma<REAL>::normalize_delta(thrust::device_vector<REAL>& delta_lo, thrust::device_vector<REAL>& delta_hi) const
+    void bdd_cuda_parallel_mma<REAL>::normalize_delta(thrust::device_vector<REAL>& delta_lo_hi) const
     {
-        auto first = thrust::make_zip_iterator(thrust::make_tuple(delta_hi.begin(), delta_lo.begin(), this->num_bdds_per_var_.begin()));
-        auto last = thrust::make_zip_iterator(thrust::make_tuple(delta_hi.end(), delta_lo.end(), this->num_bdds_per_var_.end()));
-        thrust::for_each(first, last, normalize_delta_func<REAL>());
+        normalize_delta_st<REAL> normalize_delta_func({
+                                    thrust::raw_pointer_cast(this->num_bdds_per_var_.data()),
+                                    thrust::raw_pointer_cast(delta_lo_hi.data())});
+
+        thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + 2 * this->num_bdds_per_var_.size(), normalize_delta_func);
     }
 
     template<typename REAL>
