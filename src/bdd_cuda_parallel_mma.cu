@@ -201,7 +201,7 @@ namespace LPMP {
     template<typename REAL>
         void bdd_cuda_parallel_mma<REAL>::forward_mm(const REAL omega, thrust::device_vector<REAL>& delta_lo_hi)
         {
-            MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME;
+            MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME2("cuda mma forward mma");
             if(!this->backward_state_valid_)
                 this->backward_run(false); //For the first iteration need to have costs from terminal. 
 
@@ -295,7 +295,7 @@ namespace LPMP {
     template<typename REAL>
         void bdd_cuda_parallel_mma<REAL>::backward_mm(const REAL omega, thrust::device_vector<REAL>& delta_lo_hi)
         {
-            MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
+            MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME2("cuda mma backward mma");
             assert(this->forward_state_valid_); 
 
             assert(delta_lo_hi.size() == 2 * this->nr_variables());

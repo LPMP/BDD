@@ -3,6 +3,12 @@
 #include <limits>
 #include <thrust/host_vector.h>
 #include <thrust/execution_policy.h>
+#include <thrust/for_each.h>
+#include <unordered_set>
+#include <future>
+#include "time_measure_util.h"
+// TODO: remove
+#include <stdio.h>
 
 namespace LPMP {
 
@@ -11,14 +17,21 @@ namespace LPMP {
         assert(gpu_th < cpu_th);
         // TODO: make parallel
         std::vector<size_t> nr_bdd_nodes_per_layer;
+        std::vector<size_t> nr_bdds_with_hops;
+        size_t nr_variables = 0;
         for (size_t bdd_nr = 0; bdd_nr < bdd_col.nr_bdds(); ++bdd_nr)
         {
             assert(bdd_col.is_qbdd(bdd_nr));
             const auto bdd_vars = bdd_col.variables(bdd_nr);
+            nr_variables = std::max(nr_variables, *std::max_element(bdd_vars.begin(), bdd_vars.end()) + 1);
             if (bdd_vars.size() > nr_bdd_nodes_per_layer.size())
+            {
                 nr_bdd_nodes_per_layer.resize(bdd_vars.size(), 0);
+                nr_bdds_with_hops.resize(bdd_vars.size()+1, 0);
+            }
+            ++nr_bdds_with_hops[bdd_vars.size()];
             size_t prev_var = bdd_col.root_variable(bdd_nr);
-            size_t layer = 1;
+            size_t layer = 0;
             for (auto bdd_it = bdd_col.begin(bdd_nr); bdd_it != bdd_col.end(bdd_nr); ++bdd_it)
             {
                 const auto& bdd_instr = *bdd_it;
@@ -28,10 +41,15 @@ namespace LPMP {
                     prev_var = bdd_var;
                     ++layer;
                 }
+                assert(layer < nr_bdd_nodes_per_layer.size());
                 ++nr_bdd_nodes_per_layer[layer];
             }
-            assert(layer == bdd_vars.size());
+            assert(layer+1 == bdd_vars.size());
         }
+
+        for(size_t i=0; i<nr_bdds_with_hops.size(); ++i)
+            if(nr_bdds_with_hops[i] > 0)
+                std::cout << "Hop " << i << ": #BDDs = " << nr_bdds_with_hops[i] << "\n";
 
         if(nr_bdd_nodes_per_layer.size() < gpu_th)
         {
@@ -41,12 +59,16 @@ namespace LPMP {
 
         constexpr static size_t min_nr_bdd_nodes_per_layer = 1024;
         // first layer such that all subsequent ones have fewer than min_nr_bdd_nodes_per_layer BDDs per hop
-        std::ptrdiff_t layer_th = nr_bdd_nodes_per_layer.size()-1;
-        for(; layer_th>0; --layer_th)
+        std::ptrdiff_t layer_th = std::min(cpu_th, nr_bdd_nodes_per_layer.size()-1);
+        for(; layer_th>gpu_th; --layer_th)
         {
-            if(nr_bdd_nodes_per_layer[layer_th] >= 1024)
+            if(nr_bdd_nodes_per_layer[layer_th] >= min_nr_bdd_nodes_per_layer)
+            {
+                layer_th++;
                 break;
+            }
         }
+        std::cout << "[multi parallel mma base] Computed hop threshold for CPU/GPU split = " << layer_th << ", preset GPU threshold = " << gpu_th << ", preset CPU threshold << " << cpu_th << "\n";
 
         if(layer_th + 10 > nr_bdd_nodes_per_layer.size() && layer_th + 10 < cpu_th)
         {
@@ -54,25 +76,47 @@ namespace LPMP {
             return {BDD::bdd_collection(), bdd_col};
         }
 
-        std::cout << "[multi parallel mma base] Optimize BDDs with more than " << std::max(gpu_th, std::min(size_t(layer_th), cpu_th)) << " hops on CPU\n";
+        std::cout << "[multi parallel mma base] Optimize BDDs with more than " << layer_th << " hops on CPU\n";
 
         std::vector<size_t> cpu_bdds;
         std::vector<size_t> gpu_bdds;
+        size_t nr_cpu_bdd_nodes = 0;
+        size_t nr_gpu_bdd_nodes = 0;
+        std::unordered_set<size_t> cpu_vars;
+        std::vector<size_t> nr_cpu_bdds_with_hops(nr_bdds_with_hops.size(), 0);
+        std::unordered_set<size_t> gpu_vars;
+        std::vector<size_t> nr_gpu_bdds_with_hops(nr_bdds_with_hops.size(), 0);
 
         for(size_t bdd_nr=0; bdd_nr<bdd_col.nr_bdds(); ++bdd_nr)
         {
             const auto bdd_vars = bdd_col.variables(bdd_nr);
-            if(bdd_vars.size() > cpu_th)
+            if(bdd_vars.size() > layer_th)
+            {
                 cpu_bdds.push_back(bdd_nr);
-            else if(bdd_vars.size() < gpu_th)
-                gpu_bdds.push_back(bdd_nr);
-            else if(bdd_vars.size() > layer_th)
-                cpu_bdds.push_back(bdd_nr);
+                cpu_vars.insert(bdd_vars.begin(), bdd_vars.end());
+                nr_cpu_bdd_nodes += bdd_col.nr_bdd_nodes(bdd_nr);
+                ++nr_cpu_bdds_with_hops[bdd_vars.size()];
+            }
             else
+            {
                 gpu_bdds.push_back(bdd_nr);
+                gpu_vars.insert(bdd_vars.begin(), bdd_vars.end());
+                nr_gpu_bdd_nodes += bdd_col.nr_bdd_nodes(bdd_nr);
+                ++nr_gpu_bdds_with_hops[bdd_vars.size()];
+            }
         }
 
         std::cout << "[multi parallel mma base] #CPU BDDs = " << cpu_bdds.size() << ", #GPU BDDs = " << gpu_bdds.size() << "\n";
+        std::cout << "[multi parallel mma base] #CPU vars = " << cpu_vars.size() << "/" << nr_variables << " variables = " << 100.0 * double(cpu_vars.size())/double(nr_variables) << "%, #GPU vars = " << gpu_vars.size() << "/" << nr_variables << " variables = " << 100.0 * double(gpu_vars.size())/double(nr_variables) << "%\n";
+        std::cout << "[multi parallel mma base] #CPU BDD nodes = " << nr_cpu_bdd_nodes << " = " << 100.0 * double(nr_cpu_bdd_nodes)/double(nr_cpu_bdd_nodes + nr_gpu_bdd_nodes) << "%, #GPU BDD nodes = " << nr_gpu_bdd_nodes << " = " << 100.0 * double(nr_gpu_bdd_nodes)/double(nr_cpu_bdd_nodes + nr_gpu_bdd_nodes) << "%\n";
+
+        for(size_t i=0; i<nr_cpu_bdds_with_hops.size(); ++i)
+            if(nr_cpu_bdds_with_hops[i] > 0)
+                std::cout << "CPU Hop " << i << ": #BDDs = " << nr_cpu_bdds_with_hops[i] << "\n";
+
+        for(size_t i=0; i<nr_gpu_bdds_with_hops.size(); ++i)
+            if(nr_gpu_bdds_with_hops[i] > 0)
+                std::cout << "GPU Hop " << i << ": #BDDs = " << nr_gpu_bdds_with_hops[i] << "\n";
 
         BDD::bdd_collection cpu_bdd_col = bdd_col;
         cpu_bdd_col.remove(gpu_bdds.begin(), gpu_bdds.end());
@@ -84,35 +128,32 @@ namespace LPMP {
 
     template<typename REAL>
     bdd_multi_parallel_mma_base<REAL>::bdd_multi_parallel_mma_base(BDD::bdd_collection &cpu_bdd_col, BDD::bdd_collection &cuda_bdd_col)
+        : cpu_base(cpu_bdd_col),
+        cuda_base(cuda_bdd_col)
     {
-        cpu_base = decltype(cpu_base)(cpu_bdd_col);
-        cuda_base = decltype(cuda_base)(cuda_bdd_col);
-
         std::vector<size_t> cpu_nr_bdds_per_var;
+        cpu_nr_bdds_per_var.reserve(cpu_base.nr_variables());
         for (size_t i = 0; i < cpu_base.nr_variables(); ++i)
             cpu_nr_bdds_per_var.push_back(cpu_base.nr_bdds(i));
-        total_nr_bdds_per_var_ = thrust::device_vector<size_t>(nr_variables());
+        total_nr_bdds_per_var_ = thrust::device_vector<size_t>(nr_variables(), 0);
         thrust::copy(cpu_nr_bdds_per_var.begin(), cpu_nr_bdds_per_var.end(), total_nr_bdds_per_var_.begin());
-        // for (size_t i = 0; i < cuda_base.get_num_bdds_per_var().size(); ++i)
-        //{
-        //     total_nr_bdds_per_var_[i] += cuda_base.get_num_bdds_per_var()[i];
-        // }
         thrust::transform(
-            cuda_base.get_num_bdds_per_var().begin(), cuda_base.get_num_bdds_per_var().end(),
-            total_nr_bdds_per_var_.begin(), total_nr_bdds_per_var_.begin(),
-            thrust::plus<size_t>()
-            // plus_functor()
-        );
+                cuda_base.get_num_bdds_per_var().begin(), cuda_base.get_num_bdds_per_var().end(), 
+                total_nr_bdds_per_var_.begin(),
+                total_nr_bdds_per_var_.begin(),
+                thrust::plus<size_t>()
+                );
 
         // TODO: possibly initialize in parallel_mma, where it is used
-        gpu_delta_lo_ = thrust::device_vector<REAL>(cuda_base.nr_variables(), 0.0);
-        gpu_delta_hi_ = thrust::device_vector<REAL>(cuda_base.nr_variables(), 0.0);
+        gpu_delta_ = thrust::device_vector<REAL>(2 * cuda_base.nr_variables(), 0.0);
 
         // TODO: same
-        cpu_delta_in_ = std::vector<std::array<REAL, 2>>(cpu_base.nr_variables(), {0.0, 0.0});
-        cpu_delta_out_ = std::vector<std::array<REAL, 2>>(cpu_base.nr_variables(), {0.0, 0.0});
+        cpu_delta_ = std::vector<std::array<REAL, 2>>(cpu_base.nr_variables(), {0.0, 0.0});
         
         gpu_nr_bdds_per_var_ = cuda_base.get_num_bdds_per_var();
+
+        for (size_t i=0; i<nr_variables(); ++i)
+            assert(total_nr_bdds_per_var_[i] == nr_bdds(i));
     }
 
     template <typename REAL>
@@ -199,17 +240,11 @@ namespace LPMP {
     size_t bdd_multi_parallel_mma_base<REAL>::nr_variables(const size_t bdd_nr) const
     {
         throw std::runtime_error("not supported yet");
-        // if(bdd_nr < cpu_base.nr_bdds())
-        //     return cpu_base.nr_variables(bdd_nr);
-        // else
-        //     return cuda_base.nr_variables(bdd_nr - cpu_base.nr_bdds());
     }
 
     template <typename REAL>
     double bdd_multi_parallel_mma_base<REAL>::lower_bound()
     {
-        std::cout << "cpu lb = " << cpu_base.lower_bound() << "\n";
-        std::cout << "gpu lb = " << cuda_base.lower_bound() << "\n";
         return cpu_base.lower_bound() + cuda_base.lower_bound();
     }
 
@@ -228,218 +263,171 @@ namespace LPMP {
             }
     };
 
-    template <typename REAL>
-    void copy_delta_to_cpu(const thrust::device_vector<REAL> &delta_lo, const thrust::device_vector<REAL> &delta_hi, std::vector<std::array<REAL, 2>> &delta)
-    {
-        assert(delta_lo.size() == delta_hi.size());
-        assert(delta.size() >= delta_lo.size());
-        std::fill(delta.begin() + delta_lo.size(), delta.end(), std::array<REAL,2>{0.0, 0.0});
-        auto first = thrust::make_zip_iterator(thrust::make_tuple(delta_lo.begin(), delta_hi.begin()));
-        auto last = thrust::make_zip_iterator(thrust::make_tuple(delta_lo.end(), delta_hi.end()));
-        thrust::device_vector<std::array<REAL, 2>> delta_gpu(delta_lo.size());
-        thrust::transform(first, last, delta_gpu.begin(), copy_delta_to_cpu_functor<REAL>());
-        thrust::copy(delta_gpu.begin(), delta_gpu.end(), delta.begin());
-        //thrust::transform(thrust::host, first, last, delta.begin(), copy_delta_to_cpu_functor<REAL>());
-        // TODO: remove!
-        for(size_t i=0; i<delta_lo.size(); ++i)
-        {
-            assert(delta_lo[i] == delta[i][0]);
-            assert(delta_hi[i] == delta[i][1]);
-        }
-    }
-
-    template <typename REAL>
-    struct copy_delta_to_gpu_functor
-    {
-        __device__ __host__ thrust::tuple<REAL, REAL> operator()(std::array<REAL, 2> x)
-        {
-            return {x[0], x[1]};
-        }
-    };
-
-    template <typename REAL>
-    void copy_delta_to_gpu(const std::vector<std::array<REAL, 2>> &delta, thrust::device_vector<REAL> &delta_lo, thrust::device_vector<REAL> &delta_hi)
-    {
-        assert(delta_lo.size() == delta_hi.size());
-        assert(delta.size() == delta_lo.size());
-        auto first = thrust::make_zip_iterator(thrust::make_tuple(delta_lo.begin(), delta_hi.begin()));
-        //thrust::copy(delta.begin(), delta.end(), first);
-        thrust::transform(delta.begin(), delta.end(), first, copy_delta_to_gpu_functor<REAL>());
-        assert(false);
-    }
-
+    // Must be executed before from_gpu?
     template<typename REAL>
-        std::tuple<thrust::device_vector<REAL>, thrust::device_vector<REAL>> bdd_multi_parallel_mma_base<REAL>::accumulate_delta(
-                const std::vector<std::array<REAL,2>> cpu_delta,
-                const thrust::device_vector<REAL>& gpu_delta_lo,
-                const thrust::device_vector<REAL>& gpu_delta_hi)
+        void bdd_multi_parallel_mma_base<REAL>::accumulate_delta_from_cpu(
+                const std::vector<std::array<REAL,2>>& cpu_delta,
+                thrust::device_vector<REAL>& accumulated)
         {
-            assert(gpu_delta_lo.size() == gpu_delta_hi.size());
-            assert(gpu_delta_lo.size() <= nr_variables());
-            assert(cpu_delta.size() <= nr_variables());
-            assert(std::max(cpu_delta.size(), gpu_delta_lo.size()) == nr_variables());
-
-            thrust::device_vector<REAL> accumulated_lo(nr_variables(), 0.0);
-            thrust::device_vector<REAL> accumulated_hi(nr_variables(), 0.0);
-
-            for(size_t i=0; i<gpu_delta_lo.size(); ++i)
-                accumulated_lo[i] = gpu_delta_lo[i];
-            for(size_t i=0; i<gpu_delta_hi.size(); ++i)
-                accumulated_hi[i] = gpu_delta_hi[i];
-            for(size_t i=0; i<cpu_delta.size(); ++i)
-            {
-                accumulated_lo[i] += cpu_delta[i][0];
-                accumulated_hi[i] += cpu_delta[i][1];
-            }
-
-            return {accumulated_lo, accumulated_hi};
-        }
-
-    template<typename REAL>
-        void bdd_multi_parallel_mma_base<REAL>::average_delta(thrust::device_vector<REAL>& delta)
-        {
-            assert(delta.size() == nr_variables());
-            for(size_t i=0; i<delta.size(); ++i)
-                delta[i] *= REAL(nr_bdds(i));
-        }
-
-    template<typename REAL>
-        void bdd_multi_parallel_mma_base<REAL>::split_delta(
-                const thrust::device_vector<REAL>& total_delta_lo,
-                const thrust::device_vector<REAL>& total_delta_hi,
-                std::vector<std::array<REAL, 2>> &cpu_delta,
-                thrust::device_vector<REAL> &gpu_delta_lo, 
-                thrust::device_vector<REAL> &gpu_delta_hi)
-        {
-            assert(total_delta_lo.size() == nr_variables());
-            assert(total_delta_hi.size() == nr_variables());
+            MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
             assert(cpu_delta.size() == cpu_base.nr_variables());
-            assert(gpu_delta_lo.size() == cuda_base.nr_variables());
-            assert(gpu_delta_hi.size() == cuda_base.nr_variables());
+            assert(accumulated.size() == 2*nr_variables());
 
-            // to cpu
-            for (size_t i = 0; i < cpu_delta.size(); ++i)
-            {
-                if(cpu_base.nr_bdds(i) > 0)
-                {
-                    const REAL frac = REAL(cpu_base.nr_bdds(i)) / REAL(nr_bdds(i));
-                    cpu_delta[i][0] = frac * total_delta_lo[i];
-                    cpu_delta[i][1] = frac * total_delta_hi[i];
-                }
-                else
-                {
-                    cpu_delta[i][0] = 0.0;
-                    cpu_delta[i][1] = 0.0;
-                }
-            }
+            thrust::fill(accumulated.begin() + 2*cpu_base.nr_variables(), accumulated.end(), 0.0);
+            thrust::copy((REAL*)&cpu_delta[0], (REAL*)&cpu_delta[0] + 2*cpu_base.nr_variables(), accumulated.begin());
+        }
 
-            // to gpu
-            std::vector<REAL> gpu_delta_lo_tmp(cuda_base.nr_variables());
-            std::vector<REAL> gpu_delta_hi_tmp(cuda_base.nr_variables());
-            for (size_t i = 0; i < cuda_base.nr_variables(); ++i)
-            {
-                if(gpu_nr_bdds_per_var_[i] > 0) 
-                {
-                    const REAL frac = REAL(gpu_nr_bdds_per_var_[i]) / REAL(nr_bdds(i));
-                    gpu_delta_lo_tmp[i] = frac * total_delta_lo[i];
-                    gpu_delta_hi_tmp[i] = frac * total_delta_hi[i];
-                }
-                else
-                {
-                    gpu_delta_lo_tmp[i] = 0.0;
-                    gpu_delta_hi_tmp[i] = 0.0;
-                }
-            }
-            gpu_delta_lo = gpu_delta_lo_tmp;
-            gpu_delta_hi = gpu_delta_hi_tmp;
+    template<typename REAL>
+        void bdd_multi_parallel_mma_base<REAL>::accumulate_delta_from_gpu(const thrust::device_vector<REAL>& gpu_delta, thrust::device_vector<REAL>& accumulated)
+        {
+            MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
+            assert(gpu_delta.size() == 2*cuda_base.nr_variables());
+            assert(accumulated.size() == 2*nr_variables());
 
-            for(size_t i=0; i<nr_variables(); ++i)
-            {
-                if(i < cpu_base.nr_variables() && i < cuda_base.nr_variables())
-                {
-                    assert(std::abs(gpu_delta_lo[i] + cpu_delta[i][0] - total_delta_lo[i]) < 1e-4);
-                    assert(std::abs(gpu_delta_hi[i] + cpu_delta[i][1] - total_delta_hi[i]) < 1e-4);
-                }
-                else if(i < cpu_base.nr_variables())
-                {
-                    assert(std::abs(cpu_delta[i][0] - total_delta_lo[i]) < 1e-6);
-                    assert(std::abs(cpu_delta[i][1] - total_delta_hi[i]) < 1e-6);
-                }
-                else if(i < cuda_base.nr_variables())
-                {
-                    assert(std::abs(gpu_delta_lo[i] - total_delta_lo[i]) < 1e-6);
-                    assert(std::abs(gpu_delta_hi[i] - total_delta_hi[i]) < 1e-6);
-                }
-                else
-                {
-                    assert(false);
-                }
-            }
+            thrust::transform(
+                    accumulated.begin(), accumulated.begin() + 2*cuda_base.nr_variables(),
+                    gpu_delta.begin(), 
+                    accumulated.begin(), 
+                    thrust::plus<REAL>()
+                    );
+        }
+
+    template<typename REAL>
+        void bdd_multi_parallel_mma_base<REAL>::split_delta_to_gpu(const thrust::device_vector<REAL>& total_delta, thrust::device_vector<REAL>& gpu_delta)
+        {
+            MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
+            assert(total_delta.size() == 2*nr_variables());
+            assert(gpu_delta.size() == 2*cuda_base.nr_variables());
+
+            thrust::copy(total_delta.begin(), total_delta.begin() + 2*cuda_base.nr_variables(), gpu_delta.begin());
+            // TODO: really needed?
+            // set those elements to zero where the cuda solver has no BDDs?
+        }
+
+    template<typename REAL>
+        void bdd_multi_parallel_mma_base<REAL>::split_delta_to_cpu(
+                const thrust::device_vector<REAL>& total_delta,
+                std::vector<std::array<REAL, 2>>& cpu_delta)
+        {
+            MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
+            assert(total_delta.size() == 2*nr_variables());
+            assert(cpu_delta.size() == cpu_base.nr_variables());
+
+            thrust::copy(total_delta.begin(), total_delta.begin() + 2*cpu_base.nr_variables(), (REAL*)&cpu_delta[0]);
+            // TODO: set components to zero without BDDs?
         }
 
     template <typename REAL>
-    void bdd_multi_parallel_mma_base<REAL>::forward_mm(
-            const REAL omega,
-            thrust::device_vector<REAL>& delta_lo, thrust::device_vector<REAL>& delta_hi)
+    void bdd_multi_parallel_mma_base<REAL>::forward_mm(const REAL omega, thrust::device_vector<REAL>& delta)
     {
-        assert(delta_lo.size() == delta_hi.size() && delta_lo.size() == nr_variables());
-        split_delta(delta_lo, delta_hi, cpu_delta_in_, gpu_delta_lo_, gpu_delta_hi_);
-        cuda_base.forward_mm(0.5, gpu_delta_lo_, gpu_delta_hi_);
-        cpu_base.forward_mm(0.5, cpu_delta_out_, cpu_delta_in_);
-        std::tie(delta_lo, delta_hi) = accumulate_delta(cpu_delta_out_, gpu_delta_lo_, gpu_delta_hi_);
-        std::swap(cpu_delta_in_, cpu_delta_out_);
+        assert(delta.size() == 2*nr_variables());
+        {
+            MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME2("hybrid mma forward mm");
+            split_delta_to_gpu(delta, gpu_delta_);
+            split_delta_to_cpu(delta, cpu_delta_);
+            auto cpu_fut = std::async(std::launch::async, [&]() { 
+                    cpu_base.forward_mm(omega, cpu_delta_);
+                    });
+            cuda_base.forward_mm(omega, gpu_delta_);
+            cpu_fut.wait();
+            accumulate_delta_from_cpu(cpu_delta_, delta);
+            accumulate_delta_from_gpu(gpu_delta_, delta);
+        }
     }
 
     template <typename REAL>
-    void bdd_multi_parallel_mma_base<REAL>::backward_mm(
-            const REAL omega,
-            thrust::device_vector<REAL>& delta_lo, thrust::device_vector<REAL>& delta_hi)
+    void bdd_multi_parallel_mma_base<REAL>::backward_mm(const REAL omega, thrust::device_vector<REAL>& delta)
     {
-        assert(delta_lo.size() == delta_hi.size() && delta_lo.size() == nr_variables());
-        split_delta(delta_lo, delta_hi, cpu_delta_in_, gpu_delta_lo_, gpu_delta_hi_);
-        cuda_base.backward_mm(0.5, gpu_delta_lo_, gpu_delta_hi_);
-        cpu_base.backward_mm(0.5, cpu_delta_out_, cpu_delta_in_);
-        std::tie(delta_lo, delta_hi) = accumulate_delta(cpu_delta_out_, gpu_delta_lo_, gpu_delta_hi_);
-        std::swap(cpu_delta_in_, cpu_delta_out_);
+        assert(delta.size() == 2*nr_variables());
+        {
+            MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME2("hybrid mma forward mm");
+            split_delta_to_cpu(delta, cpu_delta_);
+            split_delta_to_gpu(delta, gpu_delta_);
+            auto cpu_fut = std::async(std::launch::async, [&]() { 
+                    cpu_base.backward_mm(omega, cpu_delta_);
+                    });
+            cuda_base.backward_mm(omega, gpu_delta_);
+            cpu_fut.wait();
+            accumulate_delta_from_cpu(cpu_delta_, delta);
+            accumulate_delta_from_gpu(gpu_delta_, delta);
+        }
     }
 
     template <typename REAL>
     void bdd_multi_parallel_mma_base<REAL>::parallel_mma()
     {
-        if(total_delta_lo_.size() == 0)
-            total_delta_lo_ = thrust::device_vector<REAL>(nr_variables(), 0.0);
-        if(total_delta_hi_.size() == 0)
-            total_delta_hi_ = thrust::device_vector<REAL>(nr_variables(), 0.0);
+        if(total_delta_.size() == 0)
+            total_delta_ = thrust::device_vector<REAL>(2*nr_variables(), 0.0);
+        else
+            assert(total_delta_.size() == 2*nr_variables());
 
-        forward_mm(0.5, total_delta_lo_, total_delta_hi_);
-        average_delta(total_delta_lo_);
-        average_delta(total_delta_hi_);
-        backward_mm(0.5, total_delta_lo_, total_delta_hi_);
-        average_delta(total_delta_lo_);
-        average_delta(total_delta_hi_);
+        forward_mm(0.5, total_delta_);
+        /*
+        for(size_t i=0; i<nr_variables(); ++i)
+        {
+            if(nr_bdds(i) > 0)
+            {
+                total_delta_[2*i] /= nr_bdds(i);
+                total_delta_[2*i+1] /= nr_bdds(i);
+            }
+            else
+            {
+                total_delta_[2*i] = 0.0;
+                total_delta_[2*i+1] = 0.0;
+            }
+        }
+        */
+        normalize_delta(total_delta_);
+        backward_mm(0.5, total_delta_);
+        normalize_delta(total_delta_);
+        /*
+        for(size_t i=0; i<nr_variables(); ++i)
+        {
+            if(nr_bdds(i) > 0)
+            {
+                total_delta_[2*i] /= nr_bdds(i);
+                total_delta_[2*i+1] /= nr_bdds(i);
+            }
+            else
+            {
+                total_delta_[2*i] = 0.0;
+                total_delta_[2*i+1] = 0.0;
+            }
+        }
+        */
     }
 
-
-    // TODO: not currently used
     template <typename REAL>
     struct normalize_delta_func
     {
-        __host__ __device__ void operator()(const thrust::tuple<REAL &, REAL &, int> t) const
+        REAL* delta;
+        const REAL* nr_bdds;
+
+        __host__ __device__ void operator()(const size_t i) const
         {
-            const int norm = thrust::get<2>(t);
-            REAL &hi_cost = thrust::get<0>(t);
-            hi_cost /= norm;
-            REAL &lo_cost = thrust::get<1>(t);
-            lo_cost /= norm;
+            const size_t norm = nr_bdds[i];
+            if(norm > 0)
+            {
+                delta[2*i] /= norm;
+                delta[2*i+1] /= norm;
+            }
+            else
+            {
+                delta[2*i] = 0.0;
+                delta[2*i+1] = 0.0;
+            }
         }
     };
 
     template <typename REAL>
-    void bdd_multi_parallel_mma_base<REAL>::normalize_delta(thrust::device_vector<REAL> &delta_lo, thrust::device_vector<REAL> &delta_hi) const
+    void bdd_multi_parallel_mma_base<REAL>::normalize_delta(thrust::device_vector<REAL>& delta) const
     {
-        auto first = thrust::make_zip_iterator(thrust::make_tuple(delta_hi.begin(), delta_lo.begin(), total_nr_bdds_per_var_.begin()));
-        auto last = thrust::make_zip_iterator(thrust::make_tuple(delta_hi.end(), delta_lo.end(), total_nr_bdds_per_var_.end()));
-        thrust::for_each(first, last, normalize_delta_func<REAL>());
+        assert(delta.size() == 2*nr_variables());
+        normalize_delta_func<REAL> func {
+            thrust::raw_pointer_cast(delta.data()), 
+            thrust::raw_pointer_cast(total_nr_bdds_per_var_.data())
+        };
+        thrust::for_each_n(thrust::make_counting_iterator<size_t>(0), nr_variables(), func);
     }
 
     template <typename REAL>

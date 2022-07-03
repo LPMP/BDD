@@ -33,10 +33,8 @@ namespace LPMP {
                 void update_costs(COST_ITERATOR cost_lo_begin, COST_ITERATOR cost_lo_end, COST_ITERATOR cost_hi_begin, COST_ITERATOR cost_hi_end);
 
             
-            void forward_mm( const REAL omega,
-                    thrust::device_vector<REAL>& delta_lo, thrust::device_vector<REAL>& delta_hi);
-            void backward_mm( const REAL omega,
-                    thrust::device_vector<REAL>& delta_lo, thrust::device_vector<REAL>& delta_hi);
+            void forward_mm(const REAL omega, thrust::device_vector<REAL>& delta);
+            void backward_mm(const REAL omega, thrust::device_vector<REAL>& delta);
             void parallel_mma();
 
             two_dim_variable_array<std::array<double,2>> min_marginals();
@@ -44,27 +42,28 @@ namespace LPMP {
 
         private:
 
-            // TODO: remove
-            void normalize_delta(thrust::device_vector<REAL>& delta_lo, thrust::device_vector<REAL>& delta_hi) const;
-            void split_delta(
-                    const thrust::device_vector<REAL>& total_delta_lo,
-                    const thrust::device_vector<REAL>& total_delta_hi,
-                    std::vector<std::array<REAL, 2>> &cpu_delta,
-                    thrust::device_vector<REAL> &gpu_delta_lo, 
-                    thrust::device_vector<REAL> &gpu_delta_hi);
-            void average_delta(thrust::device_vector<REAL>& delta);
-            std::tuple<thrust::device_vector<REAL>, thrust::device_vector<REAL>> accumulate_delta(
-                    const std::vector<std::array<REAL,2>> cpu_delta,
-                    const thrust::device_vector<REAL>& gpu_delta_lo,
-                    const thrust::device_vector<REAL>& gpu_delta_hi);
+            void normalize_delta(thrust::device_vector<REAL>& delta) const;
+            void split_delta_to_cpu(
+                    const thrust::device_vector<REAL>& total_delta,
+                    std::vector<std::array<REAL, 2>>& cpu_delta);
+            void split_delta_to_gpu(
+                    const thrust::device_vector<REAL>& total_delta,
+                    thrust::device_vector<REAL>& gpu_delta);
+            void accumulate_delta_from_cpu(
+                    const std::vector<std::array<REAL,2>>& cpu_delta,
+                    thrust::device_vector<REAL>& accumulated);
+            void accumulate_delta_from_gpu(
+                    const thrust::device_vector<REAL>& gpu_delta,
+                    thrust::device_vector<REAL>& accumulated);
 
-            std::vector<std::array<REAL,2>> cpu_delta_in_, cpu_delta_out_;
-            thrust::device_vector<REAL> gpu_delta_lo_, gpu_delta_hi_;
-            thrust::device_vector<REAL> total_delta_lo_, total_delta_hi_;
-            thrust::device_vector<size_t> total_nr_bdds_per_var_;
+            std::vector<std::array<REAL,2>> cpu_delta_;
+            thrust::device_vector<REAL> gpu_delta_;
+            thrust::device_vector<REAL> total_delta_;
+            thrust::device_vector<REAL> total_nr_bdds_per_var_; // transform to REAL?
             thrust::host_vector<size_t> gpu_nr_bdds_per_var_;
 
-            bdd_parallel_mma_base<bdd_branch_instruction<REAL, uint32_t>> cpu_base;
+            using cpu_base_type = bdd_parallel_mma_base<bdd_branch_instruction<REAL, uint32_t>>;
+            cpu_base_type cpu_base;
             bdd_cuda_parallel_mma<REAL> cuda_base;
     };
 

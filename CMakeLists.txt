@@ -41,6 +41,11 @@ else()
     message("No OpenMP found")
 endif()
 
+# OpenMP flags must be passed through nvcc to the host compiler
+if(OpenMP_CXX_FOUND AND WITH_CUDA)
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler -fopenmp -Xlinker -fgomp")
+endif()
+
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(PYBIND11_CPP_STANDARD -std=c++17)
