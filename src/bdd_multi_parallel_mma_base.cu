@@ -327,10 +327,10 @@ namespace LPMP {
             split_delta_to_cpu(delta, cpu_delta_);
             auto cpu_fut = std::async(std::launch::async, [&]() { 
                     cpu_base.forward_mm(omega, cpu_delta_);
+                    accumulate_delta_from_cpu(cpu_delta_, delta);
                     });
             cuda_base.forward_mm(omega, gpu_delta_);
             cpu_fut.wait();
-            accumulate_delta_from_cpu(cpu_delta_, delta);
             accumulate_delta_from_gpu(gpu_delta_, delta);
         }
     }
@@ -345,10 +345,10 @@ namespace LPMP {
             split_delta_to_gpu(delta, gpu_delta_);
             auto cpu_fut = std::async(std::launch::async, [&]() { 
                     cpu_base.backward_mm(omega, cpu_delta_);
+                    accumulate_delta_from_cpu(cpu_delta_, delta);
                     });
             cuda_base.backward_mm(omega, gpu_delta_);
             cpu_fut.wait();
-            accumulate_delta_from_cpu(cpu_delta_, delta);
             accumulate_delta_from_gpu(gpu_delta_, delta);
         }
     }

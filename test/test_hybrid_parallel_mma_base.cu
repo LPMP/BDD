@@ -145,7 +145,7 @@ void test_problem(const std::string& problem_input)
                 const double cuda_mma_lb = cuda_mma.lower_bound(); 
                 const double hybrid_parallel_mma_lb = hybrid_parallel_mma.lower_bound(); 
                 std::cout << "lb after " << iter << " iterations: parallel mma lb = " << parallel_mma_lb << ", hybrid parallel mma lb = " << hybrid_parallel_mma_lb << ", cuda mma lb = " << cuda_mma_lb << "\n";
-                //test(std::abs(parallel_mma_lb - hybrid_parallel_mma_lb) < 1e-6);
+                test(std::abs(parallel_mma_lb - hybrid_parallel_mma_lb) < 1e-6);
             }
         }
     }
