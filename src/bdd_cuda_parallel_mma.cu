@@ -415,6 +415,7 @@ namespace LPMP {
     template<typename REAL>
     void bdd_cuda_parallel_mma<REAL>::normalize_delta(thrust::device_vector<REAL>& delta_lo_hi) const
     {
+        assert(delta_lo_hi.size() == 2 * this->nr_variables());
         normalize_delta_st<REAL> normalize_delta_func({
                                     thrust::raw_pointer_cast(this->num_bdds_per_var_.data()),
                                     thrust::raw_pointer_cast(delta_lo_hi.data())});

@@ -399,11 +399,20 @@ namespace LPMP {
     void bdd_cuda_base<REAL>::print_num_bdd_nodes_per_hop()
     {
         int prev = 0;
+        int last_num_nodes = cum_nr_bdd_nodes_per_hop_dist_[0];
+        int last_hop = 0;
         for(int i = 0; i < cum_nr_bdd_nodes_per_hop_dist_.size(); i++)
         {
-            std::cout<<"Hop: "<<i<<", # BDD nodes: "<<cum_nr_bdd_nodes_per_hop_dist_[i] - prev<<std::endl;
+            int current_hop_num_nodes = cum_nr_bdd_nodes_per_hop_dist_[i] - prev;
+            if (current_hop_num_nodes != last_num_nodes)
+            {
+                std::cout<<"Hops: ["<<last_hop<<" - "<<i<<"], # BDD nodes: "<<last_num_nodes<<std::endl;            
+                last_hop = i;
+                last_num_nodes = current_hop_num_nodes;
+            }
             prev = cum_nr_bdd_nodes_per_hop_dist_[i];
         }
+        std::cout<<"Hops: ["<<last_hop<<" - "<<cum_nr_bdd_nodes_per_hop_dist_.size() - 1<<"], # BDD nodes: "<<last_num_nodes<<std::endl;
     }
 
     template<typename REAL>
@@ -881,7 +890,7 @@ namespace LPMP {
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         backward_run(false);
-        // Sum costs_from_terminal of all root nodes. Since root nodes are always at the start (unless one row contains > 1 BDD then have to change TODO.)
+        // Sum costs_from_terminal of all root nodes. Since root nodes are always at the start (unless one row contains > 1 BDD then have to change.)
 
         return thrust::reduce(cost_from_terminal_.begin(), cost_from_terminal_.begin() + nr_bdds_, 0.0);
     }
