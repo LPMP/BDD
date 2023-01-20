@@ -40,6 +40,15 @@ namespace LPMP {
         std::cout << "[print_statistics] #variables = " << ilp.nr_variables() << "\n";
         std::cout << "[print_statistics] #constraints = " << ilp.nr_constraints() << "\n";
         std::cout << "[print_statistics] #BDDs = " << bdd_pre.nr_bdds() << "\n";
+        const auto num_constraints = ilp.nr_constraints();
+        std::vector<size_t> num_constraints_per_var(ilp.nr_variables(), 0);
+        for (size_t c = 0; c < ilp.nr_constraints(); c++)
+            for(const auto v : ilp.variables(c))
+                num_constraints_per_var[v]++;
+        std::cout << "[print_statistics] minimum num. constraints per var = " << *std::min_element(num_constraints_per_var.begin(), num_constraints_per_var.end()) << "\n";
+        std::cout << "[print_statistics] maximum num. constraints per var = " << *std::max_element(num_constraints_per_var.begin(), num_constraints_per_var.end()) << "\n";
+        std::cout << "[print_statistics] mean num. constraints per var = " << std::accumulate(num_constraints_per_var.begin(), num_constraints_per_var.end(), 0.0) / num_constraints_per_var.size() << "\n";
+        
     }
 
     ILP_input parse_ilp_file(const std::string& filename)
