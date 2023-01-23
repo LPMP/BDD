@@ -9,7 +9,7 @@ namespace LPMP {
     bdd_cuda_parallel_mma<REAL>::bdd_cuda_parallel_mma(const BDD::bdd_collection& bdd_col) : bdd_cuda_base<REAL>(bdd_col)
     {
         init();
-        // lbfgs_solver_ = lbfgs_cuda<REAL>(this->nr_layers(), 10);
+        lbfgs_solver_ = lbfgs_cuda<REAL>(this->nr_layers(), 10);
     }
 
     template<typename REAL>
@@ -162,33 +162,33 @@ namespace LPMP {
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
 
-        // if (itr_count_ > 0 && itr_count_ % 30 == 0)
-        // {
-        //     REAL lb_pre = this->lower_bound();
-        //     thrust::device_vector<REAL> grad_lbfgs(this->nr_layers());
+        if (itr_count_ > 5)
+        {
+            REAL lb_pre = this->lower_bound();
+            thrust::device_vector<REAL> grad_lbfgs(this->nr_layers());
 
-        //     bool projected = this->compute_direction_bfgs(lbfgs_solver_, grad_lbfgs.data());
+            bool projected = this->compute_direction_bfgs(lbfgs_solver_, grad_lbfgs.data());
 
-        //     // perform gradient step
-        //     grad_step<REAL> grad_step_func({step_size_, 
-        //                                     thrust::raw_pointer_cast(this->primal_variable_index_.data()), 
-        //                                     thrust::raw_pointer_cast(this->hi_cost_.data()), 
-        //                                     thrust::raw_pointer_cast(grad_lbfgs.data())});
-        //     thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + this->nr_layers(), grad_step_func);
+            // perform gradient step
+            grad_step<REAL> grad_step_func({step_size_, 
+                                            thrust::raw_pointer_cast(this->primal_variable_index_.data()), 
+                                            thrust::raw_pointer_cast(this->hi_cost_.data()), 
+                                            thrust::raw_pointer_cast(grad_lbfgs.data())});
+            thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + this->nr_layers(), grad_step_func);
 
-        //     maintain_feasibility_grad(grad_lbfgs.data()); // now account for feasibility of gradient step.
-        //     REAL lb_post = this->lower_bound();
-        //     if (lb_post < lb_pre)
-        //         step_size_ *= 0.8;
-        // }
+            maintain_feasibility_grad(grad_lbfgs.data()); // now account for feasibility of gradient step.
+            REAL lb_post = this->lower_bound();
+            if (lb_post < lb_pre)
+                step_size_ *= 0.9;
+        }
 
         forward_mm(omega, delta_lo_, delta_hi_);
         backward_mm(omega, delta_lo_, delta_hi_);
-        // if (itr_count_ > 0 && (itr_count_ % 30 >= 20))
-        // {
-        //     this->update_bfgs_states(lbfgs_solver_);
-        // }
-        // itr_count_++;
+        if (itr_count_ > 5)
+        {
+            this->update_bfgs_states(lbfgs_solver_);
+        }
+        itr_count_++;
     }
 
     // arguments:
