@@ -7,13 +7,13 @@ def validate_input_format(*args):
         assert arg.dtype == torch.get_default_dtype(), f'argument not in {torch.get_default_dtype()} format'
         assert arg.is_contiguous(), 'argument not contiguous'
 
-def ComputePrimalSolution(solvers, lo_costs_batch, hi_costs_batch, def_mm_batch, init_delta, delta_growth_rate, num_itr_lb):
+def ComputePrimalSolution(solvers, lo_costs_batch, hi_costs_batch, def_mm_batch, init_delta, delta_growth_rate, num_itr_lb, verbose = False):
     validate_input_format(lo_costs_batch, hi_costs_batch, def_mm_batch)
     layer_start = 0
     solutions_cpu = []
     for (b, solver) in enumerate(solvers):
         solver.set_solver_costs(lo_costs_batch[layer_start].data_ptr(), hi_costs_batch[layer_start].data_ptr(), def_mm_batch[layer_start].data_ptr())
-        solutions_cpu.append(solver.primal_rounding_incremental(init_delta, delta_growth_rate, num_itr_lb))
+        solutions_cpu.append(solver.primal_rounding_incremental(init_delta, delta_growth_rate, num_itr_lb, verbose))
         layer_start += solver.nr_layers()
     return solutions_cpu
 
