@@ -264,8 +264,6 @@ namespace LPMP {
             std::vector<bdd_variable> tmp_bdd_variables;
             tmp_bdd_variables.push_back({bdd_branch_nodes_.size(), std::numeric_limits<size_t>::max()});
             bdd_variables_.push_back(tmp_bdd_variables.begin(), tmp_bdd_variables.end());
-
-            std::cout << "after initializing parallel mma base, nr vars = " << this->nr_variables() << "\n";
         }
 
     template<typename BDD_BRANCH_NODE>
@@ -1020,6 +1018,9 @@ namespace LPMP {
                 forward_mm(bdd_nr, 0.5, delta_out_, delta);
 
             std::swap(delta_out_, delta);
+
+            lower_bound_state_ = lower_bound_state::invalid;
+            message_passing_state_ = message_passing_state::after_forward_pass;
         }
 
     template<typename BDD_BRANCH_NODE>
@@ -1043,6 +1044,10 @@ namespace LPMP {
                 lb += backward_mm(bdd_nr, 0.5, delta_out_, delta);
 
             std::swap(delta_out_, delta);
+
+            lower_bound_state_ = lower_bound_state::invalid;
+            message_passing_state_ = message_passing_state::after_backward_pass;
+
             return lb;
         }
 
