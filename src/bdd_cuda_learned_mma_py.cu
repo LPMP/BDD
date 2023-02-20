@@ -348,6 +348,16 @@ void grad_cost_perturbation(LPMP::bdd_cuda_learned_mma<REAL>& solver,
 }
 
 template<typename REAL>
+std::vector<float> primal_rounding_incremental_iteration(LPMP::bdd_cuda_learned_mma<REAL>& solver, double cur_delta, const bool verbose = false)
+{
+    std::vector<char> sol = perturb_primal_costs(solver, cur_delta, verbose);
+    std::vector<float> solution_f(sol.size());
+    for (int i = 0; i < sol.size(); i++)
+        solution_f[i] = (float) sol[i];
+    return solution_f;
+}
+
+template<typename REAL>
 std::vector<float> primal_rounding_incremental(LPMP::bdd_cuda_learned_mma<REAL>& solver, double init_delta, const double delta_growth_rate, const int num_itr_lb, const bool verbose = false)
 {
     std::vector<char> sol = incremental_mm_agreement_rounding_cuda(solver, init_delta, delta_growth_rate, num_itr_lb, verbose);
@@ -548,6 +558,11 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
         }, "During primal rounding calling update_costs(lo_pert, hi_pert) changes the dual costs, the underlying primal objective vector also changes.\n"
             "Here we compute gradients of such pertubation operation assuming that distribution of (lo_pert, hi_pert) was done with isoptropic weights.")
 
+        .def("primal_rounding_incremental_iteration", [](bdd_type_default& solver, double cur_delta, const bool verbose)
+        {
+            return primal_rounding_incremental_iteration(solver, cur_delta, verbose);
+        })
+
         .def("primal_rounding_incremental", [](bdd_type_default& solver, double init_delta, const double delta_growth_rate, const int num_itr_lb, const bool verbose)
         {
             return primal_rounding_incremental(solver, init_delta, delta_growth_rate, num_itr_lb, verbose);
@@ -738,6 +753,11 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
             grad_cost_perturbation(solver, grad_lo_cost_ptr, grad_hi_cost_ptr, grad_lo_pert_out, grad_hi_pert_out);
         }, "During primal rounding calling update_costs(lo_pert, hi_pert) changes the dual costs, the underlying primal objective vector also changes.\n"
             "Here we compute gradients of such pertubation operation assuming that distribution of (lo_pert, hi_pert) was done with isoptropic weights.")
+
+        .def("primal_rounding_incremental_iteration", [](bdd_type_default& solver, double cur_delta, const bool verbose)
+        {
+            return primal_rounding_incremental_iteration(solver, cur_delta, verbose);
+        })
 
         .def("primal_rounding_incremental", [](bdd_type_double& solver, double init_delta, const double delta_growth_rate, const int num_itr_lb, const bool verbose)
         {
