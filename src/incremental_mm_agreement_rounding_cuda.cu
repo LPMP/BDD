@@ -142,7 +142,7 @@ namespace LPMP {
 
     template<typename REAL>
     struct mm_types_transform {
-        const REAL delta;
+        const double delta;
         const REAL max_incon_mm_diff;
         const REAL decay_factor_inconsistent;
         const bool only_perturb_inconsistent;
