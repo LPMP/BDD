@@ -306,7 +306,8 @@ struct mm_type_to_sol {
             auto first = thrust::zip_iterator(thrust::make_tuple(mm_types.begin(), mm_sums_0.begin(), mm_sums_1.begin(), thrust::make_counting_iterator<int>(0)));
             auto last = thrust::zip_iterator(thrust::make_tuple(mm_types.end(), mm_sums_0.end(), mm_sums_1.end(), thrust::make_counting_iterator<int>(0) + mm_types.size()));
 
-            thrust::transform(first, last, delta_it_begin, mm_types_transform<typename SOLVER::value_type>{cur_delta, max_incon_mm_diff, 2.0, false}); //nr_inconsistent_mms == 1});
+            thrust::transform(first, last, delta_it_begin, mm_types_transform<typename SOLVER::value_type>{cur_delta, max_incon_mm_diff, 2.0, false});
+            // thrust::transform(first, last, delta_it_begin, mm_types_transform<typename SOLVER::value_type>{(float)cur_delta, (float)max_incon_mm_diff, 2.0, false});
 
             s.update_costs(cost_delta_0, cost_delta_1);
             return {};
