@@ -30,9 +30,11 @@ target_include_directories(LPMP-BDD INTERFACE external/tsl-robin-map/include)
 target_include_directories(LPMP-BDD INTERFACE external/PEGTL/include)
 target_include_directories(LPMP-BDD INTERFACE external/CLI11/include)
 target_include_directories(LPMP-BDD INTERFACE external/pybind11)
-target_include_directories(LPMP-BDD INTERFACE external/thrust/)
-target_include_directories(LPMP-BDD INTERFACE external/thrust/dependencies/cub)
 target_include_directories(LPMP-BDD INTERFACE external/cereal/include/)
+
+find_package(Thrust REQUIRED CONFIG PATHS external/thrust/)
+thrust_create_target(Thrust)
+target_link_libraries(LPMP-BDD INTERFACE Thrust)
 
 find_package(OpenMP)
 if(OpenMP_CXX_FOUND)

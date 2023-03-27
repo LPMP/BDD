@@ -1,6 +1,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/eigen.h>
 #include <pybind11/stl.h>
+#include "run_solver_util.h"
 #include "bdd_cuda_learned_mma.h"
 #include "incremental_mm_agreement_rounding_cuda.h"
 #include "bdd_branch_instruction.h"
@@ -218,22 +219,9 @@ void set_solver_costs(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long lo_co
 }
 
 template<typename REAL>
-void non_learned_iterations(LPMP::bdd_cuda_learned_mma<REAL>& solver, const float omega, const int max_num_itr, const float improvement_slope) 
+void non_learned_iterations(LPMP::bdd_cuda_learned_mma<REAL>& solver, const float omega, const int max_num_itr, const float improvement_slope, const float time_limit) 
 {
-    const double lb_initial = solver.lower_bound();
-    double lb_prev = lb_initial;
-    double lb_post = lb_prev;
-    for (int itr = 0; itr < max_num_itr; itr++)
-    {
-        solver.iteration(omega);
-        lb_prev = lb_post;
-        lb_post = solver.lower_bound();
-        if(itr == 0)
-            solver.set_initial_lb_change(std::abs(lb_initial - lb_post));
-
-        if (std::abs(lb_prev - lb_post) < improvement_slope * solver.get_initial_lb_change())
-            break;
-    }
+    run_solver(solver, max_num_itr, 0.0, improvement_slope, time_limit);
 }
 
 template<typename REAL>
@@ -455,10 +443,11 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
             set_solver_costs(solver, lo_cost_ptr, hi_cost_ptr, def_mm_ptr);
         },"Set the costs i.e., (lo_costs (size = nr_layers()), hi_costs (size = nr_layers()), def_mm_ptr (size = nr_layers()) to set solver state.")
 
-        .def("non_learned_iterations", [](bdd_type_default& solver, const float omega, const int max_num_itr, const float improvement_slope) 
+        .def("non_learned_iterations", [](bdd_type_default& solver, const float omega, const int max_num_itr, const float improvement_slope, const float time_limit) 
         {
-            non_learned_iterations(solver, omega, max_num_itr, improvement_slope);
-        }, "Runs parallel_mma solver for a maximum of max_num_itr iterations and stops earlier if rel. improvement is less than improvement_slop .")
+            non_learned_iterations(solver, omega, max_num_itr, improvement_slope, time_limit);
+        }, "Runs parallel_mma solver for a maximum of max_num_itr iterations and stops earlier if rel. improvement is less than improvement_slope.",
+        py::arg("omega") = 0.5, py::arg("max_num_itr") = 1000, py::arg("improvement_slope") = 1e-6, py::arg("time_limit") = 3600)
 
         .def("iterations", [](bdd_type_default& solver, 
                             const long dist_weights_ptr, 
@@ -651,10 +640,11 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
             set_solver_costs(solver, lo_cost_ptr, hi_cost_ptr, def_mm_ptr);
         },"Set the costs i.e., (lo_costs (size = nr_layers()), hi_costs (size = nr_layers()), def_mm_ptr (size = nr_layers()) to set solver state.")
 
-        .def("non_learned_iterations", [](bdd_type_double& solver, const float omega, const int max_num_itr, const float improvement_slope) 
+        .def("non_learned_iterations", [](bdd_type_double& solver, const float omega, const int max_num_itr, const float improvement_slope, const float time_limit) 
         {
-            non_learned_iterations(solver, omega, max_num_itr, improvement_slope);
-        }, "Runs parallel_mma solver for a maximum of max_num_itr iterations and stops earlier if rel. improvement is less than improvement_slop .")
+            non_learned_iterations(solver, omega, max_num_itr, improvement_slope, time_limit);
+        }, "Runs parallel_mma solver for a maximum of max_num_itr iterations and stops earlier if rel. improvement is less than improvement_slope.",
+        py::arg("omega") = 0.5, py::arg("max_num_itr") = 1000, py::arg("improvement_slope") = 1e-6, py::arg("time_limit") = 3600)
 
         .def("iterations", [](bdd_type_double& solver, 
                             const long dist_weights_ptr, 
