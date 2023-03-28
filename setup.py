@@ -15,6 +15,13 @@ class CMakeExtension(Extension):
         Extension.__init__(self, name, sources=[])
         self.sourcedir = os.path.abspath(sourcedir)
 
+def is_tool(name):
+    """Check whether `name` is on PATH and marked as executable."""
+
+    # from whichcraft import which
+    from shutil import which
+
+    return which(name) is not None
 
 class CMakeBuild(build_ext):
     def run(self):
@@ -86,9 +93,11 @@ class CMakeBuild(build_ext):
         extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
         cmake_args = ['-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=' + extdir,
                       '-DPYTHON_EXECUTABLE=' + sys.executable,
-                      '-DWITH_CUDA=ON',
-                      '-DCMAKE_GENERATOR=Ninja' # Use Ninja instead of make for faster compilation.
+                      '-DWITH_CUDA=ON'
                     ]
+        if is_tool('ninja'):
+            #   '-DCMAKE_GENERATOR=Ninja' # Use Ninja instead of make for faster compilation.
+            cmake_args += '-DCMAKE_GENERATOR=Ninja'
 
         cfg = 'Debug' if self.debug else 'Release'
         build_args = ['--config', cfg]
@@ -114,7 +123,7 @@ class CMakeBuild(build_ext):
 
 setup(
     name='BDD',
-    version='0.0.1',
+    version='0.0.2',
     description='Bindings for solving 0-1 integer linear programs via BDDs',
     packages=find_packages('src'),
     package_dir={'':'src'},
