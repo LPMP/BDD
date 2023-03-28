@@ -460,8 +460,8 @@ namespace LPMP {
                 ilp = ilp.reduce(tmp.zero_fixations, tmp.one_fixations);
 
 #ifndef NDEBUG
-            if(!ilp.every_variable_in_some_ineq());
-            std::cout << "[ILP parser] ILP has variables that are not present in any constraint\n";
+            if(!ilp.every_variable_in_some_ineq())
+                std::cout << "[ILP parser] ILP has variables that are not present in any constraint\n";
 
             const size_t nr_subproblems = ilp.nr_disconnected_subproblems();
             if(nr_subproblems != 1)
@@ -483,8 +483,8 @@ namespace LPMP {
                 ilp = ilp.reduce(tmp.zero_fixations, tmp.one_fixations);
 
 #ifndef NDEBUG
-            if(!ilp.every_variable_in_some_ineq());
-            std::cout << "[ILP parser] ILP has variables that are not present in any constraint\n";
+            if(!ilp.every_variable_in_some_ineq())
+                std::cout << "[ILP parser] ILP has variables that are not present in any constraint\n";
 
             const size_t nr_subproblems = ilp.nr_disconnected_subproblems();
             if(nr_subproblems != 1)
