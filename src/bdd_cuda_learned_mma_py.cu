@@ -346,9 +346,9 @@ std::vector<float> primal_rounding_incremental_iteration(LPMP::bdd_cuda_learned_
 }
 
 template<typename REAL>
-std::vector<float> primal_rounding_incremental(LPMP::bdd_cuda_learned_mma<REAL>& solver, double init_delta, const double delta_growth_rate, const int num_itr_lb, const bool verbose = false)
+std::vector<float> primal_rounding_incremental(LPMP::bdd_cuda_learned_mma<REAL>& solver, double init_delta, const double delta_growth_rate, const int num_itr_lb, const bool verbose = false, const int num_rounds = 500)
 {
-    std::vector<char> sol = incremental_mm_agreement_rounding_cuda(solver, init_delta, delta_growth_rate, num_itr_lb, verbose);
+    std::vector<char> sol = incremental_mm_agreement_rounding_cuda(solver, init_delta, delta_growth_rate, num_itr_lb, verbose, num_rounds);
     std::vector<float> solution_f(sol.size());
     for (int i = 0; i < sol.size(); i++)
         solution_f[i] = (float) sol[i];
@@ -552,9 +552,9 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
             return primal_rounding_incremental_iteration(solver, cur_delta, verbose);
         })
 
-        .def("primal_rounding_incremental", [](bdd_type_default& solver, double init_delta, const double delta_growth_rate, const int num_itr_lb, const bool verbose)
+        .def("primal_rounding_incremental", [](bdd_type_default& solver, const int num_rounds, double init_delta, const double delta_growth_rate, const int num_itr_lb, const bool verbose)
         {
-            return primal_rounding_incremental(solver, init_delta, delta_growth_rate, num_itr_lb, verbose);
+            return primal_rounding_incremental(solver, init_delta, delta_growth_rate, num_itr_lb, verbose, num_rounds);
         });
 
         py::class_<bdd_type_double>(m, "bdd_cuda_learned_mma_double")
@@ -749,9 +749,9 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
             return primal_rounding_incremental_iteration(solver, cur_delta, verbose);
         })
 
-        .def("primal_rounding_incremental", [](bdd_type_double& solver, double init_delta, const double delta_growth_rate, const int num_itr_lb, const bool verbose)
+        .def("primal_rounding_incremental", [](bdd_type_double& solver, const int num_rounds, double init_delta, const double delta_growth_rate, const int num_itr_lb, const bool verbose)
         {
-            return primal_rounding_incremental(solver, init_delta, delta_growth_rate, num_itr_lb, verbose);
+            return primal_rounding_incremental(solver, init_delta, delta_growth_rate, num_itr_lb, verbose, num_rounds);
         });
 }
 

@@ -314,7 +314,7 @@ struct mm_type_to_sol {
         }
 
     template<typename SOLVER>
-        std::vector<char> incremental_mm_agreement_rounding_cuda(SOLVER& s, double init_delta, const double delta_growth_rate, const int num_itr_lb, const bool verbose)
+        std::vector<char> incremental_mm_agreement_rounding_cuda(SOLVER& s, double init_delta, const double delta_growth_rate, const int num_itr_lb, const bool verbose, const int num_rounds)
         {
             assert(delta_growth_rate > 0);
             assert(init_delta > 0);
@@ -331,7 +331,7 @@ struct mm_type_to_sol {
 
             double cur_delta = 1.0/delta_growth_rate * init_delta;
 
-            for(size_t round=0; round<500; ++round)
+            for(size_t round=0; round<num_rounds; ++round)
             {
                 cur_delta = min(cur_delta*delta_growth_rate, 1e6);
                 const auto time = std::chrono::steady_clock::now();
@@ -352,10 +352,10 @@ struct mm_type_to_sol {
             return {};
         }
 
-    template std::vector<char> incremental_mm_agreement_rounding_cuda(bdd_cuda_parallel_mma<float>& , double , const double, const int, const bool );
-    template std::vector<char> incremental_mm_agreement_rounding_cuda(bdd_cuda_parallel_mma<double>& , double , const double, const int, const bool );
-    template std::vector<char> incremental_mm_agreement_rounding_cuda(bdd_cuda_learned_mma<float>& , double , const double, const int, const bool );
-    template std::vector<char> incremental_mm_agreement_rounding_cuda(bdd_cuda_learned_mma<double>& , double , const double, const int, const bool );
+    template std::vector<char> incremental_mm_agreement_rounding_cuda(bdd_cuda_parallel_mma<float>& , double , const double, const int, const bool, const int);
+    template std::vector<char> incremental_mm_agreement_rounding_cuda(bdd_cuda_parallel_mma<double>& , double , const double, const int, const bool, const int);
+    template std::vector<char> incremental_mm_agreement_rounding_cuda(bdd_cuda_learned_mma<float>& , double , const double, const int, const bool, const int);
+    template std::vector<char> incremental_mm_agreement_rounding_cuda(bdd_cuda_learned_mma<double>& , double , const double, const int, const bool, const int);
 
 
     template std::vector<char> perturb_primal_costs(bdd_cuda_parallel_mma<float>& , const double, const bool );
