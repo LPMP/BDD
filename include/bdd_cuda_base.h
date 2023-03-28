@@ -141,6 +141,7 @@ namespace LPMP {
 
             template <class Archive>
             void load(Archive & archive);
+            void print_num_bdd_nodes_per_hop();
 
         protected:
 
@@ -187,7 +188,6 @@ namespace LPMP {
             void set_special_nodes_costs();
             void compress_bdd_nodes_to_layer(const thrust::device_vector<int>& bdd_hop_dist);
             void reorder_within_bdd_layers();
-            void print_num_bdd_nodes_per_hop();
             void find_primal_variable_ordering();
 
     };

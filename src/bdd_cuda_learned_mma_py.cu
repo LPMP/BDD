@@ -555,6 +555,11 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
         .def("primal_rounding_incremental", [](bdd_type_default& solver, const int num_rounds, double init_delta, const double delta_growth_rate, const int num_itr_lb, const bool verbose)
         {
             return primal_rounding_incremental(solver, init_delta, delta_growth_rate, num_itr_lb, verbose, num_rounds);
+        })
+        
+        .def("print_bdd_info", [](bdd_type_default& solver)
+        {
+            return solver.print_num_bdd_nodes_per_hop();
         });
 
         py::class_<bdd_type_double>(m, "bdd_cuda_learned_mma_double")
@@ -744,7 +749,7 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
         }, "During primal rounding calling update_costs(lo_pert, hi_pert) changes the dual costs, the underlying primal objective vector also changes.\n"
             "Here we compute gradients of such pertubation operation assuming that distribution of (lo_pert, hi_pert) was done with isoptropic weights.")
 
-        .def("primal_rounding_incremental_iteration", [](bdd_type_default& solver, double cur_delta, const bool verbose)
+        .def("primal_rounding_incremental_iteration", [](bdd_type_double& solver, double cur_delta, const bool verbose)
         {
             return primal_rounding_incremental_iteration(solver, cur_delta, verbose);
         })
@@ -752,6 +757,11 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
         .def("primal_rounding_incremental", [](bdd_type_double& solver, const int num_rounds, double init_delta, const double delta_growth_rate, const int num_itr_lb, const bool verbose)
         {
             return primal_rounding_incremental(solver, init_delta, delta_growth_rate, num_itr_lb, verbose, num_rounds);
+        })
+        
+        .def("print_bdd_info", [](bdd_type_double& solver)
+        {
+            return solver.print_num_bdd_nodes_per_hop();
         });
 }
 

@@ -57,7 +57,7 @@ namespace LPMP {
             return {BDD::bdd_collection(), bdd_col};
         }
 
-        constexpr static size_t min_nr_bdd_nodes_per_layer = 1024;
+        constexpr static size_t min_nr_bdd_nodes_per_layer = 3072;
         // first layer such that all subsequent ones have fewer than min_nr_bdd_nodes_per_layer BDDs per hop
         std::ptrdiff_t layer_th = std::min(cpu_th, nr_bdd_nodes_per_layer.size()-1);
         for(; layer_th>gpu_th; --layer_th)
