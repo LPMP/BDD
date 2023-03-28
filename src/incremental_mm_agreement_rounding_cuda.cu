@@ -142,7 +142,7 @@ namespace LPMP {
 
     template<typename REAL>
     struct mm_types_transform {
-        const REAL delta;
+        const double delta;
         const REAL max_incon_mm_diff;
         const REAL decay_factor_inconsistent;
         const bool only_perturb_inconsistent;
@@ -256,7 +256,65 @@ struct mm_type_to_sol {
 };
 
     template<typename SOLVER>
-        std::vector<char> incremental_mm_agreement_rounding_cuda(SOLVER& s, double init_delta, const double delta_growth_rate, const int num_itr_lb, const bool verbose)
+        std::vector<char> perturb_primal_costs(SOLVER& s, const double cur_delta, const bool verbose)
+        {
+            s.distribute_delta();
+            const auto mms = s.min_marginals_cuda();
+            const thrust::device_vector<int>& primal_vars = std::get<0>(mms);
+            const auto& mms_0 = std::get<1>(mms);
+            const auto& mms_1 = std::get<2>(mms);
+            const auto mm_types = compute_mm_types(s.nr_variables(), mms_0, mms_1, primal_vars);
+            const size_t nr_one_mms = thrust::count(mm_types.begin(), mm_types.end(), mm_type::one);
+            const size_t nr_zero_mms = thrust::count(mm_types.begin(), mm_types.end(), mm_type::zero);
+            const size_t nr_equal_mms = thrust::count(mm_types.begin(), mm_types.end(), mm_type::equal);
+            const size_t nr_inconsistent_mms = thrust::count(mm_types.begin(), mm_types.end(), mm_type::inconsistent);
+            if (nr_inconsistent_mms == 1)
+            {
+                const size_t incon_index = thrust::distance(mm_types.begin(), thrust::find(mm_types.begin(), mm_types.end(), mm_type::inconsistent));
+                if (verbose) std::cout<<"Inconsistent index: "<<incon_index<<"\n";
+            }
+
+            if (verbose)
+            {
+                std::cout << "[incremental primal rounding cuda] " <<
+                "#one min-marg diffs = " << nr_one_mms << " " << u8"\u2258" << " " << double(100*nr_one_mms)/double(s.nr_variables()) << "%, " <<
+                "#zero min-marg diffs = " << nr_zero_mms << " " << u8"\u2258" << " " << double(100*nr_zero_mms)/double(s.nr_variables()) << "%, " <<
+                "#equal min-marg diffs = " << nr_equal_mms << " " << u8"\u2258" << " " << double(100*nr_equal_mms)/double(s.nr_variables()) << "%, " <<
+                "#inconsistent min-marg diffs = " << nr_inconsistent_mms << " " << u8"\u2258" << " " << double(100*nr_inconsistent_mms)/double(s.nr_variables()) << "%\n";
+            }
+            // reconstruct solution from min-marginals
+            if(nr_one_mms + nr_zero_mms == s.nr_variables())
+            {
+                if (verbose) std::cout << "[incremental primal rounding cuda] reconstruct solution\n";
+                assert(mm_types.size() == s.nr_variables());
+                thrust::device_vector<char> device_sol(s.nr_variables());
+                thrust::transform(mm_types.begin(), mm_types.end(), device_sol.begin(), mm_type_to_sol{});
+                std::vector<char> sol(s.nr_variables());
+                thrust::copy(device_sol.begin(), device_sol.end(), sol.begin());
+                return sol;
+            }
+
+            thrust::device_vector<double> cost_delta_0(s.nr_variables());
+            thrust::device_vector<double> cost_delta_1(s.nr_variables());
+
+            const auto mm_sums = compute_mm_sums(s.nr_variables(), mms_0, mms_1, primal_vars);
+            const auto& mm_sums_0 = std::get<0>(mm_sums);
+            const auto& mm_sums_1 = std::get<1>(mm_sums);
+            const auto max_incon_mm_diff = compute_max_inconsistent_mm_diff(mm_types, mm_sums_0, mm_sums_1);
+
+            auto delta_it_begin = thrust::zip_iterator(thrust::make_tuple(cost_delta_0.begin(), cost_delta_1.begin()));
+            auto first = thrust::zip_iterator(thrust::make_tuple(mm_types.begin(), mm_sums_0.begin(), mm_sums_1.begin(), thrust::make_counting_iterator<int>(0)));
+            auto last = thrust::zip_iterator(thrust::make_tuple(mm_types.end(), mm_sums_0.end(), mm_sums_1.end(), thrust::make_counting_iterator<int>(0) + mm_types.size()));
+
+            thrust::transform(first, last, delta_it_begin, mm_types_transform<typename SOLVER::value_type>{cur_delta, max_incon_mm_diff, 2.0, false});
+            // thrust::transform(first, last, delta_it_begin, mm_types_transform<typename SOLVER::value_type>{(float)cur_delta, (float)max_incon_mm_diff, 2.0, false});
+
+            s.update_costs(cost_delta_0, cost_delta_1);
+            return {};
+        }
+
+    template<typename SOLVER>
+        std::vector<char> incremental_mm_agreement_rounding_cuda(SOLVER& s, double init_delta, const double delta_growth_rate, const int num_itr_lb, const bool verbose, const int num_rounds)
         {
             assert(delta_growth_rate > 0);
             assert(init_delta > 0);
@@ -273,65 +331,19 @@ struct mm_type_to_sol {
 
             double cur_delta = 1.0/delta_growth_rate * init_delta;
 
-            for(size_t round=0; round<500; ++round)
+            for(size_t round=0; round<num_rounds; ++round)
             {
                 cur_delta = min(cur_delta*delta_growth_rate, 1e6);
                 const auto time = std::chrono::steady_clock::now();
                 const double time_elapsed = (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000;
                 if (verbose) std::cout << "[incremental primal rounding cuda] round " << round << ", cost delta " << cur_delta << ", time elapsed = " << time_elapsed << "\n";
                 
-                s.distribute_delta();
-                const auto mms = s.min_marginals_cuda();
-                const thrust::device_vector<int>& primal_vars = std::get<0>(mms);
-                const auto& mms_0 = std::get<1>(mms);
-                const auto& mms_1 = std::get<2>(mms);
-                const auto mm_types = compute_mm_types(s.nr_variables(), mms_0, mms_1, primal_vars);
-                const size_t nr_one_mms = thrust::count(mm_types.begin(), mm_types.end(), mm_type::one);
-                const size_t nr_zero_mms = thrust::count(mm_types.begin(), mm_types.end(), mm_type::zero);
-                const size_t nr_equal_mms = thrust::count(mm_types.begin(), mm_types.end(), mm_type::equal);
-                const size_t nr_inconsistent_mms = thrust::count(mm_types.begin(), mm_types.end(), mm_type::inconsistent);
-                if (nr_inconsistent_mms == 1)
+                const std::vector<char> sol = perturb_primal_costs(s, cur_delta, verbose);
+                if (sol.size() > 0)
                 {
-                    const size_t incon_index = thrust::distance(mm_types.begin(), thrust::find(mm_types.begin(), mm_types.end(), mm_type::inconsistent));
-                    if (verbose) std::cout<<"Inconsistent index: "<<incon_index<<"\n";
-                }
-
-                if (verbose)
-                {
-                    std::cout << "[incremental primal rounding cuda] " <<
-                    "#one min-marg diffs = " << nr_one_mms << " " << u8"\u2258" << " " << double(100*nr_one_mms)/double(s.nr_variables()) << "%, " <<
-                    "#zero min-marg diffs = " << nr_zero_mms << " " << u8"\u2258" << " " << double(100*nr_zero_mms)/double(s.nr_variables()) << "%, " <<
-                    "#equal min-marg diffs = " << nr_equal_mms << " " << u8"\u2258" << " " << double(100*nr_equal_mms)/double(s.nr_variables()) << "%, " <<
-                    "#inconsistent min-marg diffs = " << nr_inconsistent_mms << " " << u8"\u2258" << " " << double(100*nr_inconsistent_mms)/double(s.nr_variables()) << "%\n";
-                }
-                // reconstruct solution from min-marginals
-                if(nr_one_mms + nr_zero_mms == s.nr_variables())
-                {
-                    if (verbose) std::cout << "[incremental primal rounding cuda] reconstruct solution\n";
-                    assert(mm_types.size() == s.nr_variables());
-                    thrust::device_vector<char> device_sol(s.nr_variables());
-                    thrust::transform(mm_types.begin(), mm_types.end(), device_sol.begin(), mm_type_to_sol{});
-                    std::vector<char> sol(s.nr_variables());
-                    thrust::copy(device_sol.begin(), device_sol.end(), sol.begin());
                     if (verbose) std::cout << "[incremental primal rounding cuda] reconstructed solution\n"<<"[incremental primal rounding cuda] Lower bound with 0 delta: "<<lb<<"\n";
                     return sol;
                 }
-
-                thrust::device_vector<double> cost_delta_0(s.nr_variables());
-                thrust::device_vector<double> cost_delta_1(s.nr_variables());
-
-                const auto mm_sums = compute_mm_sums(s.nr_variables(), mms_0, mms_1, primal_vars);
-                const auto& mm_sums_0 = std::get<0>(mm_sums);
-                const auto& mm_sums_1 = std::get<1>(mm_sums);
-                const auto max_incon_mm_diff = compute_max_inconsistent_mm_diff(mm_types, mm_sums_0, mm_sums_1);
-
-                auto delta_it_begin = thrust::zip_iterator(thrust::make_tuple(cost_delta_0.begin(), cost_delta_1.begin()));
-                auto first = thrust::zip_iterator(thrust::make_tuple(mm_types.begin(), mm_sums_0.begin(), mm_sums_1.begin(), thrust::make_counting_iterator<int>(0)));
-                auto last = thrust::zip_iterator(thrust::make_tuple(mm_types.end(), mm_sums_0.end(), mm_sums_1.end(), thrust::make_counting_iterator<int>(0) + mm_types.size()));
-
-                thrust::transform(first, last, delta_it_begin, mm_types_transform<typename SOLVER::value_type>{cur_delta, max_incon_mm_diff, 2.0, false}); //nr_inconsistent_mms == 1});
-
-                s.update_costs(cost_delta_0, cost_delta_1);
                 run_solver(s, num_itr_lb, 1e-7, 0.0001, std::numeric_limits<double>::max(), false);
                 if (verbose) std::cout << "[incremental primal rounding cuda] lower bound = " << s.lower_bound() << "\n";
             }
@@ -340,8 +352,15 @@ struct mm_type_to_sol {
             return {};
         }
 
-    template std::vector<char> incremental_mm_agreement_rounding_cuda(bdd_cuda_parallel_mma<float>& , double , const double, const int, const bool );
-    template std::vector<char> incremental_mm_agreement_rounding_cuda(bdd_cuda_parallel_mma<double>& , double , const double, const int, const bool );
-    template std::vector<char> incremental_mm_agreement_rounding_cuda(bdd_cuda_learned_mma<float>& , double , const double, const int, const bool );
-    template std::vector<char> incremental_mm_agreement_rounding_cuda(bdd_cuda_learned_mma<double>& , double , const double, const int, const bool );
+    template std::vector<char> incremental_mm_agreement_rounding_cuda(bdd_cuda_parallel_mma<float>& , double , const double, const int, const bool, const int);
+    template std::vector<char> incremental_mm_agreement_rounding_cuda(bdd_cuda_parallel_mma<double>& , double , const double, const int, const bool, const int);
+    template std::vector<char> incremental_mm_agreement_rounding_cuda(bdd_cuda_learned_mma<float>& , double , const double, const int, const bool, const int);
+    template std::vector<char> incremental_mm_agreement_rounding_cuda(bdd_cuda_learned_mma<double>& , double , const double, const int, const bool, const int);
+
+
+    template std::vector<char> perturb_primal_costs(bdd_cuda_parallel_mma<float>& , const double, const bool );
+    template std::vector<char> perturb_primal_costs(bdd_cuda_parallel_mma<double>& , const double, const bool );
+    template std::vector<char> perturb_primal_costs(bdd_cuda_learned_mma<float>& , const double, const bool );
+    template std::vector<char> perturb_primal_costs(bdd_cuda_learned_mma<double>& , const double, const bool );
+
 }

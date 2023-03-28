@@ -125,7 +125,7 @@ namespace LPMP {
 
             const thrust::device_vector<int> get_primal_variable_index() const { return primal_variable_index_; }
             const thrust::device_vector<int> get_bdd_index() const { return bdd_index_; }
-            const thrust::device_vector<int> get_num_bdds_per_var() const {return num_bdds_per_var_; }
+            const thrust::device_vector<int>& get_num_bdds_per_var() const {return num_bdds_per_var_; }
 
             void distribute_delta(thrust::device_ptr<REAL> def_min_marg_diff_ptr);
             void distribute_delta();
@@ -141,6 +141,7 @@ namespace LPMP {
 
             template <class Archive>
             void load(Archive & archive);
+            void print_num_bdd_nodes_per_hop();
 
         protected:
 
@@ -187,7 +188,6 @@ namespace LPMP {
             void set_special_nodes_costs();
             void compress_bdd_nodes_to_layer(const thrust::device_vector<int>& bdd_hop_dist);
             void reorder_within_bdd_layers();
-            void print_num_bdd_nodes_per_hop();
             void find_primal_variable_ordering();
 
     };

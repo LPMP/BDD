@@ -166,6 +166,10 @@ namespace BDD {
                 void rebase(const size_t bdd_nr, ITERATOR var_map_begin, ITERATOR var_map_end);
             template<typename VAR_MAP>
                 void rebase(const size_t bdd_nr, const VAR_MAP& var_map);
+            template<typename ITERATOR>
+                void rebase(ITERATOR var_map_begin, ITERATOR var_map_end);
+            template<typename VAR_MAP>
+                void rebase(const VAR_MAP& var_map);
             // returns old variables
             std::vector<size_t> rebase_to_contiguous(const size_t bdd_nr);
 
@@ -320,6 +324,20 @@ namespace BDD {
                 }();
                 bdd.index = rebase_index;
             } 
+        }
+
+    template<typename ITERATOR>
+        void bdd_collection::rebase(ITERATOR var_map_begin, ITERATOR var_map_end)
+        {
+            for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
+                rebase(bdd_nr, var_map_begin, var_map_end);
+        }
+
+    template<typename VAR_MAP>
+        void bdd_collection::rebase(const VAR_MAP& var_map)
+        {
+            for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
+                rebase(bdd_nr, var_map);
         }
 
     template<typename ITERATOR>

@@ -16,10 +16,12 @@ namespace LPMP {
 
             void iteration(const REAL omega = 0.5);
 
-            void forward_mm(const REAL omega,
-                    thrust::device_vector<REAL>& delta_lo, thrust::device_vector<REAL>& delta_hi);
-            void backward_mm(const REAL omega,
-                    thrust::device_vector<REAL>& delta_lo, thrust::device_vector<REAL>& delta_hi);
+            void forward_mm(const REAL omega, thrust::device_vector<REAL>& delta_lo_hi);
+            void backward_mm(const REAL omega, thrust::device_vector<REAL>& delta_lo_hi);
+
+            // Normalize delta by num BDDs to distribute isotropically.
+            // delta_lo_ -> delta_hi_/#BDDs, delta_hi_ -> delta_hi_/#BDDs
+            void normalize_delta(thrust::device_vector<REAL>& delta_lo_hi) const;
 
         protected:
             void min_marginals_from_directional_costs(const int hop_index, const REAL omega_scalar);
@@ -28,10 +30,7 @@ namespace LPMP {
             void min_marginals_from_directional_costs(const int hop_index, const REAL omega_scalar, thrust::device_ptr<REAL> mm_diff_ptr, const thrust::device_ptr<const REAL> omega_vec = nullptr);
 
             // compute delta_lo_ and delta_hi_ (per variable) from mm_to_distribute (per bdd node)
-            void compute_delta(const thrust::device_ptr<const REAL> mm_to_distribute, thrust::device_ptr<REAL> delta_lo, thrust::device_ptr<REAL> delta_hi) const;
-            // Normalize delta by num BDDs to distribute isotropically.
-            // delta_lo_ -> delta_hi_/#BDDs, delta_hi_ -> delta_hi_/#BDDs
-            void normalize_delta(thrust::device_vector<REAL>& delta_lo, thrust::device_vector<REAL>& delta_hi) const;
+            void compute_delta(const thrust::device_ptr<const REAL> mm_to_distribute, thrust::device_ptr<REAL> delta_lo_hi) const;
 
             // set argument to all infinity
             void flush_mm(thrust::device_ptr<REAL> mm_diff_ptr);
@@ -43,7 +42,7 @@ namespace LPMP {
             bool compute_direction_bfgs(lbfgs_cuda<REAL>& lbfgs_solver, thrust::device_ptr<REAL> grad_f);
 
             // Deferred min-marginal sums.
-            thrust::device_vector<REAL> delta_lo_, delta_hi_; // One entry in each per primal variable.
+            thrust::device_vector<REAL> delta_lo_hi_; // Two entries per primal variable. Even indices contain delta_lo and odd indices contain delta_hi.
             lbfgs_cuda<REAL> lbfgs_solver_;
 
 
@@ -54,6 +53,6 @@ namespace LPMP {
             thrust::device_vector<REAL> mm_lo_local_; // Contains mm_lo for last computed hop. Memory allocated is as per max(cum_nr_layers_per_hop_dist_).
 
             int itr_count_ = 0;
-            REAL step_size_ = 1e-3;
+            REAL step_size_ = 1e-4;
     };
 }

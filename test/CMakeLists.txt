@@ -137,6 +137,13 @@ if(WITH_CUDA)
     target_link_libraries(test_bdd_cuda_learned_omega LPMP-BDD bdd_cuda_learned_mma lbfgs_cuda)
     add_test(test_bdd_cuda_learned_omega test_bdd_cuda_learned_omega)
 
+    add_executable(test_cuda_parallel_mma test_cuda_parallel_mma.cu)
+    target_link_libraries(test_cuda_parallel_mma LPMP-BDD)
+    add_test(test_cuda_parallel_mma test_cuda_parallel_mma)
+
+    add_executable(test_hybrid_parallel_mma_base test_hybrid_parallel_mma_base.cu)
+    target_link_libraries(test_hybrid_parallel_mma_base LPMP-BDD bdd_multi_parallel_mma_base)
+    add_test(test_hybrid_parallel_mma_base test_hybrid_parallel_mma_base)
 endif()
 
 add_executable(test_bdd_solver_fix_variable test_bdd_solver_fix_variable.cpp)

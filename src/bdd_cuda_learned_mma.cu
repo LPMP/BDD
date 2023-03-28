@@ -12,8 +12,7 @@ namespace LPMP {
                                                         const int* const __restrict__ hi_bdd_node_index, 
                                                         const int* const __restrict__ bdd_node_to_layer_map, 
                                                         const int* const __restrict__ primal_variable_index, 
-                                                        const REAL* const __restrict__ delta_lo_sum,
-                                                        const REAL* const __restrict__ delta_hi_sum,
+                                                        const REAL* const __restrict__ delta_lo_hi_sum,
                                                         const REAL* const __restrict__ mm_diff,
                                                         const REAL* const __restrict__ dist_weights,
                                                         const REAL* const __restrict__ lo_cost_in,
@@ -35,12 +34,12 @@ namespace LPMP {
             const REAL dist_w = dist_weights[layer_idx];
             const int cur_primal_idx = primal_variable_index[layer_idx];
 
-            const REAL cur_lo_cost = lo_cost_in[layer_idx] + min(cur_mm_diff_hi_lo, 0.0f) + dist_w * delta_lo_sum[cur_primal_idx];
+            const REAL cur_lo_cost = lo_cost_in[layer_idx] + min(cur_mm_diff_hi_lo, 0.0f) + dist_w * delta_lo_hi_sum[2 * cur_primal_idx];
             const REAL cur_c_from_root = cost_from_root[bdd_node_idx];
 
             atomicMin(&cost_from_root[next_lo_node], cur_c_from_root + cur_lo_cost);
 
-            const REAL cur_hi_cost = hi_cost_in[layer_idx] + min(-cur_mm_diff_hi_lo, 0.0f) + dist_w * delta_hi_sum[cur_primal_idx];
+            const REAL cur_hi_cost = hi_cost_in[layer_idx] + min(-cur_mm_diff_hi_lo, 0.0f) + dist_w * delta_lo_hi_sum[2 * cur_primal_idx + 1];
             const int next_hi_node = hi_bdd_node_index[bdd_node_idx];
             atomicMin(&cost_from_root[next_hi_node], cur_c_from_root + cur_hi_cost);
 
@@ -59,7 +58,7 @@ namespace LPMP {
         if(!this->backward_state_valid_)
             this->backward_run(false); //For the first iteration need to have costs from terminal. 
         
-        this->compute_delta(mm_diff_ptr, this->delta_lo_.data(), this->delta_hi_.data());
+        this->compute_delta(mm_diff_ptr, this->delta_lo_hi_.data());
         this->flush_mm(mm_diff_ptr);
         // Clear states.
         this->flush_costs_from_root();
@@ -76,8 +75,7 @@ namespace LPMP {
                                                             thrust::raw_pointer_cast(this->hi_bdd_node_index_.data()),
                                                             thrust::raw_pointer_cast(this->bdd_node_to_layer_map_.data()),
                                                             thrust::raw_pointer_cast(this->primal_variable_index_.data()),
-                                                            thrust::raw_pointer_cast(this->delta_lo_.data()),
-                                                            thrust::raw_pointer_cast(this->delta_hi_.data()),
+                                                            thrust::raw_pointer_cast(this->delta_lo_hi_.data()),
                                                             thrust::raw_pointer_cast(mm_diff_ptr),
                                                             thrust::raw_pointer_cast(dist_weights),
                                                             thrust::raw_pointer_cast(this->lo_cost_.data()),
@@ -98,8 +96,7 @@ namespace LPMP {
                                             const int* const __restrict__ hi_bdd_node_index, 
                                             const int* const __restrict__ bdd_node_to_layer_map, 
                                             const int* const __restrict__ primal_variable_index, 
-                                            const REAL* const __restrict__ delta_lo_sum,
-                                            const REAL* const __restrict__ delta_hi_sum,
+                                            const REAL* const __restrict__ delta_lo_hi_sum,
                                             const REAL* const __restrict__ mm_diff,
                                             const REAL* const __restrict__ dist_weights,
                                             const REAL* const __restrict__ lo_cost_in,
@@ -122,8 +119,8 @@ namespace LPMP {
             const REAL dist_w = dist_weights[layer_idx];
             const int cur_primal_idx = primal_variable_index[layer_idx];
 
-            const REAL cur_lo_cost = lo_cost_in[layer_idx] + min(cur_mm_diff_hi_lo, 0.0f) + dist_w * delta_lo_sum[cur_primal_idx];
-            const REAL cur_hi_cost = hi_cost_in[layer_idx] + min(-cur_mm_diff_hi_lo, 0.0f) + dist_w * delta_hi_sum[cur_primal_idx];
+            const REAL cur_lo_cost = lo_cost_in[layer_idx] + min(cur_mm_diff_hi_lo, 0.0f) + dist_w * delta_lo_hi_sum[2 * cur_primal_idx];
+            const REAL cur_hi_cost = hi_cost_in[layer_idx] + min(-cur_mm_diff_hi_lo, 0.0f) + dist_w * delta_lo_hi_sum[2 * cur_primal_idx + 1];
             const int next_hi_node = hi_bdd_node_index[bdd_node_idx];
 
             // Update costs from terminal:
@@ -143,7 +140,7 @@ namespace LPMP {
     {
         assert(this->forward_state_valid_);
 
-        this->compute_delta(mm_diff_ptr, this->delta_lo_.data(), this->delta_hi_.data());
+        this->compute_delta(mm_diff_ptr, this->delta_lo_hi_.data());
         this->flush_mm(mm_diff_ptr);
         for (int s = this->nr_hops() - 1; s >= 0; s--)
         {
@@ -158,8 +155,7 @@ namespace LPMP {
                                                             thrust::raw_pointer_cast(this->hi_bdd_node_index_.data()),
                                                             thrust::raw_pointer_cast(this->bdd_node_to_layer_map_.data()),
                                                             thrust::raw_pointer_cast(this->primal_variable_index_.data()),
-                                                            thrust::raw_pointer_cast(this->delta_lo_.data()),
-                                                            thrust::raw_pointer_cast(this->delta_hi_.data()),
+                                                            thrust::raw_pointer_cast(this->delta_lo_hi_.data()),
                                                             thrust::raw_pointer_cast(mm_diff_ptr),
                                                             thrust::raw_pointer_cast(dist_weights),
                                                             thrust::raw_pointer_cast(this->lo_cost_.data()),
@@ -200,6 +196,9 @@ namespace LPMP {
                                 const int compute_lbfgs_grad_for_itr,
                                 thrust::device_ptr<REAL> grad_lbfgs)
     {
+        if(this->delta_lo_hi_.size() == 0)
+            this->delta_lo_hi_ = thrust::device_vector<REAL>(2 * this->nr_variables(), 0.0);
+
         const double lb_initial = this->lower_bound();
         double lb_prev = lb_initial;
         double lb_post = lb_prev;
@@ -338,6 +337,9 @@ namespace LPMP {
         if (track_grad_for_num_itr == 0)
             return;
 
+        if(this->delta_lo_hi_.size() == 0)
+            this->delta_lo_hi_ = thrust::device_vector<REAL>(2 * this->nr_variables(), 0.0);
+
         thrust::fill(grad_dist_weights_out, grad_dist_weights_out + this->nr_layers(), 0.0);
         if (!omega_vec.get())
             thrust::fill(grad_omega, grad_omega + 1, 0.0); // omega_scalar is used.
@@ -435,8 +437,7 @@ namespace LPMP {
         const REAL* dist_weights;
         const REAL* grad_lo_cost;
         const REAL* grad_hi_cost;
-        const REAL* delta_lo;
-        const REAL* delta_hi;
+        const REAL* delta_lo_hi;
         REAL* grad_cur_mm_diff;
         REAL* grad_delta_lo;
         REAL* grad_delta_hi;
@@ -458,7 +459,7 @@ namespace LPMP {
             atomicAdd(&grad_delta_lo[primal], current_grad_lo_cost * dist_weights[i]);
             atomicAdd(&grad_delta_hi[primal], current_grad_hi_cost * dist_weights[i]);
 
-            grad_dist_weights[i] += delta_lo[primal] * current_grad_lo_cost + delta_hi[primal] * current_grad_hi_cost;
+            grad_dist_weights[i] += delta_lo_hi[2 * primal] * current_grad_lo_cost + delta_lo_hi[2 * primal + 1] * current_grad_hi_cost;
         }
     };
 
@@ -490,8 +491,7 @@ namespace LPMP {
                                                 thrust::raw_pointer_cast(dist_weights + start_offset),
                                                 thrust::raw_pointer_cast(grad_lo_cost + start_offset),
                                                 thrust::raw_pointer_cast(grad_hi_cost + start_offset),
-                                                thrust::raw_pointer_cast(this->delta_lo_.data()),
-                                                thrust::raw_pointer_cast(this->delta_hi_.data()),
+                                                thrust::raw_pointer_cast(this->delta_lo_hi_.data()),
                                                 thrust::raw_pointer_cast(grad_mm + start_offset),
                                                 thrust::raw_pointer_cast(grad_delta_lo),
                                                 thrust::raw_pointer_cast(grad_delta_hi),
@@ -559,8 +559,8 @@ namespace LPMP {
 
         this->backward_run(false);
 
-        thrust::device_vector<REAL> grad_delta_lo(this->delta_lo_.size(), 0.0);
-        thrust::device_vector<REAL> grad_delta_hi(this->delta_hi_.size(), 0.0);
+        thrust::device_vector<REAL> grad_delta_lo(this->nr_variables(), 0.0);
+        thrust::device_vector<REAL> grad_delta_hi(this->nr_variables(), 0.0);
 
         for (int s = this->nr_hops() - 1; s >= 0; s--)
         {
@@ -609,8 +609,8 @@ namespace LPMP {
 
         this->forward_run();
 
-        thrust::device_vector<REAL> grad_delta_lo(this->delta_lo_.size(), 0.0);
-        thrust::device_vector<REAL> grad_delta_hi(this->delta_hi_.size(), 0.0);
+        thrust::device_vector<REAL> grad_delta_lo(this->nr_variables(), 0.0);
+        thrust::device_vector<REAL> grad_delta_hi(this->nr_variables(), 0.0);
 
         for (int s = 0; s < this->nr_hops(); s++)
         {
@@ -1108,7 +1108,7 @@ namespace LPMP {
         thrust::equal_to<int> binary_pred;
         auto new_end = thrust::reduce_by_key(this->primal_variable_index_sorted_.begin(), this->primal_variable_index_sorted_.end() - this->nr_bdds_, first_val, 
                             thrust::make_discard_iterator(), first_out_val, binary_pred, tuple_sum());
-        assert(thrust::distance(first_out_val, new_end.second) == this->delta_hi_.size());
+        assert(thrust::distance(first_out_val, new_end.second) == this->nr_variables());
 
         // Normalize by number of BDDs (assumes isotropic cost distribution during forward pass).
         auto first = thrust::make_zip_iterator(thrust::make_tuple(grad_lo_pert_out, grad_hi_pert_out, this->num_bdds_per_var_.begin()));

@@ -7,13 +7,13 @@ def validate_input_format(*args):
         assert arg.dtype == torch.get_default_dtype(), f'argument not in {torch.get_default_dtype()} format'
         assert arg.is_contiguous(), 'argument not contiguous'
 
-def ComputePrimalSolution(solvers, lo_costs_batch, hi_costs_batch, def_mm_batch, init_delta, delta_growth_rate, num_itr_lb):
+def ComputePrimalSolution(solvers, lo_costs_batch, hi_costs_batch, def_mm_batch, init_delta, delta_growth_rate, num_itr_lb, verbose = False):
     validate_input_format(lo_costs_batch, hi_costs_batch, def_mm_batch)
     layer_start = 0
     solutions_cpu = []
     for (b, solver) in enumerate(solvers):
         solver.set_solver_costs(lo_costs_batch[layer_start].data_ptr(), hi_costs_batch[layer_start].data_ptr(), def_mm_batch[layer_start].data_ptr())
-        solutions_cpu.append(solver.primal_rounding_incremental(init_delta, delta_growth_rate, num_itr_lb))
+        solutions_cpu.append(solver.primal_rounding_incremental(init_delta, delta_growth_rate, num_itr_lb, verbose))
         layer_start += solver.nr_layers()
     return solutions_cpu
 
@@ -73,12 +73,6 @@ class DualIterations(torch.autograd.Function):
             lb_first_order_hist_ptr = 0
             lb_sec_order_hist_ptr = 0
 
-        if lbfgs_num_itr > 0:
-            grad_lbfgs = torch.empty_like(def_mm_batch)
-            ctx.mark_non_differentiable(grad_lbfgs)
-        else:
-            lbfgs_ptr = 0
-
         is_omega_scalar = torch.numel(omega) == 1
         if not is_omega_scalar:
             validate_input_format(omega)
@@ -92,8 +86,6 @@ class DualIterations(torch.autograd.Function):
                 current_num_itr = max(num_iterations - random.randint(0, num_iterations // 2), 3)
             else:
                 current_num_itr = num_iterations
-            if lbfgs_num_itr > 0:
-                lbfgs_ptr = grad_lbfgs[layer_start].data_ptr()
             if compute_history_for_itrs > 0:
                 sol_avg_out_ptr = sol_avg_out[layer_start].data_ptr()
                 lb_first_order_hist_ptr = lb_first_order_hist[bdd_start].data_ptr()
@@ -102,14 +94,12 @@ class DualIterations(torch.autograd.Function):
                 num_itr = solver.iterations(dist_weights_batch[layer_start].data_ptr(), current_num_itr, 
                                             omega[0].item(), improvement_slope, 0, False,
                                             compute_history_for_itrs, history_avg_beta, sol_avg_out_ptr,
-                                            lb_first_order_hist_ptr, lb_sec_order_hist_ptr,
-                                            lbfgs_num_itr, lbfgs_ptr)
+                                            lb_first_order_hist_ptr, lb_sec_order_hist_ptr)
             else:
                 num_itr = solver.iterations(dist_weights_batch[layer_start].data_ptr(), current_num_itr, 
                                             1.0, improvement_slope, omega[layer_start].data_ptr(), True,
                                             compute_history_for_itrs, history_avg_beta, sol_avg_out_ptr,
-                                            lb_first_order_hist_ptr, lb_sec_order_hist_ptr,
-                                            lbfgs_num_itr, lbfgs_ptr)
+                                            lb_first_order_hist_ptr, lb_sec_order_hist_ptr)
 
             actual_num_itr.append(num_itr)
             solver.get_solver_costs(lo_costs_out[layer_start].data_ptr(), hi_costs_out[layer_start].data_ptr(), def_mm_out[layer_start].data_ptr()) 
@@ -374,7 +364,7 @@ class ComputeLowerBoundperBDD(torch.autograd.Function):
             bdd_start += solver.nr_bdds()
             layer_start += solver.nr_layers()
 
-        return None, grad_lo_costs_in, grad_hi_costs_in
+        return None, grad_lo_costs_in, grad_hi_costs_in, None
 
 class ComputePerBDDSolutionsIdentityBackward(torch.autograd.Function):
     @staticmethod

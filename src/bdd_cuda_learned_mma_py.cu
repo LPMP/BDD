@@ -1,6 +1,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/eigen.h>
 #include <pybind11/stl.h>
+#include "run_solver_util.h"
 #include "bdd_cuda_learned_mma.h"
 #include "incremental_mm_agreement_rounding_cuda.h"
 #include "bdd_branch_instruction.h"
@@ -218,22 +219,9 @@ void set_solver_costs(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long lo_co
 }
 
 template<typename REAL>
-void non_learned_iterations(LPMP::bdd_cuda_learned_mma<REAL>& solver, const float omega, const int max_num_itr, const float improvement_slope) 
+void non_learned_iterations(LPMP::bdd_cuda_learned_mma<REAL>& solver, const float omega, const int max_num_itr, const float improvement_slope, const float time_limit) 
 {
-    const double lb_initial = solver.lower_bound();
-    double lb_prev = lb_initial;
-    double lb_post = lb_prev;
-    for (int itr = 0; itr < max_num_itr; itr++)
-    {
-        solver.iteration(omega);
-        lb_prev = lb_post;
-        lb_post = solver.lower_bound();
-        if(itr == 0)
-            solver.set_initial_lb_change(std::abs(lb_initial - lb_post));
-
-        if (std::abs(lb_prev - lb_post) < improvement_slope * solver.get_initial_lb_change())
-            break;
-    }
+    run_solver(solver, max_num_itr, 0.0, improvement_slope, time_limit);
 }
 
 template<typename REAL>
@@ -354,9 +342,19 @@ void grad_cost_perturbation(LPMP::bdd_cuda_learned_mma<REAL>& solver,
 }
 
 template<typename REAL>
-std::vector<float> primal_rounding_incremental(LPMP::bdd_cuda_learned_mma<REAL>& solver, double init_delta, const double delta_growth_rate, const int num_itr_lb)
+std::vector<float> primal_rounding_incremental_iteration(LPMP::bdd_cuda_learned_mma<REAL>& solver, double cur_delta, const bool verbose = false)
 {
-    std::vector<char> sol = incremental_mm_agreement_rounding_cuda(solver, init_delta, delta_growth_rate, num_itr_lb, false);
+    std::vector<char> sol = perturb_primal_costs(solver, cur_delta, verbose);
+    std::vector<float> solution_f(sol.size());
+    for (int i = 0; i < sol.size(); i++)
+        solution_f[i] = (float) sol[i];
+    return solution_f;
+}
+
+template<typename REAL>
+std::vector<float> primal_rounding_incremental(LPMP::bdd_cuda_learned_mma<REAL>& solver, double init_delta, const double delta_growth_rate, const int num_itr_lb, const bool verbose = false, const int num_rounds = 500)
+{
+    std::vector<char> sol = incremental_mm_agreement_rounding_cuda(solver, init_delta, delta_growth_rate, num_itr_lb, verbose, num_rounds);
     std::vector<float> solution_f(sol.size());
     for (int i = 0; i < sol.size(); i++)
         solution_f[i] = (float) sol[i];
@@ -451,10 +449,11 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
             set_solver_costs(solver, lo_cost_ptr, hi_cost_ptr, def_mm_ptr);
         },"Set the costs i.e., (lo_costs (size = nr_layers()), hi_costs (size = nr_layers()), def_mm_ptr (size = nr_layers()) to set solver state.")
 
-        .def("non_learned_iterations", [](bdd_type_default& solver, const float omega, const int max_num_itr, const float improvement_slope) 
+        .def("non_learned_iterations", [](bdd_type_default& solver, const float omega, const int max_num_itr, const float improvement_slope, const float time_limit) 
         {
-            non_learned_iterations(solver, omega, max_num_itr, improvement_slope);
-        }, "Runs parallel_mma solver for a maximum of max_num_itr iterations and stops earlier if rel. improvement is less than improvement_slop .")
+            non_learned_iterations(solver, omega, max_num_itr, improvement_slope, time_limit);
+        }, "Runs parallel_mma solver for a maximum of max_num_itr iterations and stops earlier if rel. improvement is less than improvement_slope.",
+        py::arg("omega") = 0.5, py::arg("max_num_itr") = 1000, py::arg("improvement_slope") = 1e-6, py::arg("time_limit") = 3600)
 
         .def("iterations", [](bdd_type_default& solver, 
                             const long dist_weights_ptr, 
@@ -556,9 +555,19 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
         }, "During primal rounding calling update_costs(lo_pert, hi_pert) changes the dual costs, the underlying primal objective vector also changes.\n"
             "Here we compute gradients of such pertubation operation assuming that distribution of (lo_pert, hi_pert) was done with isoptropic weights.")
 
-        .def("primal_rounding_incremental", [](bdd_type_default& solver, double init_delta, const double delta_growth_rate, const int num_itr_lb)
+        .def("primal_rounding_incremental_iteration", [](bdd_type_default& solver, double cur_delta, const bool verbose)
         {
-            return primal_rounding_incremental(solver, init_delta, delta_growth_rate, num_itr_lb);
+            return primal_rounding_incremental_iteration(solver, cur_delta, verbose);
+        })
+
+        .def("primal_rounding_incremental", [](bdd_type_default& solver, const int num_rounds, double init_delta, const double delta_growth_rate, const int num_itr_lb, const bool verbose)
+        {
+            return primal_rounding_incremental(solver, init_delta, delta_growth_rate, num_itr_lb, verbose, num_rounds);
+        })
+        
+        .def("print_bdd_info", [](bdd_type_default& solver)
+        {
+            return solver.print_num_bdd_nodes_per_hop();
         });
 
         py::class_<bdd_type_double>(m, "bdd_cuda_learned_mma_double")
@@ -644,10 +653,11 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
             set_solver_costs(solver, lo_cost_ptr, hi_cost_ptr, def_mm_ptr);
         },"Set the costs i.e., (lo_costs (size = nr_layers()), hi_costs (size = nr_layers()), def_mm_ptr (size = nr_layers()) to set solver state.")
 
-        .def("non_learned_iterations", [](bdd_type_double& solver, const float omega, const int max_num_itr, const float improvement_slope) 
+        .def("non_learned_iterations", [](bdd_type_double& solver, const float omega, const int max_num_itr, const float improvement_slope, const float time_limit) 
         {
-            non_learned_iterations(solver, omega, max_num_itr, improvement_slope);
-        }, "Runs parallel_mma solver for a maximum of max_num_itr iterations and stops earlier if rel. improvement is less than improvement_slop .")
+            non_learned_iterations(solver, omega, max_num_itr, improvement_slope, time_limit);
+        }, "Runs parallel_mma solver for a maximum of max_num_itr iterations and stops earlier if rel. improvement is less than improvement_slope.",
+        py::arg("omega") = 0.5, py::arg("max_num_itr") = 1000, py::arg("improvement_slope") = 1e-6, py::arg("time_limit") = 3600)
 
         .def("iterations", [](bdd_type_double& solver, 
                             const long dist_weights_ptr, 
@@ -749,9 +759,19 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
         }, "During primal rounding calling update_costs(lo_pert, hi_pert) changes the dual costs, the underlying primal objective vector also changes.\n"
             "Here we compute gradients of such pertubation operation assuming that distribution of (lo_pert, hi_pert) was done with isoptropic weights.")
 
-        .def("primal_rounding_incremental", [](bdd_type_double& solver, double init_delta, const double delta_growth_rate, const int num_itr_lb)
+        .def("primal_rounding_incremental_iteration", [](bdd_type_double& solver, double cur_delta, const bool verbose)
         {
-            return primal_rounding_incremental(solver, init_delta, delta_growth_rate, num_itr_lb);
+            return primal_rounding_incremental_iteration(solver, cur_delta, verbose);
+        })
+
+        .def("primal_rounding_incremental", [](bdd_type_double& solver, const int num_rounds, double init_delta, const double delta_growth_rate, const int num_itr_lb, const bool verbose)
+        {
+            return primal_rounding_incremental(solver, init_delta, delta_growth_rate, num_itr_lb, verbose, num_rounds);
+        })
+        
+        .def("print_bdd_info", [](bdd_type_double& solver)
+        {
+            return solver.print_num_bdd_nodes_per_hop();
         });
 }
 

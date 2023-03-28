@@ -110,7 +110,11 @@ namespace LPMP {
                     }
 
                     const size_t nr_vars = constraint.coefficients.size();
-                    const size_t max_coeff = *std::max_element(constraint.coefficients.begin(), constraint.coefficients.end());
+                    assert(constraint.coefficients.size() > 0);
+                    const int max_coeff = std::max(
+                            *std::max_element(constraint.coefficients.begin(), constraint.coefficients.end()),
+                            - *std::min_element(constraint.coefficients.begin(), constraint.coefficients.end())
+                            );
                     if(nr_vars <= 64 || max_coeff <= 100) // convert to BDD directly
                     {
                         BDD::node_ref bdd = converter.convert_to_bdd(constraint.coefficients, constraint.ineq, constraint.right_hand_side);
@@ -141,7 +145,7 @@ namespace LPMP {
                         if(constraint_groups == true && input.nr_constraint_groups() > 0)
                             throw std::runtime_error("constraint groups and coefficient decomposition conversion not both supported");
 
-                        std::cout << "[bdd preprocessor] convert inequality " << constraint.identifier << " through coefficient decomposition. max coeff: "<< max_coeff << ", nr_vars: "<<nr_vars<<"\n";
+                        std::cout << "[bdd preprocessor] convert inequality " << constraint.identifier << " through coefficient decomposition. max coeff: "<< max_coeff << ", nr_vars: " << nr_vars << "\n";
                         input.write_lp(std::cout, constraint);
                         auto [bdd, var_split] = converter.coefficient_decomposition_convert_to_bdd(constraint.coefficients, constraint.ineq, constraint.right_hand_side);
 

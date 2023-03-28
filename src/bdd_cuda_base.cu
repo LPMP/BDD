@@ -31,6 +31,7 @@ namespace LPMP {
     template<typename REAL>
     bdd_cuda_base<REAL>::bdd_cuda_base(const BDD::bdd_collection& bdd_col)
     {
+        assert(bdd_col.nr_bdds() > 0);
         initialize(bdd_col);
         thrust::device_vector<int> bdd_hop_dist_root, bdd_depth;
         std::tie(bdd_hop_dist_root, bdd_depth) = populate_bdd_nodes(bdd_col);
@@ -385,14 +386,12 @@ namespace LPMP {
     template<typename REAL>
     void bdd_cuda_base<REAL>::flush_forward_states()
     {
-        MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         forward_state_valid_ = false;
     }
 
     template<typename REAL>
     void bdd_cuda_base<REAL>::flush_backward_states()
     {
-        MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         backward_state_valid_ = false;
     }
 
@@ -400,11 +399,20 @@ namespace LPMP {
     void bdd_cuda_base<REAL>::print_num_bdd_nodes_per_hop()
     {
         int prev = 0;
+        int last_num_nodes = cum_nr_bdd_nodes_per_hop_dist_[0];
+        int last_hop = 0;
         for(int i = 0; i < cum_nr_bdd_nodes_per_hop_dist_.size(); i++)
         {
-            std::cout<<"Hop: "<<i<<", # BDD nodes: "<<cum_nr_bdd_nodes_per_hop_dist_[i] - prev<<std::endl;
+            int current_hop_num_nodes = cum_nr_bdd_nodes_per_hop_dist_[i] - prev;
+            if (current_hop_num_nodes != last_num_nodes)
+            {
+                std::cout<<"Hops: ["<<last_hop<<" - "<<i<<"], # BDD nodes: "<<last_num_nodes<<std::endl;            
+                last_hop = i;
+                last_num_nodes = current_hop_num_nodes;
+            }
             prev = cum_nr_bdd_nodes_per_hop_dist_[i];
         }
+        std::cout<<"Hops: ["<<last_hop<<" - "<<cum_nr_bdd_nodes_per_hop_dist_.size() - 1<<"], # BDD nodes: "<<last_num_nodes<<std::endl;
     }
 
     template<typename REAL>
@@ -463,6 +471,8 @@ namespace LPMP {
     void bdd_cuda_base<REAL>::update_costs(COST_ITERATOR cost_lo_begin, COST_ITERATOR cost_lo_end, COST_ITERATOR cost_hi_begin, COST_ITERATOR cost_hi_end)
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME;
+        assert(std::distance(cost_lo_begin, cost_lo_end) <= this->nr_variables());
+        assert(std::distance(cost_hi_begin, cost_hi_end) <= this->nr_variables());
 
         auto populate_costs = [&](auto cost_begin, auto cost_end, auto bdd_cost_begin, auto bdd_cost_end) {
             thrust::device_vector<REAL> primal_costs(cost_begin, cost_end);
@@ -880,7 +890,7 @@ namespace LPMP {
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         backward_run(false);
-        // Sum costs_from_terminal of all root nodes. Since root nodes are always at the start (unless one row contains > 1 BDD then have to change TODO.)
+        // Sum costs_from_terminal of all root nodes. Since root nodes are always at the start (unless one row contains > 1 BDD then have to change.)
 
         return thrust::reduce(cost_from_terminal_.begin(), cost_from_terminal_.begin() + nr_bdds_, 0.0);
     }

@@ -4,6 +4,7 @@
 #include <array>
 #include <cassert>
 #include <limits>
+#include <stddef.h>
 
 namespace LPMP {
 
