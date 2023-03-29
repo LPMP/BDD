@@ -51,6 +51,19 @@ For computing BDDs for representing constraints and for sequentially visiting va
 * `-o bfs`: Use a breadth-first search through the variable-constraint adjacency matrix to determine a variable ordering starting from the most eccentric node.
 * `-o cuthill`: Use the Cuthill McKee algorithm on the variable-constraint adjacency matrix to determina a variable ordering.
 
+### Python interface
+
+All solvers are exposed to Python. To install Python solver do:
+
+```bash
+git clone git@github.com:LPMP/BDD.git
+cd BDD
+git submodule update --init --recursive
+python setup.py install
+```
+For information about Python interface see [test_bdd_solver_py.py](test/test_bdd_solver_py.py).
+
+
 ## References
 If you use this work please cite
 * [`J. H. Lange and P. Swoboda. Efficient Message Passing for 0–1 ILPs with Binary Decision Diagrams. In ICML 2021.`](http://proceedings.mlr.press/v139/lange21a.html)

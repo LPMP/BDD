@@ -2,7 +2,7 @@ import BDD.ILP_instance_py as ilp_instance
 from BDD.bdd_solver_py import bdd_solver as bdd_solver
 from BDD.bdd_solver_py import bdd_solver_options as bdd_solver_options
 
-def create_two_simplex_problem():
+def create_toy_problem():
     objective = {'x1': 2.0, 'x2': 1.0, 'x3': -1.0, 'x4': 1.0, 'x5': -2.0, 'x6': -5.0}
     constraints = [
         ['C1', {'x1': 1.0, 'x2': 1.0, 'x3': 1.0}, '=', 1.0],
@@ -30,7 +30,7 @@ def create_two_simplex_problem():
         ilp.add_new_constraint(con_name, con_vars, con_coeffs, rhs_value, ineq_type)
     return ilp
 
-ilp = create_two_simplex_problem()
+ilp = create_toy_problem()
 opts = bdd_solver_options(ilp)
 # Or read .lp file from disk as:
 # opts = bdd_solver_options("PATH_TO_LP_FILE.LP")
