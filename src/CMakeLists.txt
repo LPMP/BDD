@@ -93,3 +93,6 @@ add_subdirectory(specialized_solvers)
 
 pybind11_add_module(ILP_instance_py ILP_instance_py.cpp)
 target_link_libraries(ILP_instance_py PRIVATE LPMP-BDD mrf_uai_parser mrf_input)
+
+pybind11_add_module(bdd_solver_py bdd_solver_py.cpp)
+target_link_libraries(bdd_solver_py PRIVATE LPMP-BDD bdd_solver)

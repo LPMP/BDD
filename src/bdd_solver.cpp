@@ -95,6 +95,29 @@ namespace LPMP {
         : bdd_solver_options(args.size()+1, convert_string_to_argv(args).get())
     {}
 
+    bdd_solver_options::bdd_solver_options(const std::string& input_file_path)
+    {
+        ilp = parse_ilp_file(input_file_path);
+    }
+
+    bdd_solver_options::bdd_solver_options(ILP_input& _ilp) : ilp(_ilp) {}
+
+    void bdd_solver_options::set_solver_type(const std::string& solver_type)
+    {
+        if(solver_type == "fastdog_gpu")
+            bdd_solver_impl_ = bdd_solver_impl::mma_cuda;
+        else if(solver_type == "fastdog_cpu")
+            bdd_solver_impl_ = bdd_solver_impl::parallel_mma;
+        else if(solver_type == "fastdog_hybrid")
+            bdd_solver_impl_ = bdd_solver_impl::hybrid_parallel_mma;
+        else
+            std::runtime_error("invalid solver_type specified.");
+        max_iter = 20000;
+        incremental_primal_rounding = true;
+        incremental_initial_perturbation = 1.1;
+        incremental_primal_rounding_num_itr = 150;
+    }
+
     /*
     bdd_solver::bdd_solver(int argc, char** argv)
         : bdd_solver(bdd_solver_options(argc, argv))
@@ -365,7 +388,7 @@ namespace LPMP {
         return permute_min_marginals(mms, options.ilp.get_variable_permutation());
     }
 
-    double bdd_solver::round()
+    std::tuple<double, std::vector<char>> bdd_solver::round()
     {
         if(options.incremental_primal_rounding)
         {
@@ -381,13 +404,13 @@ namespace LPMP {
                             //|| std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<double>>
                             //////////////////////////////////////////
                             )
-                    return incremental_mm_agreement_rounding_iter(s, options.incremental_initial_perturbation, options.incremental_growth_rate, options.incremental_primal_num_itr_lb);
+                    return incremental_mm_agreement_rounding_iter(s, options.incremental_initial_perturbation, options.incremental_growth_rate, options.incremental_primal_num_itr_lb, options.incremental_primal_rounding_num_itr);
                     else if constexpr( // GPU rounding
                             std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<float>>
                             || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<double>>
                             )
                     {
-                    return s.incremental_mm_agreement_rounding(options.incremental_initial_perturbation, options.incremental_growth_rate, options.incremental_primal_num_itr_lb);
+                    return s.incremental_mm_agreement_rounding(options.incremental_initial_perturbation, options.incremental_growth_rate, options.incremental_primal_num_itr_lb, options.incremental_primal_rounding_num_itr);
                     }
 
                     {
@@ -398,7 +421,7 @@ namespace LPMP {
 
             const double obj = options.ilp.evaluate(sol.begin(), sol.end());
             std::cout << "[incremental primal rounding] solution objective = " << obj << "\n";
-            return obj;
+            return {obj, sol};
         }
         else if(options.wedelin_primal_rounding)
         {
@@ -436,12 +459,12 @@ namespace LPMP {
 
             const double obj = options.ilp.evaluate(sol.begin(), sol.end());
             std::cout << "[incremental primal rounding] solution objective = " << obj << "\n";
-            return obj;
+            return {obj, sol};
 
         }
         else // no rounding
         {
-            return std::numeric_limits<double>::infinity();
+            return {std::numeric_limits<double>::infinity(), std::vector<char>{}};
         }
     }
 

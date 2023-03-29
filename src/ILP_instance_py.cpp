@@ -79,10 +79,10 @@ PYBIND11_MODULE(ILP_instance_py, m) {
         .def(py::init<>())
         .def("nr_constraints",&LPMP::ILP_input::nr_constraints)
         .def("nr_variables",&LPMP::ILP_input::nr_variables)
-        .def("evaluate", [](const LPMP::ILP_input& ilp, const std::vector<char>& sol) { 
+        .def("evaluate", [](const LPMP::ILP_input& ilp, const std::vector<int>& sol) { 
                 return ilp.evaluate(sol.begin(), sol.end());
                 })
-        .def("feasible", [](const LPMP::ILP_input& ilp, const std::vector<char>& sol) { 
+        .def("feasible", [](const LPMP::ILP_input& ilp, const std::vector<int>& sol) { 
                 return ilp.feasible(sol.begin(), sol.end());
                 })
         .def("export_constraints", &LPMP::ILP_input::export_constraints)

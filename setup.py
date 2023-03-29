@@ -97,7 +97,7 @@ class CMakeBuild(build_ext):
                     ]
         if is_tool('ninja'):
             #   '-DCMAKE_GENERATOR=Ninja' # Use Ninja instead of make for faster compilation.
-            cmake_args += '-DCMAKE_GENERATOR=Ninja'
+            cmake_args.append('-DCMAKE_GENERATOR=Ninja')
 
         cfg = 'Debug' if self.debug else 'Release'
         build_args = ['--config', cfg]
@@ -130,7 +130,8 @@ setup(
     ext_package='BDD',
     ext_modules=[CMakeExtension(name='bdd_mp_py'), 
                 CMakeExtension(name='ILP_instance_py'),
-                CMakeExtension(name='bdd_cuda_learned_mma_py')],
+                CMakeExtension(name='bdd_cuda_learned_mma_py'),
+                CMakeExtension(name='bdd_solver_py')],
     py_modules=['bdd_cuda_torch'],
     cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,

@@ -44,7 +44,7 @@ namespace LPMP {
     }
 
     template<typename SOLVER>
-        std::vector<char> incremental_mm_agreement_rounding_iter(SOLVER& s, double init_delta = std::numeric_limits<double>::infinity(), const double delta_growth_rate = 1.1, const int num_itr_lb = 100)
+        std::vector<char> incremental_mm_agreement_rounding_iter(SOLVER& s, double init_delta = std::numeric_limits<double>::infinity(), const double delta_growth_rate = 1.1, const int num_itr_lb = 100, const int num_rounding_itr = 500)
         {
             MEASURE_FUNCTION_EXECUTION_TIME;
             assert(init_delta > 0.0);
@@ -63,7 +63,7 @@ namespace LPMP {
             //std::mt19937 gen(rd);
             std::default_random_engine gen{static_cast<long unsigned int>(0)}; // deterministic seed for repeatable experiments
 
-            for(size_t round=0; round<500; ++round)
+            for(size_t round=0; round<num_rounding_itr; ++round)
             {
                 cur_delta = std::min(cur_delta*delta_growth_rate, 1e6);
                 const auto time = std::chrono::steady_clock::now();

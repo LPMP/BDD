@@ -116,10 +116,10 @@ namespace LPMP {
     }
 
     template<typename REAL>
-    std::vector<char> bdd_cuda<REAL>::incremental_mm_agreement_rounding(const double init_delta, const double delta_growth_rate, const int num_itr_lb)
+    std::vector<char> bdd_cuda<REAL>::incremental_mm_agreement_rounding(const double init_delta, const double delta_growth_rate, const int num_itr_lb, const int num_rounds)
     {
 #ifdef WITH_CUDA
-        return incremental_mm_agreement_rounding_cuda(pimpl->pmma, init_delta, delta_growth_rate, num_itr_lb);
+        return incremental_mm_agreement_rounding_cuda(pimpl->pmma, init_delta, delta_growth_rate, num_itr_lb, true, num_rounds);
 #endif
         return {};
     }

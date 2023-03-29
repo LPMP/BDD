@@ -31,6 +31,9 @@ namespace LPMP {
         template<typename FILE_INPUT_FUNCTION, typename STRING_INPUT_FUNCTION>
             bdd_solver_options(int argc, char** argv, FILE_INPUT_FUNCTION file_input_function, STRING_INPUT_FUNCTION string_input_function);
         bdd_solver_options() {};
+        bdd_solver_options(const std::string& ilp_file_path);
+        bdd_solver_options(ILP_input& _ilp);
+        void set_solver_type(const std::string& solver_type);
 
         std::string input_file;
         std::string input_string;
@@ -59,6 +62,7 @@ namespace LPMP {
         double incremental_initial_perturbation = std::numeric_limits<double>::infinity();
         double incremental_growth_rate = 1.2;
         int incremental_primal_num_itr_lb = 500;
+        int incremental_primal_rounding_num_itr = 500;
         //////////////////////////////////////
 
         // Wedelin rounding //
@@ -91,7 +95,7 @@ namespace LPMP {
             //bdd_solver(const std::vector<std::string>& args);
 
             void solve();
-            double round();
+            std::tuple<double, std::vector<char>> round();
             void tighten();
             double lower_bound();
             void fix_variable(const size_t var, const bool value);
@@ -201,6 +205,9 @@ namespace LPMP {
             ->check(CLI::Range(1.0,std::numeric_limits<double>::max()));
 
         incremental_rounding_param_group->add_option("--incremental_primal_num_itr_lb", incremental_primal_num_itr_lb, "number of iterations of dual optimization during incremental primal rounding")
+            ->check(CLI::Range(1,std::numeric_limits<int>::max()));
+
+        incremental_rounding_param_group->add_option("--incremental_primal_rounding_num_itr", incremental_primal_rounding_num_itr, "maximum number of incremental primal rounding iterations")
             ->check(CLI::Range(1,std::numeric_limits<int>::max()));
 
         auto wedelin_rounding_param_group = app.add_option_group("Wedelin primal rounding parameters", "parameters for rounding a primal solution");
