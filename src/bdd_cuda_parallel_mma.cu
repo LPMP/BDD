@@ -161,8 +161,9 @@ namespace LPMP {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME;
         if(delta_lo_hi_.size() == 0)
             delta_lo_hi_ = thrust::device_vector<REAL>(this->nr_variables() * 2, 0.0);
-
-        if (itr_count_ > 5 && itr_count_ % 1 == 0)
+        
+        const int lbfgs_freq = 5;
+        if (itr_count_ > 5 && itr_count_ % lbfgs_freq == 0)
         {
             REAL lb_pre = this->lower_bound();
             thrust::device_vector<REAL> grad_lbfgs(this->nr_layers());
@@ -188,7 +189,7 @@ namespace LPMP {
         normalize_delta(delta_lo_hi_);
         backward_mm(omega, delta_lo_hi_);
         normalize_delta(delta_lo_hi_);
-        if (itr_count_ > 5 && itr_count_ % 1 == 0)
+        if (itr_count_ > 5 && itr_count_ % lbfgs_freq == 0)
         {
             this->update_bfgs_states(lbfgs_solver_);
         }
