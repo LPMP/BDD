@@ -17,6 +17,18 @@ def ComputePrimalSolution(solvers, lo_costs_batch, hi_costs_batch, def_mm_batch,
         layer_start += solver.nr_layers()
     return solutions_cpu
 
+def GetMarginalProbability(solvers, lo_costs_batch, hi_costs_batch):
+    validate_input_format(lo_costs_batch, hi_costs_batch)
+    marg_prob_lo = torch.zeros_like(lo_costs_batch)
+    marg_prob_hi = torch.empty_like(hi_costs_batch)
+    layer_start = 0
+    for (b, solver) in enumerate(solvers):
+        solver.set_solver_costs(lo_costs_batch[layer_start].data_ptr(), hi_costs_batch[layer_start].data_ptr(), marg_prob_lo[layer_start].data_ptr())
+        solver.sum_marginals(marg_prob_lo[layer_start].data_ptr(), marg_prob_hi[layer_start].data_ptr())
+        layer_start += solver.nr_layers()
+    prob_hi = torch.nn.Softmax(dim = 1)(torch.stack((marg_prob_lo, marg_prob_hi), 1))[:, 1]
+    return prob_hi
+
 def ComputePerBDDSolutions(solvers, lo_costs_batch, hi_costs_batch):
     validate_input_format(lo_costs_batch, hi_costs_batch)
     per_bdd_solution_hi = torch.zeros_like(lo_costs_batch) # Initialize by 0's to also copy to deferred min-marginals.

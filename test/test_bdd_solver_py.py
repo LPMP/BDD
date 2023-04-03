@@ -38,7 +38,7 @@ opts = bdd_solver_options(ilp)
 # Set solver options from preset categories:
 opts.auto_set_parameters("fastdog_gpu") # valid options are "fastdog_cpu", "fastdog_gpu", "fastdog_hybrid"
 
-# OR manually set options:
+# Override any parameters (only if required):
 # opts.dual_max_iter = 20000 # maximum allowed number of iterations, solver can terminate early due to convergence criteria below:
 # opts.dual_tolerance = 1e-6
 # opts.dual_improvement_slope = 1e-9

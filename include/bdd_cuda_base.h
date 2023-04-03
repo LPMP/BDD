@@ -81,6 +81,9 @@ namespace LPMP {
             two_dim_variable_array<std::array<double,2>> min_marginals();
             std::tuple<thrust::device_vector<int>, thrust::device_vector<REAL>, thrust::device_vector<REAL>> min_marginals_cuda(bool get_sorted = true);
 
+            two_dim_variable_array<std::array<double,2>> sum_marginals(bool get_log_probs = true);
+            std::tuple<thrust::device_vector<int>, thrust::device_vector<REAL>, thrust::device_vector<REAL>> sum_marginals_cuda(bool get_sorted = true, bool get_log_probs = true);
+
             void bdds_solution_cuda(thrust::device_ptr<REAL> sol); // Computes argmin for each BDD separately and sets in sol.
             two_dim_variable_array<REAL> bdds_solution(); // Returns the solution on CPU and laid out in similar way as the output of min_marginals()
 
@@ -126,9 +129,6 @@ namespace LPMP {
             const thrust::device_vector<int> get_primal_variable_index() const { return primal_variable_index_; }
             const thrust::device_vector<int> get_bdd_index() const { return bdd_index_; }
             const thrust::device_vector<int>& get_num_bdds_per_var() const {return num_bdds_per_var_; }
-
-            void distribute_delta(thrust::device_ptr<REAL> def_min_marg_diff_ptr);
-            void distribute_delta();
 
             void terminal_layer_indices(thrust::device_ptr<int> indices) const; // indices should point to memory of size nr_bdds()
 

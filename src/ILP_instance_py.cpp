@@ -89,6 +89,7 @@ PYBIND11_MODULE(ILP_instance_py, m) {
         .def("objective", [](const LPMP::ILP_input& ilp) { return ilp.objective(); })
         .def("get_var_name", &LPMP::ILP_input::get_var_name)
         .def("get_var_index", &LPMP::ILP_input::get_var_index)
+        .def("preprocess", &LPMP::ILP_input::preprocess)
         .def("node_constraint_incidence_matrix", [](const LPMP::ILP_input& ilp) { 
                 return std::make_tuple(
                         node_constraint_incidence_matrix(ilp),

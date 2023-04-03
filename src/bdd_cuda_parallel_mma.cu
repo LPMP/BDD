@@ -199,13 +199,13 @@ namespace LPMP {
     }
 
     template<typename REAL>
-        void bdd_cuda_parallel_mma<REAL>::forward_mm(const REAL omega, thrust::device_vector<REAL>& delta_lo_hi)
-        {
-            MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME2("cuda mma forward mma");
-            if(!this->backward_state_valid_)
-                this->backward_run(false); //For the first iteration need to have costs from terminal. 
+    void bdd_cuda_parallel_mma<REAL>::forward_mm(const REAL omega, thrust::device_vector<REAL>& delta_lo_hi)
+    {
+        MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME2("cuda mma forward mma");
+        if(!this->backward_state_valid_)
+            this->backward_run(false); //For the first iteration need to have costs from terminal. 
 
-            assert(delta_lo_hi.size() == 2 * this->nr_variables());
+        assert(delta_lo_hi.size() == 2 * this->nr_variables());
 
         // Clear states.
         this->flush_costs_from_root();
@@ -293,51 +293,51 @@ namespace LPMP {
     }
 
     template<typename REAL>
-        void bdd_cuda_parallel_mma<REAL>::backward_mm(const REAL omega, thrust::device_vector<REAL>& delta_lo_hi)
+    void bdd_cuda_parallel_mma<REAL>::backward_mm(const REAL omega, thrust::device_vector<REAL>& delta_lo_hi)
+    {
+        MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME2("cuda mma backward mma");
+        assert(this->forward_state_valid_); 
+
+        assert(delta_lo_hi.size() == 2 * this->nr_variables());
+
+        flush_mm(this->deffered_mm_diff_.data());
+
+        for (int s = this->cum_nr_bdd_nodes_per_hop_dist_.size() - 2; s >= 0; s--)
         {
-            MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME2("cuda mma backward mma");
-            assert(this->forward_state_valid_); 
+            // 1. Compute min-marginals using costs from root, costs from terminal and hi_costs, lo_costs for current hop
+            min_marginals_from_directional_costs(s, omega);
 
-            assert(delta_lo_hi.size() == 2 * this->nr_variables());
+            const int start_offset = s > 0 ? this->cum_nr_bdd_nodes_per_hop_dist_[s - 1] : 0;
 
-            flush_mm(this->deffered_mm_diff_.data());
+            const int cur_num_bdd_nodes = this->nr_bdd_nodes(s);
+            const int blockCount = ceil(cur_num_bdd_nodes / (REAL) NUM_THREADS_CUDA);
 
-            for (int s = this->cum_nr_bdd_nodes_per_hop_dist_.size() - 2; s >= 0; s--)
-            {
-                // 1. Compute min-marginals using costs from root, costs from terminal and hi_costs, lo_costs for current hop
-                min_marginals_from_directional_costs(s, omega);
+            // 2. Subtract from hi_costs, update costs from terminal.
+            backward_step_with_solve<<<blockCount, NUM_THREADS_CUDA>>>(cur_num_bdd_nodes, start_offset,
+                    thrust::raw_pointer_cast(this->lo_bdd_node_index_.data()),
+                    thrust::raw_pointer_cast(this->hi_bdd_node_index_.data()),
+                    thrust::raw_pointer_cast(this->bdd_node_to_layer_map_.data()),
+                    thrust::raw_pointer_cast(this->primal_variable_index_.data()),
+                    thrust::raw_pointer_cast(delta_lo_hi.data()),
+                    thrust::raw_pointer_cast(this->deffered_mm_diff_.data()),
+                    thrust::raw_pointer_cast(this->lo_cost_.data()),
+                    thrust::raw_pointer_cast(this->hi_cost_.data()),
+                    thrust::raw_pointer_cast(lo_cost_out_.data()),
+                    thrust::raw_pointer_cast(hi_cost_out_.data()),
+                    thrust::raw_pointer_cast(this->cost_from_terminal_.data()));
+        }
+        thrust::swap(this->lo_cost_, lo_cost_out_);
+        thrust::swap(this->hi_cost_, hi_cost_out_);
 
-                const int start_offset = s > 0 ? this->cum_nr_bdd_nodes_per_hop_dist_[s - 1] : 0;
+        compute_delta(this->deffered_mm_diff_.data(), delta_lo_hi.data());
 
-                const int cur_num_bdd_nodes = this->nr_bdd_nodes(s);
-                const int blockCount = ceil(cur_num_bdd_nodes / (REAL) NUM_THREADS_CUDA);
-
-                // 2. Subtract from hi_costs, update costs from terminal.
-                backward_step_with_solve<<<blockCount, NUM_THREADS_CUDA>>>(cur_num_bdd_nodes, start_offset,
-                        thrust::raw_pointer_cast(this->lo_bdd_node_index_.data()),
-                        thrust::raw_pointer_cast(this->hi_bdd_node_index_.data()),
-                        thrust::raw_pointer_cast(this->bdd_node_to_layer_map_.data()),
-                        thrust::raw_pointer_cast(this->primal_variable_index_.data()),
-                        thrust::raw_pointer_cast(delta_lo_hi.data()),
-                        thrust::raw_pointer_cast(this->deffered_mm_diff_.data()),
-                        thrust::raw_pointer_cast(this->lo_cost_.data()),
-                        thrust::raw_pointer_cast(this->hi_cost_.data()),
-                        thrust::raw_pointer_cast(lo_cost_out_.data()),
-                        thrust::raw_pointer_cast(hi_cost_out_.data()),
-                        thrust::raw_pointer_cast(this->cost_from_terminal_.data()));
-            }
-            thrust::swap(this->lo_cost_, lo_cost_out_);
-            thrust::swap(this->hi_cost_, hi_cost_out_);
-
-            compute_delta(this->deffered_mm_diff_.data(), delta_lo_hi.data());
-
-            this->flush_forward_states();
-            this->backward_state_valid_ = true;
+        this->flush_forward_states();
+        this->backward_state_valid_ = true;
 
 #ifndef NDEBUG
-            cudaDeviceSynchronize();  // Not necessary, only to compute exact timing of this function.
+        cudaDeviceSynchronize();  // Not necessary, only to compute exact timing of this function.
 #endif
-        }
+    }
 
     template<typename REAL> struct pos_part
     {
@@ -422,6 +422,49 @@ namespace LPMP {
 
         thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + 2 * this->num_bdds_per_var_.size(), normalize_delta_func);
     }
+
+    template<typename REAL>
+    struct distribute_deffered_mm_diff_func {
+        const int* primal_index;
+        const REAL* deffered_mm_diff;
+        REAL* lo_cost;
+        REAL* hi_cost;
+        __host__ __device__ void operator()(const int layer_index)
+        {
+            const int primal_var = primal_index[layer_index];
+            if (primal_var == INT_MAX)
+                return; // terminal node.
+            
+            const REAL current_mm_diff = deffered_mm_diff[layer_index];
+            if (current_mm_diff > 0)
+                hi_cost[layer_index] += current_mm_diff;
+            else
+                lo_cost[layer_index] -= current_mm_diff;
+        }
+    };
+
+    template<typename REAL>
+    void bdd_cuda_parallel_mma<REAL>::distribute_delta(thrust::device_ptr<REAL> def_min_marg_diff_ptr)
+    {     
+        distribute_deffered_mm_diff_func<REAL> d_mm_func({
+            thrust::raw_pointer_cast(this->primal_variable_index_.data()),
+            thrust::raw_pointer_cast(def_min_marg_diff_ptr),
+            thrust::raw_pointer_cast(this->lo_cost_.data()),
+            thrust::raw_pointer_cast(this->hi_cost_.data())});
+
+        thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + this->nr_layers(), d_mm_func);
+        thrust::fill(def_min_marg_diff_ptr, def_min_marg_diff_ptr + this->nr_layers(), 0.0f);
+        this->flush_forward_states();
+        this->flush_backward_states();
+        thrust::fill(delta_lo_hi_.begin(), delta_lo_hi_.end(), 0.0);
+    }
+
+    template<typename REAL>
+    void bdd_cuda_parallel_mma<REAL>::distribute_delta()
+    {
+        distribute_delta(this->deffered_mm_diff_.data());
+    }
+
 
     template<typename REAL>
     void bdd_cuda_parallel_mma<REAL>::flush_mm(thrust::device_ptr<REAL> mm_diff_ptr)
