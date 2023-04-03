@@ -314,11 +314,11 @@ void all_min_marginal_differences(LPMP::bdd_cuda_learned_mma<REAL>& solver,const
 }
 
 template<typename REAL>
-void sum_marginals(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long sum_lo_out_ptr, const long sum_hi_out_ptr)
+void sum_marginals(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long sum_lo_out_ptr, const long sum_hi_out_ptr, const bool get_logits)
 {
     thrust::device_ptr<REAL> sum_lo_out_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<REAL*>(sum_lo_out_ptr));
     thrust::device_ptr<REAL> sum_hi_out_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<REAL*>(sum_hi_out_ptr));
-    const auto sum_ms = solver.sum_marginals_cuda(false, true);
+    const auto sum_ms = solver.sum_marginals_cuda(false, get_logits);
     const auto& sum_m_0 = std::get<1>(sum_ms);
     const auto& sum_m_1 = std::get<2>(sum_ms);
     thrust::copy(sum_m_0.begin(), sum_m_0.end(), sum_lo_out_ptr_thrust);
@@ -536,9 +536,9 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
             all_min_marginal_differences(solver, mm_diff_out_ptr);
         }, "Computes min-marginal differences = (m^1 - m^0) for ALL dual variables and sets in memory pointed to by *mm_diff_out_ptr.")
 
-        .def("sum_marginals", [](bdd_type_default& solver, const long sum_marg_lo_out_ptr, const long sum_marg_hi_out_ptr)
+        .def("sum_marginals", [](bdd_type_default& solver, const long sum_marg_lo_out_ptr, const long sum_marg_hi_out_ptr, const bool get_logits)
         {
-            sum_marginals(solver, sum_marg_lo_out_ptr, sum_marg_hi_out_ptr);
+            sum_marginals(solver, sum_marg_lo_out_ptr, sum_marg_hi_out_ptr, get_logits);
         }, "Computes sum-marginals (logits) lo and hi. Non-differentiable for now.")
 
         .def("grad_all_min_marginal_differences", [](bdd_type_default& solver, 
@@ -743,9 +743,9 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
             all_min_marginal_differences(solver, mm_diff_out_ptr);
         }, "Computes min-marginal differences = (m^1 - m^0) for ALL dual variables and sets in memory pointed to by *mm_diff_out_ptr.")
 
-        .def("sum_marginals", [](bdd_type_double& solver, const long sum_marg_lo_out_ptr, const long sum_marg_hi_out_ptr)
+        .def("sum_marginals", [](bdd_type_double& solver, const long sum_marg_lo_out_ptr, const long sum_marg_hi_out_ptr, const bool get_logits)
         {
-            sum_marginals(solver, sum_marg_lo_out_ptr, sum_marg_hi_out_ptr);
+            sum_marginals(solver, sum_marg_lo_out_ptr, sum_marg_hi_out_ptr, get_logits);
         }, "Computes sum-marginals (logits) lo and hi. Non-differentiable for now.")
 
         .def("grad_all_min_marginal_differences", [](bdd_type_double& solver, 
