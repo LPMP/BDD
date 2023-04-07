@@ -104,7 +104,8 @@ namespace LPMP {
             void grad_lower_bound_per_bdd(
                 thrust::device_ptr<REAL> grad_lb_per_bdd, // Input: incoming grad w.r.t lower bound per BDD.
                 thrust::device_ptr<REAL> grad_lo_cost_out, // Gradients w.r.t lo costs
-                thrust::device_ptr<REAL> grad_hi_cost_out // Gradients w.r.t hi costs
+                thrust::device_ptr<REAL> grad_hi_cost_out, // Gradients w.r.t hi costs
+                const bool compute_smooth_lb = false
             );
 
             void set_initial_lb_change(const double val) {

@@ -1130,13 +1130,52 @@ namespace LPMP {
     };
 
     template<typename REAL>
+    struct compute_prob_from_sm {
+        const int* primal_index;
+        const REAL* sum_m_lo;
+        const REAL* sum_m_hi;
+        REAL* prob_hi;
+        const size_t nr_vars;
+        __host__ __device__ void operator()(const int layer_index)
+        {
+            const int primal = primal_index[layer_index];
+            if (primal >= nr_vars)
+            {
+                prob_hi[layer_index] = 0.0;
+            }
+            else
+            {
+                const REAL smlo = sum_m_lo[layer_index];
+                const REAL smhi = sum_m_hi[layer_index];
+                const REAL c = max(smlo, smhi);
+                prob_hi[layer_index] = exp(smhi - c) / (exp(smhi - c) + exp(smlo - c));
+            }
+        }
+    };
+
+    template<typename REAL>
     void bdd_cuda_learned_mma<REAL>::grad_lower_bound_per_bdd(
         thrust::device_ptr<REAL> grad_lb_per_bdd, // Input: incoming grad w.r.t lower bound per BDD.
         thrust::device_ptr<REAL> grad_lo_cost_out, // Gradients w.r.t lo costs
-        thrust::device_ptr<REAL> grad_hi_cost_out // Gradients w.r.t hi costs
+        thrust::device_ptr<REAL> grad_hi_cost_out, // Gradients w.r.t hi costs
+        const bool compute_smooth_lb
     )
     {
-        this->bdds_solution_cuda(grad_hi_cost_out);
+        if (!compute_smooth_lb)
+            this->bdds_solution_cuda(grad_hi_cost_out);
+        else
+        {
+            const auto sum_ms = this->sum_marginals_cuda(false, true);
+            thrust::device_vector<REAL> sum_m_0 = std::get<1>(sum_ms);
+            thrust::device_vector<REAL> sum_m_1 = std::get<2>(sum_ms);
+            compute_prob_from_sm<REAL> prob_hi_func({
+                thrust::raw_pointer_cast(this->primal_variable_index_.data()),
+                thrust::raw_pointer_cast(sum_m_0.data()), thrust::raw_pointer_cast(sum_m_1.data()),
+                thrust::raw_pointer_cast(grad_hi_cost_out), 
+                this->nr_variables()
+            });
+            thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + this->nr_layers(), prob_hi_func);
+        }
         // Now multiply each BDD solution by corresponding gradient dL / d lb_per_bdd.
         scale_grad_lb<REAL> func({thrust::raw_pointer_cast(this->primal_variable_index_.data()),
                                 thrust::raw_pointer_cast(this->bdd_index_.data()), 

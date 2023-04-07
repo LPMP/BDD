@@ -295,12 +295,12 @@ void grad_distribute_delta(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long 
 }
 
 template<typename REAL>
-void grad_lower_bound_per_bdd(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long grad_lb_per_bdd, const long grad_lo_cost_ptr, const long grad_hi_cost_ptr)
+void grad_lower_bound_per_bdd(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long grad_lb_per_bdd, const long grad_lo_cost_ptr, const long grad_hi_cost_ptr, const bool smooth_lb)
 {
     thrust::device_ptr<REAL> grad_lb_per_bdd_thrust = thrust::device_pointer_cast(reinterpret_cast<REAL*>(grad_lb_per_bdd));
     thrust::device_ptr<REAL> grad_lo_cost_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<REAL*>(grad_lo_cost_ptr));
     thrust::device_ptr<REAL> grad_hi_cost_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<REAL*>(grad_hi_cost_ptr));
-    solver.grad_lower_bound_per_bdd(grad_lb_per_bdd_thrust, grad_lo_cost_ptr_thrust, grad_hi_cost_ptr_thrust);
+    solver.grad_lower_bound_per_bdd(grad_lb_per_bdd_thrust, grad_lo_cost_ptr_thrust, grad_hi_cost_ptr_thrust, smooth_lb);
 }
 
 template<typename REAL>
@@ -526,9 +526,9 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
             grad_distribute_delta(solver, grad_lo_cost_ptr, grad_hi_cost_ptr, grad_def_mm_out_ptr);
         }, "Backprop. through distribute_delta.")
         
-        .def("grad_lower_bound_per_bdd", [](bdd_type_default& solver, const long grad_lb_per_bdd, const long grad_lo_cost_ptr, const long grad_hi_cost_ptr)
+        .def("grad_lower_bound_per_bdd", [](bdd_type_default& solver, const long grad_lb_per_bdd, const long grad_lo_cost_ptr, const long grad_hi_cost_ptr, const bool smooth_lb)
         {
-            grad_lower_bound_per_bdd(solver, grad_lb_per_bdd, grad_lo_cost_ptr, grad_hi_cost_ptr);
+            grad_lower_bound_per_bdd(solver, grad_lb_per_bdd, grad_lo_cost_ptr, grad_hi_cost_ptr, smooth_lb);
         }, "Backprop. through lower bound per BDD.")
         
         .def("all_min_marginal_differences", [](bdd_type_default& solver, const long mm_diff_out_ptr)
@@ -733,9 +733,9 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
             grad_distribute_delta(solver, grad_lo_cost_ptr, grad_hi_cost_ptr, grad_def_mm_out_ptr);
         }, "Backprop. through distribute_delta.")
         
-        .def("grad_lower_bound_per_bdd", [](bdd_type_double& solver, const long grad_lb_per_bdd, const long grad_lo_cost_ptr, const long grad_hi_cost_ptr)
+        .def("grad_lower_bound_per_bdd", [](bdd_type_double& solver, const long grad_lb_per_bdd, const long grad_lo_cost_ptr, const long grad_hi_cost_ptr, const bool smooth_lb)
         {
-            grad_lower_bound_per_bdd(solver, grad_lb_per_bdd, grad_lo_cost_ptr, grad_hi_cost_ptr);
+            grad_lower_bound_per_bdd(solver, grad_lb_per_bdd, grad_lo_cost_ptr, grad_hi_cost_ptr, smooth_lb);
         }, "Backprop. through lower bound per BDD.")
         
         .def("all_min_marginal_differences", [](bdd_type_double& solver, const long mm_diff_out_ptr)
