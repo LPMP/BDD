@@ -338,13 +338,14 @@ class PerturbPrimalCosts(torch.autograd.Function):
 
 class ComputeLowerBoundperBDD(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, solvers, lo_costs_batch, hi_costs_batch):
+    def forward(ctx, solvers, lo_costs_batch, hi_costs_batch, smooth_gradients_temp = 0.0):
         validate_input_format(lo_costs_batch, hi_costs_batch)
         assert(lo_costs_batch.dim() == 1)
         assert(lo_costs_batch.shape == hi_costs_batch.shape)
 
         ctx.set_materialize_grads(False)
         ctx.solvers = solvers
+        ctx.smooth_gradients_temp = smooth_gradients_temp
         ctx.save_for_backward(lo_costs_batch, hi_costs_batch)
         mm_diff_batch = torch.zeros_like(lo_costs_batch)
         num_bdds_batch = sum([s.nr_bdds() for s in solvers])
@@ -372,12 +373,18 @@ class ComputeLowerBoundperBDD(torch.autograd.Function):
         grad_hi_costs_in = torch.empty_like(hi_costs_batch)
         layer_start = 0
         bdd_start = 0
+        smooth_gradients = ctx.smooth_gradients_temp > 0 
+        if smooth_gradients:
+            lo_costs_batch = lo_costs_batch.clone() / ctx.smooth_gradients_temp
+            hi_costs_batch = hi_costs_batch.clone() / ctx.smooth_gradients_temp
+
         for (b, solver) in enumerate(solvers):
             solver.set_solver_costs(lo_costs_batch[layer_start].data_ptr(), hi_costs_batch[layer_start].data_ptr(), grad_lo_costs_in[layer_start].data_ptr())
             try:
                 solver.grad_lower_bound_per_bdd(grad_lb_per_bdd_batch[bdd_start].data_ptr(), 
                                                 grad_lo_costs_in[layer_start].data_ptr(), 
-                                                grad_hi_costs_in[layer_start].data_ptr())
+                                                grad_hi_costs_in[layer_start].data_ptr(),
+                                                smooth_gradients)
             except Exception as e:
                 print(e)
                 print(f'Error in grad_lb')
