@@ -45,7 +45,6 @@ namespace LPMP {
                 initial_rho_inv = rho_inv;
                 initial_rho_inv_valid = true;
             }
-            std::cout<<"rho_inv / initial_rho_inv: "<<rho_inv / initial_rho_inv<<"\n";
             if (rho_inv / initial_rho_inv > 1e-8) // otherwise, skip the iterate as curvature condition is not strongly satisfied.
             {
                 rho_inv_history[next_insertion_index] = rho_inv;
@@ -150,7 +149,6 @@ namespace LPMP {
     template<typename REAL>
     bool lbfgs_cuda<REAL>::update_possible()
     {
-        std::cout<<"[lbfgs] num_history "<<num_history<<"\n";
         if (num_history < m)
             return false;
         return true;

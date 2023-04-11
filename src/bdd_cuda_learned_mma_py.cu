@@ -221,6 +221,7 @@ void set_solver_costs(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long lo_co
 template<typename REAL>
 void non_learned_iterations(LPMP::bdd_cuda_learned_mma<REAL>& solver, const float omega, const int max_num_itr, const float improvement_slope, const float time_limit) 
 {
+    solver.distribute_delta(); // cuda parallel mma takes delta as input not, def mm. So transfer def mm to costs.
     run_solver(solver, max_num_itr, 0.0, improvement_slope, time_limit);
 }
 

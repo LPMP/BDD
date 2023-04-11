@@ -184,7 +184,6 @@ namespace LPMP {
         if(this->itr_count_ == 0)
             this->set_initial_lb_change(std::abs(this->lower_bound() - lb_initial));
 
-        std::cout<<"this->lbfgs_step_size_: "<<this->lbfgs_step_size_<<", do_lbfgs: "<<do_lbfgs<<"\n";
         if (do_lbfgs)
             this->update_bfgs_states(this->deffered_mm_diff_.data());
         this->itr_count_++;
@@ -545,23 +544,6 @@ namespace LPMP {
         if (!projected)
             return;
 
-        // Make grad_lbfgs feasible.
-        thrust::device_vector<REAL> delta_grad(this->nr_variables());
-        auto first_val = thrust::make_permutation_iterator(grad_lbfgs.begin(), this->primal_variable_sorting_order_.begin());
-        auto first_out_val = delta_grad.begin();
-
-        thrust::equal_to<int> binary_pred;
-        auto new_end = thrust::reduce_by_key(this->primal_variable_index_sorted_.begin(), this->primal_variable_index_sorted_.end() - this->nr_bdds_, first_val, 
-                            thrust::make_discard_iterator(), first_out_val, binary_pred, thrust::plus<REAL>());
-
-        maintain_feasibility_grad<REAL> maintain_feasibility_grad_func({
-            thrust::raw_pointer_cast(this->primal_variable_index_.data()),
-            thrust::raw_pointer_cast(this->num_bdds_per_var_.data()),
-            thrust::raw_pointer_cast(delta_grad.data()),
-            thrust::raw_pointer_cast(grad_lbfgs.data())});
-
-        thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + this->nr_layers(), maintain_feasibility_grad_func);
-
         const REAL lb_pre = this->lower_bound();
         auto calculate_rel_change = [&](const REAL lb_post) {
             return (lb_post - lb_pre) / (1e-9 + this->get_initial_lb_change());
@@ -574,7 +556,7 @@ namespace LPMP {
             this->flush_backward_states();
         };
 
-        const double required_rel_change = 1e-5;
+        const double required_rel_change = 1e-6;
         size_t num_updates = 0;
         REAL curr_rel_change = 0.0;
         REAL best_step_size = 0.0;
@@ -665,10 +647,29 @@ namespace LPMP {
     {
         this->bdds_solution_cuda(grad_f);
         bool projected = this->lbfgs_solver_.project_gradient(grad_f);
-        if (projected)
-            return true;
-        thrust::fill(grad_f, grad_f + this->nr_layers(), 0.0);
-        return false;
+        if (!projected)
+        {
+            thrust::fill(grad_f, grad_f + this->nr_layers(), 0.0);
+            return false;
+        }
+        
+        // Make grad_f feasible.
+        thrust::device_vector<REAL> delta_grad(this->nr_variables());
+        auto first_val = thrust::make_permutation_iterator(grad_f, this->primal_variable_sorting_order_.begin());
+        auto first_out_val = delta_grad.begin();
+
+        thrust::equal_to<int> binary_pred;
+        auto new_end = thrust::reduce_by_key(this->primal_variable_index_sorted_.begin(), this->primal_variable_index_sorted_.end() - this->nr_bdds_, first_val, 
+                            thrust::make_discard_iterator(), first_out_val, binary_pred, thrust::plus<REAL>());
+
+        maintain_feasibility_grad<REAL> maintain_feasibility_grad_func({
+            thrust::raw_pointer_cast(this->primal_variable_index_.data()),
+            thrust::raw_pointer_cast(this->num_bdds_per_var_.data()),
+            thrust::raw_pointer_cast(delta_grad.data()),
+            thrust::raw_pointer_cast(grad_f)});
+
+        thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + this->nr_layers(), maintain_feasibility_grad_func);
+        return true;
     }
 
     template class bdd_cuda_parallel_mma<float>;
