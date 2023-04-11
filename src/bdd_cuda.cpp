@@ -10,7 +10,7 @@ namespace LPMP {
     template<typename REAL>
     class bdd_cuda<REAL>::impl {
         public:
-            impl(BDD::bdd_collection& bdd_col);
+            impl(BDD::bdd_collection& bdd_col, const double lbfgs_step_size);
 
 #ifdef WITH_CUDA
             bdd_cuda_parallel_mma<REAL> pmma;
@@ -18,9 +18,9 @@ namespace LPMP {
     };
 
     template<typename REAL>
-    bdd_cuda<REAL>::impl::impl(BDD::bdd_collection& bdd_col)
+    bdd_cuda<REAL>::impl::impl(BDD::bdd_collection& bdd_col, const double lbfgs_step_size)
 #ifdef WITH_CUDA
-    : pmma(bdd_col)
+    : pmma(bdd_col, lbfgs_step_size)
 #endif
     {
 #ifndef WITH_CUDA
@@ -29,11 +29,11 @@ namespace LPMP {
     }
 
     template<typename REAL>
-    bdd_cuda<REAL>::bdd_cuda(BDD::bdd_collection& bdd_col)
+    bdd_cuda<REAL>::bdd_cuda(BDD::bdd_collection& bdd_col, const double lbfgs_step_size)
     {
 #ifdef WITH_CUDA
         MEASURE_FUNCTION_EXECUTION_TIME; 
-        pimpl = std::make_unique<impl>(bdd_col);
+        pimpl = std::make_unique<impl>(bdd_col, lbfgs_step_size);
 #else
         throw std::runtime_error("bdd_solver not compiled with CUDA support");
 #endif

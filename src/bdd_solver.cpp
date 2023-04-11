@@ -228,6 +228,9 @@ namespace LPMP {
         }
         else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::sequential_mma)
         {
+            if(options.lbfgs_step_size != 0)
+                throw std::runtime_error("no BFGS implemented for sequential mma");
+
             if(options.smoothing == 0)
             {
                 if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::single_prec)
@@ -249,6 +252,9 @@ namespace LPMP {
         } 
         else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::parallel_mma)
         {
+            if(options.lbfgs_step_size != 0)
+                throw std::runtime_error("no BFGS implemented for parallel mma");
+
             if(options.smoothing == 0)
             {
                 if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::single_prec)
@@ -275,15 +281,18 @@ namespace LPMP {
             if(options.smoothing != 0)
                 throw std::runtime_error("no smoothing implemented for cuda mma");
             if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::single_prec)
-                solver = std::move(bdd_cuda<float>(bdd_pre.get_bdd_collection(), costs.begin(), costs.end()));
+                solver = std::move(bdd_cuda<float>(bdd_pre.get_bdd_collection(), costs.begin(), costs.end(), options.lbfgs_step_size));
             else if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::double_prec)
-                solver = std::move(bdd_cuda<double>(bdd_pre.get_bdd_collection(), costs.begin(), costs.end()));
+                solver = std::move(bdd_cuda<double>(bdd_pre.get_bdd_collection(), costs.begin(), costs.end(), options.lbfgs_step_size));
             else
                 throw std::runtime_error("only float and double precision allowed");
             std::cout << "[bdd solver] constructed CUDA based mma solver\n"; 
         }
         else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::hybrid_parallel_mma)
         {
+            if(options.lbfgs_step_size != 0)
+                throw std::runtime_error("no BFGS implemented for hybrid parallel mma");
+
             if(options.smoothing != 0)
                 throw std::runtime_error("no smoothing implemented for hybrid parallel mma");
             if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::single_prec)

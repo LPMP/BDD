@@ -61,7 +61,7 @@ def ComputePerBDDSolutions(solvers, lo_costs_batch, hi_costs_batch):
 class DualIterations(torch.autograd.Function):
     @staticmethod
     def forward(ctx, solvers, lo_costs_batch, hi_costs_batch, def_mm_batch, dist_weights_batch, num_iterations, omega, 
-                grad_dual_itr_max_itr, improvement_slope, num_caches, compute_history_for_itrs, history_avg_beta, randomize_num_iterations = False):
+                grad_dual_itr_max_itr, improvement_slope, num_caches, compute_history_for_itrs, history_avg_beta, randomize_num_iterations = False, lbfgs_num_itr = 0):
         validate_input_format(lo_costs_batch, hi_costs_batch, def_mm_batch, dist_weights_batch)
         assert(lo_costs_batch.dim() == 1)
         assert(def_mm_batch.dim() == 1)
@@ -82,6 +82,7 @@ class DualIterations(torch.autograd.Function):
         sol_avg_out = None
         lb_first_order_hist = None
         lb_sec_order_hist = None
+        grad_lbfgs = None
         if compute_history_for_itrs > 0:
             sol_avg_out = torch.empty_like(def_mm_batch)
             num_bdds_batch = sum([s.nr_bdds() for s in solvers])
@@ -94,6 +95,12 @@ class DualIterations(torch.autograd.Function):
             sol_avg_out_ptr = 0
             lb_first_order_hist_ptr = 0
             lb_sec_order_hist_ptr = 0
+
+        if lbfgs_num_itr > 0:
+            grad_lbfgs = torch.zeros_like(lo_costs_batch)
+            ctx.mark_non_differentiable(grad_lbfgs)
+        else:
+            grad_lbfgs_ptr = 0
 
         is_omega_scalar = torch.numel(omega) == 1
         if not is_omega_scalar:
@@ -112,16 +119,20 @@ class DualIterations(torch.autograd.Function):
                 sol_avg_out_ptr = sol_avg_out[layer_start].data_ptr()
                 lb_first_order_hist_ptr = lb_first_order_hist[bdd_start].data_ptr()
                 lb_sec_order_hist_ptr = lb_sec_order_hist[bdd_start].data_ptr()
+            if lbfgs_num_itr > 0:
+                grad_lbfgs_ptr = grad_lbfgs[layer_start].data_ptr()
             if is_omega_scalar:
                 num_itr = solver.iterations(dist_weights_batch[layer_start].data_ptr(), current_num_itr, 
                                             omega[0].item(), improvement_slope, 0, False,
                                             compute_history_for_itrs, history_avg_beta, sol_avg_out_ptr,
-                                            lb_first_order_hist_ptr, lb_sec_order_hist_ptr)
+                                            lb_first_order_hist_ptr, lb_sec_order_hist_ptr, 
+                                            lbfgs_num_itr, grad_lbfgs_ptr)
             else:
                 num_itr = solver.iterations(dist_weights_batch[layer_start].data_ptr(), current_num_itr, 
                                             1.0, improvement_slope, omega[layer_start].data_ptr(), True,
                                             compute_history_for_itrs, history_avg_beta, sol_avg_out_ptr,
-                                            lb_first_order_hist_ptr, lb_sec_order_hist_ptr)
+                                            lb_first_order_hist_ptr, lb_sec_order_hist_ptr, 
+                                            lbfgs_num_itr, grad_lbfgs_ptr)
 
             actual_num_itr.append(num_itr)
             solver.get_solver_costs(lo_costs_out[layer_start].data_ptr(), hi_costs_out[layer_start].data_ptr(), def_mm_out[layer_start].data_ptr()) 
@@ -130,11 +141,11 @@ class DualIterations(torch.autograd.Function):
 
         ctx.actual_num_itr = actual_num_itr
         assert(layer_start == lo_costs_batch.shape[0])
-        return lo_costs_out, hi_costs_out, def_mm_out, sol_avg_out, lb_first_order_hist, lb_sec_order_hist
+        return lo_costs_out, hi_costs_out, def_mm_out, sol_avg_out, lb_first_order_hist, lb_sec_order_hist, grad_lbfgs
 
     @staticmethod
     @once_differentiable
-    def backward(ctx, grad_lo_costs_out, grad_hi_costs_out, grad_def_mm_out, grad_sol_avg_out, grad_lb_first, grad_lb_sec):
+    def backward(ctx, grad_lo_costs_out, grad_hi_costs_out, grad_def_mm_out, grad_sol_avg_out, grad_lb_first, grad_lb_sec, grad_grad_lbfgs):
         validate_input_format(grad_lo_costs_out, grad_hi_costs_out, grad_def_mm_out)
         assert(grad_lo_costs_out.dim() == 1)
         assert(grad_lo_costs_out.shape == grad_hi_costs_out.shape)
@@ -179,7 +190,7 @@ class DualIterations(torch.autograd.Function):
         assert(torch.all(torch.isfinite(grad_dist_weights_batch_in)))
         assert(torch.all(torch.isfinite(grad_omega)))
 
-        return None, grad_lo_costs_in, grad_hi_costs_in, grad_deff_mm_diff_in, grad_dist_weights_batch_in, None, grad_omega, None, None, None, None, None, None
+        return None, grad_lo_costs_in, grad_hi_costs_in, grad_deff_mm_diff_in, grad_dist_weights_batch_in, None, grad_omega, None, None, None, None, None, None, None
 
 class DistributeDeferredDelta(torch.autograd.Function):
     @staticmethod

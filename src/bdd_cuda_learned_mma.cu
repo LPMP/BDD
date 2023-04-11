@@ -192,7 +192,9 @@ namespace LPMP {
                                 thrust::device_ptr<REAL> lb_second_diff_avg,
                                 const int compute_history_for_itr,
                                 const REAL history_avg_beta,
-                                const thrust::device_ptr<const REAL> omega_vec)
+                                const thrust::device_ptr<const REAL> omega_vec,
+                                const int compute_lbfgs_grad_for_itr,
+                                thrust::device_ptr<REAL> grad_lbfgs)
     {
         if(this->delta_lo_hi_.size() == 0)
             this->delta_lo_hi_ = thrust::device_vector<REAL>(2 * this->nr_variables(), 0.0);
@@ -211,11 +213,25 @@ namespace LPMP {
             second_last_lb = thrust::device_vector<REAL>(this->nr_bdds());
             third_last_lb = thrust::device_vector<REAL>(this->nr_bdds());
         }
+        
+        if (compute_lbfgs_grad_for_itr > 0)
+        {
+            if (this->lbfgs_solver_.get_m() != compute_lbfgs_grad_for_itr)
+                this->lbfgs_solver_ = lbfgs_cuda<REAL>(this->nr_layers(), compute_lbfgs_grad_for_itr);
+        }
         int history_tracked_for = 0;
+        int lbfgs_tracked_for = 0;
         for(itr = 0; itr < num_itr; itr++)
         {
             forward_iteration_learned_mm_dist(dist_weights, this->deffered_mm_diff_.data(), omega_scalar, omega_vec);
             backward_iteration_learned_mm_dist(dist_weights, this->deffered_mm_diff_.data(), omega_scalar, omega_vec);
+            // if (compute_lbfgs_grad_for_itr && !converged && compute_lbfgs_grad_for_itr * 2 >= num_itr - itr)
+            if (compute_lbfgs_grad_for_itr && (compute_lbfgs_grad_for_itr >= num_itr - itr - 1 || converged))
+            {
+                this->update_bfgs_states(this->deffered_mm_diff_.data());
+                lbfgs_tracked_for++;
+            }
+
             if (compute_history_for_itr && (compute_history_for_itr >= num_itr - itr || converged))
             {
                 this->bdds_solution_cuda(last_sol.data());
@@ -263,8 +279,14 @@ namespace LPMP {
                 this->set_initial_lb_change(std::abs(lb_initial - lb_post));
             if (!converged && std::abs(lb_prev - lb_post) < improvement_slope * this->get_initial_lb_change())
                 converged = true;
-            if (converged && (history_tracked_for == compute_history_for_itr))
+            if (converged && (history_tracked_for == compute_history_for_itr) && (lbfgs_tracked_for == compute_lbfgs_grad_for_itr))
                 break;
+        }
+
+        if (compute_lbfgs_grad_for_itr)
+        {
+            this->compute_direction_bfgs(grad_lbfgs);
+            // this->lbfgs_solver_.flush_states(); // Building history from start next time. 
         }
         return itr;
     }

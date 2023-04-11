@@ -54,6 +54,7 @@ namespace LPMP {
         bool solution_statistics = false;
 
         double smoothing = 0;
+        double lbfgs_step_size = 0;
 
         bool tighten = false;
 
@@ -188,6 +189,9 @@ namespace LPMP {
             ->transform(CLI::CheckedTransformer(bdd_solver_precision_map, CLI::ignore_case));
 
         app.add_option("--smoothing", smoothing, "smoothing, default value = 0 (no smoothing)")
+                ->check(CLI::PositiveNumber);
+
+        app.add_option("--lbfgs_step_size", lbfgs_step_size, "step size for LBFGS updates (only in mma_cuda), default value = 0 (no LBFGS)")
                 ->check(CLI::PositiveNumber);
 
         auto primal_group = app.add_option_group("primal rounding", "method for obtaining a primal solution from the dual optimization");

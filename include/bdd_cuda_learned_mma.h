@@ -61,7 +61,9 @@ namespace LPMP {
                             thrust::device_ptr<REAL> lb_second_diff_avg = nullptr,
                             const int compute_history_for_itr = 0,
                             const REAL history_avg_beta = 0.9,
-                            const thrust::device_ptr<const REAL> omega_vec = nullptr);
+                            const thrust::device_ptr<const REAL> omega_vec = nullptr,
+                            const int compute_lbfgs_grad_for_itr = 0,
+                            thrust::device_ptr<REAL> grad_lbfgs = nullptr);
 
             // Assumes that deffered_mm_diff_ contains the mm's containing the values before iterations() was called.
             void grad_iterations(
@@ -107,13 +109,6 @@ namespace LPMP {
                 thrust::device_ptr<REAL> grad_hi_cost_out, // Gradients w.r.t hi costs
                 const bool compute_smooth_lb = false
             );
-
-            void set_initial_lb_change(const double val) {
-                if (!std::isfinite(initial_lb_change_))
-                    initial_lb_change_ = val; 
-            }
-
-            double get_initial_lb_change() const { return initial_lb_change_; }
 
         private:
             // last_hop should be equal to nr_hops() - 1 for complete forward pass.
@@ -201,6 +196,5 @@ namespace LPMP {
                                     const thrust::device_ptr<const REAL> omega_vec = nullptr,
                                     const bool backprop_omega = true
                                     );
-            double initial_lb_change_ = std::numeric_limits<double>::infinity();
     };
 }

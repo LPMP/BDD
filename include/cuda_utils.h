@@ -11,6 +11,7 @@
 #include <thrust/unique.h>
 #include <thrust/adjacent_difference.h>
 #include <thrust/iterator/discard_iterator.h>
+#include <thrust/inner_product.h>
 #include "time_measure_util.h"
 #include <thrust/iterator/constant_iterator.h>
 #include <thrust/random.h>
@@ -240,6 +241,13 @@ inline void print_min_max(const thrust::device_ptr<T>& v, const char* name, cons
 {
     auto result = thrust::minmax_element(v, v + num);
     std::cout<<name<<": min = "<<*result.first<<", max = "<<*result.second<<"\n";
+}
+
+template<typename T>
+inline void print_norm(const thrust::device_ptr<T>& v, const char* name, const size_t num)
+{
+    T result = std::sqrt(thrust::inner_product(v, v + num, v, (T) 0.0));
+    std::cout<<name<<": norm = "<<result<<"\n";
 }
 
 struct tuple_min

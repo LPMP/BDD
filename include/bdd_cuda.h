@@ -9,9 +9,9 @@ namespace LPMP {
     template<typename REAL>
     class bdd_cuda {
         public:
-            bdd_cuda(BDD::bdd_collection& bdd_col);
+            bdd_cuda(BDD::bdd_collection& bdd_col, const double lbfgs_step_size = 0.0);
             template<typename ITERATOR>
-            bdd_cuda(BDD::bdd_collection& bdd_col, ITERATOR cost_begin, ITERATOR cost_end);
+            bdd_cuda(BDD::bdd_collection& bdd_col, ITERATOR cost_begin, ITERATOR cost_end, const double lbfgs_step_size = 0.0);
             bdd_cuda(bdd_cuda&&);
             bdd_cuda& operator=(bdd_cuda&&);
             ~bdd_cuda();
@@ -32,8 +32,8 @@ namespace LPMP {
 
     template<typename REAL>
         template<typename ITERATOR>
-        bdd_cuda<REAL>::bdd_cuda(BDD::bdd_collection& bdd_col, ITERATOR cost_begin, ITERATOR cost_end)
-        : bdd_cuda(bdd_col)
+        bdd_cuda<REAL>::bdd_cuda(BDD::bdd_collection& bdd_col, ITERATOR cost_begin, ITERATOR cost_end, const double lbfgs_step_size)
+        : bdd_cuda(bdd_col, lbfgs_step_size)
         {
             update_costs(cost_begin, cost_begin, cost_begin, cost_end);
         }

@@ -5,9 +5,16 @@
 namespace LPMP {
 
     template<typename REAL>
-    bdd_cuda_parallel_mma<REAL>::bdd_cuda_parallel_mma(const BDD::bdd_collection& bdd_col) : bdd_cuda_base<REAL>(bdd_col)
+    bdd_cuda_parallel_mma<REAL>::bdd_cuda_parallel_mma(const BDD::bdd_collection& bdd_col, const double lbfgs_step_size) : bdd_cuda_base<REAL>(bdd_col)
     {
         init();
+        this->lbfgs_step_size_ = lbfgs_step_size;
+        this->input_lbfgs_step_size_ = lbfgs_step_size;
+        if (this->lbfgs_step_size_ > 0)
+        {
+            this->lbfgs_solver_ = lbfgs_cuda<REAL>(this->nr_layers(), 5);
+            std::cout<<"[bdd cuda parallel mma] Using LBFGS updates with step size: "<<this->lbfgs_step_size_<<"\n";
+        }
     }
 
     template<typename REAL>
@@ -132,18 +139,55 @@ namespace LPMP {
         min_marginals_from_directional_costs(hop_index, omega, this->deffered_mm_diff_.data());
     }
 
+    template<typename REAL>
+    struct grad_step
+    {
+        const REAL step_size;
+        const int* primal_var_indices;
+        REAL* hi_costs;
+        REAL* grad;
+        __host__ __device__ void operator()(const int idx)
+        {
+            if (primal_var_indices[idx] == INT_MAX)
+            {
+                grad[idx] = 0;
+                return; // terminal node.
+            }
+
+            const REAL cur_grad = grad[idx];
+            grad[idx] = step_size * cur_grad;
+            hi_costs[idx] += step_size * cur_grad;
+        }
+    };
 
     template<typename REAL>
     void bdd_cuda_parallel_mma<REAL>::iteration(const REAL omega)
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME;
+        bool do_lbfgs = this->lbfgs_step_size_ > 0 && this->num_unsuccessful_lbfgs_updates_ < 5;
+        if (do_lbfgs && this->lbfgs_solver_.get_m() == -1) // hack for python interface.
+            this->lbfgs_solver_ = lbfgs_cuda<REAL>(this->nr_layers(), 5);
         if(delta_lo_hi_.size() == 0)
             delta_lo_hi_ = thrust::device_vector<REAL>(this->nr_variables() * 2, 0.0);
+
+        if (this->itr_count_ > 0 && do_lbfgs)
+            do_bfgs_update();
+
+        REAL lb_initial;
+        if(this->itr_count_ == 0)
+            lb_initial = this->lower_bound();
 
         forward_mm(omega, delta_lo_hi_);
         normalize_delta(delta_lo_hi_);
         backward_mm(omega, delta_lo_hi_);
         normalize_delta(delta_lo_hi_);
+        if(this->itr_count_ == 0)
+            this->set_initial_lb_change(std::abs(this->lower_bound() - lb_initial));
+
+        std::cout<<"this->lbfgs_step_size_: "<<this->lbfgs_step_size_<<", do_lbfgs: "<<do_lbfgs<<"\n";
+        if (do_lbfgs)
+            this->update_bfgs_states(this->deffered_mm_diff_.data());
+        this->itr_count_++;
     }
 
     // arguments:
@@ -467,10 +511,164 @@ namespace LPMP {
 
 
     template<typename REAL>
+    struct maintain_feasibility_grad {
+        const int* primal_index;
+        const int* num_bdds_per_var;
+        const REAL* grad_delta;
+        REAL* gradient;
+        __host__ __device__ void operator()(const int layer_index)
+        {
+            const int primal_var = primal_index[layer_index];
+            if (primal_var == INT_MAX)  // terminal node.
+                gradient[layer_index] = 0.0;
+            else
+                gradient[layer_index] -= grad_delta[primal_var] / num_bdds_per_var[primal_var];
+        }
+    };
+
+    template<typename REAL>
+    struct add_scaled_product_func {
+        const REAL stepsize;
+        __host__ __device__ REAL operator()(const REAL& hi_cost, const REAL& gradient) const {
+            return hi_cost + stepsize * gradient;
+        }
+    };
+
+    template<typename REAL>
+    void bdd_cuda_parallel_mma<REAL>::do_bfgs_update()
+    {
+        if (!this->lbfgs_solver_.update_possible())
+            return;
+
+        thrust::device_vector<REAL> grad_lbfgs(this->nr_layers());
+        bool projected = this->compute_direction_bfgs(grad_lbfgs.data());
+        if (!projected)
+            return;
+
+        // Make grad_lbfgs feasible.
+        thrust::device_vector<REAL> delta_grad(this->nr_variables());
+        auto first_val = thrust::make_permutation_iterator(grad_lbfgs.begin(), this->primal_variable_sorting_order_.begin());
+        auto first_out_val = delta_grad.begin();
+
+        thrust::equal_to<int> binary_pred;
+        auto new_end = thrust::reduce_by_key(this->primal_variable_index_sorted_.begin(), this->primal_variable_index_sorted_.end() - this->nr_bdds_, first_val, 
+                            thrust::make_discard_iterator(), first_out_val, binary_pred, thrust::plus<REAL>());
+
+        maintain_feasibility_grad<REAL> maintain_feasibility_grad_func({
+            thrust::raw_pointer_cast(this->primal_variable_index_.data()),
+            thrust::raw_pointer_cast(this->num_bdds_per_var_.data()),
+            thrust::raw_pointer_cast(delta_grad.data()),
+            thrust::raw_pointer_cast(grad_lbfgs.data())});
+
+        thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + this->nr_layers(), maintain_feasibility_grad_func);
+
+        const REAL lb_pre = this->lower_bound();
+        auto calculate_rel_change = [&](const REAL lb_post) {
+            return (lb_post - lb_pre) / (1e-9 + this->get_initial_lb_change());
+        };
+
+        const thrust::device_vector<REAL> orig_hi_cost(this->hi_cost_);
+        auto apply_update = [&](const REAL step_size) {
+            thrust::transform(orig_hi_cost.begin(), orig_hi_cost.end(), grad_lbfgs.begin(), this->hi_cost_.begin(), add_scaled_product_func<REAL>({step_size}));
+            this->flush_forward_states();
+            this->flush_backward_states();
+        };
+
+        const double required_rel_change = 1e-5;
+        size_t num_updates = 0;
+        REAL curr_rel_change = 0.0;
+        REAL best_step_size = 0.0;
+        REAL best_rel_improvement = 0.0;
+        do
+        {
+            apply_update(this->lbfgs_step_size_);
+            curr_rel_change = calculate_rel_change(this->lower_bound());
+            if (best_rel_improvement < curr_rel_change)
+            {
+                best_rel_improvement = curr_rel_change;
+                best_step_size = this->lbfgs_step_size_;
+            }
+            if (curr_rel_change <= 0.0)
+                this->lbfgs_step_size_ *= 0.8;
+            else if (curr_rel_change < required_rel_change)
+                this->lbfgs_step_size_ *= 1.1;
+
+            std::cout<<"[lbfgs] relative_change: "<<curr_rel_change<<", step size: "<<this->lbfgs_step_size_<<"\n";
+            if (num_updates > 5)
+            {
+                if (best_rel_improvement > 1e-7)
+                {
+                    if (best_step_size != this->lbfgs_step_size_)
+                        apply_update(best_step_size);
+                    return;
+                }
+                thrust::copy(orig_hi_cost.begin(), orig_hi_cost.end(), this->hi_cost_.begin());
+                this->flush_forward_states();
+                this->flush_backward_states();
+                this->num_unsuccessful_lbfgs_updates_ += 1;
+                return;
+            }
+            num_updates++;
+        } while(curr_rel_change < required_rel_change);
+        if (num_updates == 1 && this->num_unsuccessful_lbfgs_updates_ == 0)
+            this->lbfgs_step_size_ *= 1.1;
+        this->num_unsuccessful_lbfgs_updates_ = 0;
+        return;
+    }
+
+    template<typename REAL>
     void bdd_cuda_parallel_mma<REAL>::flush_mm(thrust::device_ptr<REAL> mm_diff_ptr)
     {   // Makes min marginals INF so that they can be populated again by in-place minimization
         thrust::fill(mm_lo_local_.begin(), mm_lo_local_.end(), CUDART_INF_F_HOST);
         thrust::fill(mm_diff_ptr, mm_diff_ptr + this->nr_layers(), CUDART_INF_F_HOST);
+    }
+
+    template<typename REAL>
+    struct compute_net_costs_func {
+        const int* primal_index;
+        const REAL* lo_cost;
+        const REAL* hi_cost;
+        const REAL* deffered_mm_diff;
+        REAL* net_cost;
+        __host__ __device__ void operator()(const int layer_index)
+        {
+            const int primal_var = primal_index[layer_index];
+            if (primal_var == INT_MAX)
+                return; // terminal node.
+            
+            net_cost[layer_index] = hi_cost[layer_index] - lo_cost[layer_index] + deffered_mm_diff[layer_index];
+        }
+    };
+
+    template<typename REAL>
+    void bdd_cuda_parallel_mma<REAL>::update_bfgs_states(thrust::device_ptr<REAL> def_mm_diff_ptr)
+    {
+        thrust::device_vector<REAL> sol(this->nr_layers());
+        this->bdds_solution_cuda(sol.data());
+
+        thrust::device_vector<REAL> net_cost(this->nr_layers());
+
+        compute_net_costs_func<REAL> net_costs_func({
+            thrust::raw_pointer_cast(this->primal_variable_index_.data()),
+            thrust::raw_pointer_cast(this->lo_cost_.data()),
+            thrust::raw_pointer_cast(this->hi_cost_.data()),
+            thrust::raw_pointer_cast(def_mm_diff_ptr),
+            thrust::raw_pointer_cast(net_cost.data())});
+
+        thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + this->nr_layers(), net_costs_func);
+
+        this->lbfgs_solver_.store_next_itr(net_cost, sol);
+    }
+
+    template<typename REAL>
+    bool bdd_cuda_parallel_mma<REAL>::compute_direction_bfgs(thrust::device_ptr<REAL> grad_f)
+    {
+        this->bdds_solution_cuda(grad_f);
+        bool projected = this->lbfgs_solver_.project_gradient(grad_f);
+        if (projected)
+            return true;
+        thrust::fill(grad_f, grad_f + this->nr_layers(), 0.0);
+        return false;
     }
 
     template class bdd_cuda_parallel_mma<float>;

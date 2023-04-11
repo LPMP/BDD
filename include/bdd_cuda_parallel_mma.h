@@ -11,7 +11,7 @@ namespace LPMP {
 
             void init();
             bdd_cuda_parallel_mma() {}
-            bdd_cuda_parallel_mma(const BDD::bdd_collection& bdd_col);
+            bdd_cuda_parallel_mma(const BDD::bdd_collection& bdd_col, const double lbfgs_step_size = 0.0);
 
             void iteration(const REAL omega = 0.5);
 
@@ -38,9 +38,12 @@ namespace LPMP {
 
             thrust::device_vector<REAL> hi_cost_out_, lo_cost_out_; // One entry per BDD layer.
 
+            void do_bfgs_update();
+            void update_bfgs_states(thrust::device_ptr<REAL> def_mm_diff_ptr);
+            bool compute_direction_bfgs(thrust::device_ptr<REAL> grad_f);
+
             // Deferred min-marginal sums.
             thrust::device_vector<REAL> delta_lo_hi_; // Two entries per primal variable. Even indices contain delta_lo and odd indices contain delta_hi.
-
 
         private:
             //void forward_iteration(const REAL omega);

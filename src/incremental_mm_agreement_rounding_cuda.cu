@@ -310,6 +310,7 @@ struct mm_type_to_sol {
             // thrust::transform(first, last, delta_it_begin, mm_types_transform<typename SOLVER::value_type>{(float)cur_delta, (float)max_incon_mm_diff, 2.0, false});
 
             s.update_costs(cost_delta_0, cost_delta_1);
+            s.primal_objective_changed();
             return {};
         }
 

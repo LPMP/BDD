@@ -2,6 +2,7 @@
 #include "time_measure_util.h"
 #include "cuda_utils.h"
 #include "exp_sum_cuda.h"
+#include "lbfgs_cuda.h"
 #include <thrust/sort.h>
 #include <thrust/for_each.h>
 #include <thrust/gather.h>
@@ -1224,6 +1225,16 @@ namespace LPMP {
             bdd_to_constraint_map_[constraint_to_bdd_map(c, 0)] = c;
         }
         assert(*std::max_element(bdd_to_constraint_map_.begin(), bdd_to_constraint_map_.end()) == nr_bdds_ - 1);
+    }
+
+    template<typename REAL>
+    void bdd_cuda_base<REAL>::primal_objective_changed()
+    {
+        num_unsuccessful_lbfgs_updates_ = 0;
+        itr_count_ = 0;
+        lbfgs_step_size_ = input_lbfgs_step_size_;
+        initial_lb_change_ = std::numeric_limits<double>::infinity();
+        lbfgs_solver_.flush_states();
     }
 
     template void bdd_cuda_base<float>::update_costs(const thrust::device_vector<double>&, const thrust::device_vector<double>&);

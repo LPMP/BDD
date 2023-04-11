@@ -5,6 +5,7 @@
 #include "two_dimensional_variable_array.hxx"
 #include <cuda_runtime.h>
 #include <thrust/device_vector.h>
+#include "lbfgs_cuda.h"
 
 // For serialization
 #include <cereal/types/vector.hpp>
@@ -143,6 +144,16 @@ namespace LPMP {
             void load(Archive & archive);
             void print_num_bdd_nodes_per_hop();
 
+            void primal_objective_changed();
+            void set_lbfgs_step_size(const double step_size)
+            {
+                lbfgs_step_size_ = step_size;
+                input_lbfgs_step_size_ = step_size;
+            }
+            double get_lbfgs_step_size() const
+            {
+                return lbfgs_step_size_;
+            }
         protected:
 
             void update_costs(const thrust::device_vector<REAL>& update_vec);
@@ -178,6 +189,18 @@ namespace LPMP {
             bool backward_state_valid_ = false; // true means cost from terminal are valid.
 
             std::vector<size_t> bdd_to_constraint_map_;
+            lbfgs_cuda<REAL> lbfgs_solver_;
+            int num_unsuccessful_lbfgs_updates_ = 0;
+            int itr_count_ = 0;
+            double lbfgs_step_size_ = 0.0;
+            double input_lbfgs_step_size_ = 0.0;
+
+            void set_initial_lb_change(const double val) {
+                if (!std::isfinite(initial_lb_change_))
+                    initial_lb_change_ = val; 
+            }
+
+            double get_initial_lb_change() const { return initial_lb_change_; }
 
         private:
             void initialize(const BDD::bdd_collection& bdd_col);
@@ -189,6 +212,7 @@ namespace LPMP {
             void compress_bdd_nodes_to_layer(const thrust::device_vector<int>& bdd_hop_dist);
             void reorder_within_bdd_layers();
             void find_primal_variable_ordering();
+            double initial_lb_change_ = std::numeric_limits<double>::infinity();
 
     };
 
