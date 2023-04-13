@@ -178,6 +178,70 @@ void terminal_layer_indices(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long
 }
 
 template<typename REAL>
+void cost_from_root(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long out_ptr)
+{
+    REAL* ptr = reinterpret_cast<REAL*>(out_ptr); 
+    const thrust::device_vector<REAL> managed = solver.compute_get_cost_from_root();
+    thrust::copy(managed.begin(), managed.end(), ptr);
+}
+
+template<typename REAL>
+void cost_from_terminal(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long out_ptr)
+{
+    REAL* ptr = reinterpret_cast<REAL*>(out_ptr); 
+    const thrust::device_vector<REAL> managed = solver.compute_get_cost_from_terminal();
+    thrust::copy(managed.begin(), managed.end(), ptr);
+}
+
+template<typename REAL>
+void lo_bdd_node_index(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long out_ptr)
+{
+    int* ptr = reinterpret_cast<int*>(out_ptr); 
+    const thrust::device_vector<int> managed = solver.get_lo_bdd_node_index();
+    thrust::copy(managed.begin(), managed.end(), ptr);
+}
+
+template<typename REAL>
+void hi_bdd_node_index(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long out_ptr)
+{
+    int* ptr = reinterpret_cast<int*>(out_ptr); 
+    const thrust::device_vector<int> managed = solver.get_hi_bdd_node_index();
+    thrust::copy(managed.begin(), managed.end(), ptr);
+}
+
+template<typename REAL>
+void bdd_node_to_layer_map(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long out_ptr)
+{
+    int* ptr = reinterpret_cast<int*>(out_ptr); 
+    const thrust::device_vector<int> managed = solver.get_bdd_node_to_layer_map();
+    thrust::copy(managed.begin(), managed.end(), ptr);
+}
+
+template<typename REAL>
+void root_indices(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long out_ptr)
+{
+    int* ptr = reinterpret_cast<int*>(out_ptr); 
+    const thrust::device_vector<int> managed = solver.get_root_indices();
+    thrust::copy(managed.begin(), managed.end(), ptr);
+}
+
+template<typename REAL>
+void bot_sink_indices(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long out_ptr)
+{
+    int* ptr = reinterpret_cast<int*>(out_ptr); 
+    const thrust::device_vector<int> managed = solver.get_bot_sink_indices();
+    thrust::copy(managed.begin(), managed.end(), ptr);
+}
+
+template<typename REAL>
+void top_sink_indices(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long out_ptr)
+{
+    int* ptr = reinterpret_cast<int*>(out_ptr); 
+    const thrust::device_vector<int> managed = solver.get_top_sink_indices();
+    thrust::copy(managed.begin(), managed.end(), ptr);
+}
+
+template<typename REAL>
 void primal_variable_index(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long primal_variable_index_out_ptr)
 {
     int* ptr = reinterpret_cast<int*>(primal_variable_index_out_ptr); 
@@ -411,6 +475,10 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
         .def("nr_layers", [](const bdd_type_default& solver) { return solver.nr_layers(); })
         .def("nr_layers", [](const bdd_type_default& solver, const int hop_index) { return solver.nr_layers(hop_index); })
         .def("nr_bdds", [](const bdd_type_default& solver) { return solver.nr_bdds(); })
+        .def("nr_bdd_nodes", [](const bdd_type_default& solver) { return solver.nr_bdd_nodes(); })
+        .def("get_cum_nr_bdd_nodes_per_hop_dist", &bdd_type_default::get_cum_nr_bdd_nodes_per_hop_dist)
+        .def("get_cum_nr_layers_per_hop_dist", &bdd_type_default::get_cum_nr_layers_per_hop_dist)
+        .def("get_nr_variables_per_hop_dist", &bdd_type_default::get_nr_variables_per_hop_dist)
         .def("constraint_matrix_coeffs", [](const bdd_type_default& solver, const LPMP::ILP_input& ilp)
         {
             return get_constraint_matrix_coeffs(ilp, solver);
@@ -440,6 +508,42 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
         {
             bdd_index(solver, bdd_index_out_ptr);
         }, "Sets BDD indices for all dual variables in the pre-allocated memory of size = nr_layers() pointed to by the input pointer in INT32 format.")
+
+        .def("cost_from_root", [](bdd_type_default& solver, const long out_ptr)
+        {
+            cost_from_root(solver, out_ptr);
+        }, "Sets cost_from_root for all bdd nodes in the pre-allocated memory of size = nr_bdd_nodes() pointed to by the input pointer in FP32 format.")
+
+        .def("cost_from_terminal", [](bdd_type_default& solver, const long out_ptr)
+        {
+            cost_from_terminal(solver, out_ptr);
+        }, "Sets cost_from_terminal for all bdd nodes in the pre-allocated memory of size = nr_bdd_nodes() pointed to by the input pointer in FP32 format.")
+
+        .def("lo_hi_bdd_node_index", [](bdd_type_default& solver, const long out_ptr_lo, const long out_ptr_hi)
+        {
+            lo_bdd_node_index(solver, out_ptr_lo);
+            hi_bdd_node_index(solver, out_ptr_hi);
+        }, "Sets lo_bdd_node_index, hi_bdd_node_index indices for all bdd nodes in the pre-allocated memory of size = nr_bdd_nodes() pointed to by the input pointer in INT32 format.")
+
+        .def("bdd_node_to_layer_map", [](bdd_type_default& solver, const long out_ptr)
+        {
+            bdd_node_to_layer_map(solver, out_ptr);
+        }, "Sets bdd_node_to_layer_map for all bdd nodes in the pre-allocated memory of size = nr_bdd_nodes() pointed to by the input pointer in INT32 format.")
+
+        .def("root_indices", [](bdd_type_default& solver, const long out_ptr)
+        {
+            root_indices(solver, out_ptr);
+        }, "Sets indices of root bdd nodes in the pre-allocated memory of size = nr_bdds() pointed to by the input pointer in INT32 format.")
+
+        .def("bot_sink_indices", [](bdd_type_default& solver, const long out_ptr)
+        {
+            bot_sink_indices(solver, out_ptr);
+        }, "Sets indices of bot sink bdd nodes in the pre-allocated memory of size = nr_bdds() pointed to by the input pointer in INT32 format.")
+
+        .def("top_sink_indices", [](bdd_type_default& solver, const long out_ptr)
+        {
+            top_sink_indices(solver, out_ptr);
+        }, "Sets indices of top sink bdd nodes in the pre-allocated memory of size = nr_bdds() pointed to by the input pointer in INT32 format.")
 
         .def("get_primal_objective_vector", [](bdd_type_default& solver, const long primal_obj_out_ptr)
         {
@@ -620,6 +724,9 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
         .def("nr_layers", [](const bdd_type_double& solver) { return solver.nr_layers(); })
         .def("nr_layers", [](const bdd_type_double& solver, const int hop_index) { return solver.nr_layers(hop_index); })
         .def("nr_bdds", [](const bdd_type_double& solver) { return solver.nr_bdds(); })
+        .def("get_cum_nr_bdd_nodes_per_hop_dist", &bdd_type_double::get_cum_nr_bdd_nodes_per_hop_dist)
+        .def("get_cum_nr_layers_per_hop_dist", &bdd_type_double::get_cum_nr_layers_per_hop_dist)
+        .def("get_nr_variables_per_hop_dist", &bdd_type_double::get_nr_variables_per_hop_dist)
         .def("constraint_matrix_coeffs", [](const bdd_type_double& solver, const LPMP::ILP_input& ilp)
         {
             return get_constraint_matrix_coeffs(ilp, solver);
@@ -649,6 +756,32 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
         {
             bdd_index(solver, bdd_index_out_ptr);
         }, "Sets BDD indices for all dual variables in the pre-allocated memory of size = nr_layers() pointed to by the input pointer in INT32 format.")
+
+        .def("lo_hi_bdd_node_index", [](bdd_type_double& solver, const long out_ptr_lo, const long out_ptr_hi)
+        {
+            lo_bdd_node_index(solver, out_ptr_lo);
+            hi_bdd_node_index(solver, out_ptr_hi);
+        }, "Sets lo_bdd_node_index, hi_bdd_node_index indices for all bdd nodes in the pre-allocated memory of size = nr_bdd_nodes() pointed to by the input pointer in INT32 format.")
+
+        .def("bdd_node_to_layer_map", [](bdd_type_double& solver, const long out_ptr)
+        {
+            bdd_node_to_layer_map(solver, out_ptr);
+        }, "Sets bdd_node_to_layer_map for all bdd nodes in the pre-allocated memory of size = nr_bdd_nodes() pointed to by the input pointer in INT32 format.")
+
+        .def("root_indices", [](bdd_type_double& solver, const long out_ptr)
+        {
+            root_indices(solver, out_ptr);
+        }, "Sets indices of root bdd nodes in the pre-allocated memory of size = nr_bdds() pointed to by the input pointer in INT32 format.")
+
+        .def("bot_sink_indices", [](bdd_type_double& solver, const long out_ptr)
+        {
+            bot_sink_indices(solver, out_ptr);
+        }, "Sets indices of bot sink bdd nodes in the pre-allocated memory of size = nr_bdds() pointed to by the input pointer in INT32 format.")
+
+        .def("top_sink_indices", [](bdd_type_double& solver, const long out_ptr)
+        {
+            top_sink_indices(solver, out_ptr);
+        }, "Sets indices of top sink bdd nodes in the pre-allocated memory of size = nr_bdds() pointed to by the input pointer in INT32 format.")
 
         .def("get_primal_objective_vector", [](bdd_type_double& solver, const long primal_obj_out_ptr)
         {

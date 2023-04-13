@@ -25,6 +25,8 @@ class lbfgs_cuda{
 
         bool update_possible();
 
+         void next_itr_without_storage();
+       
     private:
         std::vector<thrust::device_vector<REAL>> s_history, y_history; // difference of x, and grad f resp.
         thrust::device_vector<REAL> prev_x, prev_grad_f;

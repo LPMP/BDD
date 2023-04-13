@@ -53,10 +53,10 @@ namespace LPMP {
                 next_insertion_index = (next_insertion_index + 1) % m;
                 num_history = min(num_history + 1, m);
             } //TODO: when skipping estimate of hessian will become out-of-date. However removing these updates as below gives worse results than not removing.
-            // else
-            // {
-            //     num_history = max(num_history - 1, 0);
-            // }
+            else
+            {
+                num_history = max(num_history - 1, 0);
+            }
             prev_x = cur_x;
             prev_grad_f = cur_grad_f;
         }
@@ -144,6 +144,12 @@ namespace LPMP {
         prev_states_stored = false;
         initial_rho_inv = 0.0;
         initial_rho_inv_valid = false;
+    }
+
+    template<typename REAL>
+    void lbfgs_cuda<REAL>::next_itr_without_storage()
+    {
+        num_history = max(num_history - 1, 0);
     }
 
     template<typename REAL>

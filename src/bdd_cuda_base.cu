@@ -1228,6 +1228,20 @@ namespace LPMP {
     }
 
     template<typename REAL>
+    const thrust::device_vector<REAL> bdd_cuda_base<REAL>::compute_get_cost_from_root()
+    {
+        forward_run();
+        return cost_from_root_;
+    }
+    
+    template<typename REAL>
+    const thrust::device_vector<REAL> bdd_cuda_base<REAL>::compute_get_cost_from_terminal()
+    {
+        backward_run(false);
+        return cost_from_terminal_;
+    }
+
+    template<typename REAL>
     void bdd_cuda_base<REAL>::primal_objective_changed()
     {
         num_unsuccessful_lbfgs_updates_ = 0;

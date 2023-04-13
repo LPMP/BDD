@@ -226,10 +226,15 @@ namespace LPMP {
             forward_iteration_learned_mm_dist(dist_weights, this->deffered_mm_diff_.data(), omega_scalar, omega_vec);
             backward_iteration_learned_mm_dist(dist_weights, this->deffered_mm_diff_.data(), omega_scalar, omega_vec);
             // if (compute_lbfgs_grad_for_itr && !converged && compute_lbfgs_grad_for_itr * 2 >= num_itr - itr)
-            if (compute_lbfgs_grad_for_itr && (compute_lbfgs_grad_for_itr >= num_itr - itr - 1 || converged))
+            if (compute_lbfgs_grad_for_itr)
             {
-                this->update_bfgs_states(this->deffered_mm_diff_.data());
-                lbfgs_tracked_for++;
+                if (compute_lbfgs_grad_for_itr >= num_itr - itr - 1 || converged)
+                {
+                    this->update_bfgs_states(this->deffered_mm_diff_.data());
+                    lbfgs_tracked_for++;
+                }
+                else
+                    this->lbfgs_solver_.next_itr_without_storage();
             }
 
             if (compute_history_for_itr && (compute_history_for_itr >= num_itr - itr || converged))
@@ -285,8 +290,11 @@ namespace LPMP {
 
         if (compute_lbfgs_grad_for_itr)
         {
-            this->compute_direction_bfgs(grad_lbfgs);
-            // this->lbfgs_solver_.flush_states(); // Building history from start next time. 
+            const thrust::device_vector<REAL> orig_hi_cost(this->hi_cost_);
+            this->do_bfgs_update();
+            // extract the applied update:
+            thrust::transform(this->hi_cost_.begin(), this->hi_cost_.end(), orig_hi_cost.begin(), grad_lbfgs, thrust::minus<REAL>());
+            this->hi_cost_ = orig_hi_cost;
         }
         return itr;
     }

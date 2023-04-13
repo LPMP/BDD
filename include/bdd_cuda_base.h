@@ -127,9 +127,23 @@ namespace LPMP {
 
             void set_solver_costs(const SOLVER_COSTS_VECS& costs); // similar to above but takes device_vectors
 
+            const thrust::device_vector<REAL> compute_get_cost_from_root();
+            const thrust::device_vector<REAL> compute_get_cost_from_terminal();
+
+            const thrust::device_vector<int> get_lo_bdd_node_index() const { return lo_bdd_node_index_; }
+            const thrust::device_vector<int> get_hi_bdd_node_index() const { return hi_bdd_node_index_; }
+            const thrust::device_vector<int> get_bdd_node_to_layer_map() const { return bdd_node_to_layer_map_; }
+            const thrust::device_vector<int> get_root_indices() const { return root_indices_; }
+            const thrust::device_vector<int> get_bot_sink_indices() const { return bot_sink_indices_; }
+            const thrust::device_vector<int> get_top_sink_indices() const { return top_sink_indices_; }
+
             const thrust::device_vector<int> get_primal_variable_index() const { return primal_variable_index_; }
             const thrust::device_vector<int> get_bdd_index() const { return bdd_index_; }
             const thrust::device_vector<int>& get_num_bdds_per_var() const {return num_bdds_per_var_; }
+
+            const std::vector<int>& get_cum_nr_bdd_nodes_per_hop_dist() const { return cum_nr_bdd_nodes_per_hop_dist_; }
+            const std::vector<int>& get_cum_nr_layers_per_hop_dist() const { return cum_nr_layers_per_hop_dist_; }
+            const std::vector<int>& get_nr_variables_per_hop_dist() const { return nr_variables_per_hop_dist_; }
 
             void terminal_layer_indices(thrust::device_ptr<int> indices) const; // indices should point to memory of size nr_bdds()
 
