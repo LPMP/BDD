@@ -1,5 +1,5 @@
 import torch
-from torch_scatter import scatter_sum, scatter_min 
+from torch_scatter import scatter_sum, scatter_min, scatter_logsumexp
 import BDD.ILP_instance_py as ilp_instance_bbd
 import BDD.bdd_cuda_learned_mma_py as bdd_cuda_solver
 
@@ -43,10 +43,6 @@ class bdd_torch_base:
         self.def_mm_ = torch.empty((self.cuda_solver.nr_layers()), dtype = torch.float32, device = 'cuda')
 
         self.cuda_solver.get_solver_costs(self.lo_costs_.data_ptr(), self.hi_costs_.data_ptr(), self.def_mm_.data_ptr())
-        self.cost_from_root_ = torch.empty((self.cuda_solver.nr_bdd_nodes()), dtype = torch.float32, device = 'cuda')
-        self.cost_from_terminal_ = torch.zeros((self.cuda_solver.nr_bdd_nodes()), dtype = torch.float32, device = 'cuda')
-        # Set costs of bot sinks to top to infinity:
-        self.cost_from_terminal_[self.bot_sink_indices_] = float("Inf")
 
     def nr_hops(self):
         return len(self.cum_nr_layers_per_hop_dist_) - 1 # ignores terminal nodes.
@@ -57,42 +53,111 @@ class bdd_torch_base:
         else:
             return self.cum_nr_bdd_nodes_per_hop_dist_[hop_index - 1], self.cum_nr_bdd_nodes_per_hop_dist_[hop_index]
 
-    def flush_costs_from_root(self):
-        self.cost_from_root_[:] = float("Inf")
-        self.cost_from_root_[self.root_indices_] = 0.0
+    def init_costs_from_root(self, is_log_sum_exp = False):
+        cost_from_root = torch.empty((self.cuda_solver.nr_bdd_nodes()), dtype = torch.float32, device = 'cuda')
+        if not is_log_sum_exp:
+            cost_from_root[:] = float("Inf")
+            cost_from_root[self.root_indices_] = 0.0
+        else:
+            cost_from_root[:] = 0.0
+            cost_from_root[self.bot_sink_indices_] = float("Inf")
+        return cost_from_root
 
-    def get_arc_costs_bdd_node(self, hop_index):
+    def init_costs_from_terminal(self, is_log_sum_exp = False):
+        cost_from_terminal = torch.empty((self.cuda_solver.nr_bdd_nodes()), dtype = torch.float32, device = 'cuda')
+        if not is_log_sum_exp:
+            cost_from_terminal[:] = 0.0
+            cost_from_terminal[self.bot_sink_indices_] = float("Inf")
+        else:
+            cost_from_terminal[:] = 0.0
+            cost_from_terminal[self.bot_sink_indices_] = -float("Inf")
+        return cost_from_terminal
+
+    def get_arc_costs_bdd_node(self, hop_index, lo_costs, hi_costs):
         bdd_node_start, bdd_node_end = self.start_end_bdd_node_indices(hop_index)
         node_to_layer_map = self.bdd_node_to_layer_map_[bdd_node_start: bdd_node_end]
-        return self.lo_costs_[node_to_layer_map], self.hi_costs_[node_to_layer_map], self.def_mm_[node_to_layer_map]
+        return lo_costs[node_to_layer_map], hi_costs[node_to_layer_map]
 
-    def get_hop_data(self, hop_index):
+    def get_hop_data(self, hop_index, lo_costs, hi_costs):
         start_node, end_node = self.start_end_bdd_node_indices(hop_index)
         lo_bdd_node_hop = self.lo_bdd_node_[start_node: end_node]
         hi_bdd_node_hop = self.hi_bdd_node_[start_node: end_node]
-        lo_cost_hop, hi_cost_hop, def_mm_hop = self.get_arc_costs_bdd_node(hop_index)
+        lo_cost_hop, hi_cost_hop = self.get_arc_costs_bdd_node(hop_index, lo_costs, hi_costs)
         valid_node_mask = lo_bdd_node_hop >= 0 # No outgoing arcs from terminal nodes.
-        return start_node, end_node, lo_bdd_node_hop, hi_bdd_node_hop, lo_cost_hop, hi_cost_hop, def_mm_hop, valid_node_mask
+        return start_node, end_node, lo_bdd_node_hop, hi_bdd_node_hop, lo_cost_hop, hi_cost_hop, valid_node_mask
 
-    def forward_run(self):
-        self.flush_costs_from_root()
+    def forward_run(self, lo_costs, hi_costs, is_smooth = False):
+        cost_from_root = self.init_costs_from_root(is_smooth)
         for hop_index in range(self.nr_hops()):
-            start_node, end_node, lo_bdd_node_hop, hi_bdd_node_hop, lo_cost_hop, hi_cost_hop, def_mm_hop, valid_node_mask = self.get_hop_data(hop_index)
-            cost_from_root_hop = self.cost_from_root_[start_node:end_node]
-
-            next_cost_to_lo = cost_from_root_hop[valid_node_mask] + lo_cost_hop[valid_node_mask]
-            next_cost_to_hi = cost_from_root_hop[valid_node_mask] + hi_cost_hop[valid_node_mask]
+            start_node, end_node, lo_bdd_node_hop, hi_bdd_node_hop, lo_cost_hop, hi_cost_hop, valid_node_mask = self.get_hop_data(hop_index, lo_costs, hi_costs)
+            cost_from_root_hop = cost_from_root[start_node:end_node]
             
-            scatter_min(next_cost_to_lo, lo_bdd_node_hop[valid_node_mask], out = self.cost_from_root_)            
-            scatter_min(next_cost_to_hi, hi_bdd_node_hop[valid_node_mask], out = self.cost_from_root_)
-        return self.cost_from_root_
+            if is_smooth:
+                next_costs = torch.cat((cost_from_root_hop[valid_node_mask] - lo_cost_hop[valid_node_mask], 
+                                        cost_from_root_hop[valid_node_mask] - hi_cost_hop[valid_node_mask]), 0)
+                next_indices = torch.cat((lo_bdd_node_hop[valid_node_mask], hi_bdd_node_hop[valid_node_mask]), 0)
+                cost_from_root = cost_from_root + scatter_logsumexp(next_costs, next_indices, dim_size = cost_from_root.numel())
+            else:
+                next_cost_to_lo = cost_from_root_hop[valid_node_mask] + lo_cost_hop[valid_node_mask]
+                next_cost_to_hi = cost_from_root_hop[valid_node_mask] + hi_cost_hop[valid_node_mask]
+                scatter_min(next_cost_to_lo, lo_bdd_node_hop[valid_node_mask], out = cost_from_root)
+                scatter_min(next_cost_to_hi, hi_bdd_node_hop[valid_node_mask], out = cost_from_root)
+        return cost_from_root
 
-    def backward_run(self):
+    def backward_run(self, lo_costs, hi_costs, is_smooth = False):
+        cost_from_terminal = self.init_costs_from_terminal(is_smooth)
         for hop_index in reversed(range(self.nr_hops())):
-            start_node, end_node, lo_bdd_node_hop, hi_bdd_node_hop, lo_cost_hop, hi_cost_hop, def_mm_hop, valid_node_mask = self.get_hop_data(hop_index)
+            start_node, end_node, lo_bdd_node_hop, hi_bdd_node_hop, lo_cost_hop, hi_cost_hop, valid_node_mask = self.get_hop_data(hop_index, lo_costs, hi_costs)
+            hop_indices = torch.arange(start_node, end_node, dtype = torch.long, device = 'cuda')
+            if is_smooth:
+                next_lo_cost_from_terminal = cost_from_terminal[lo_bdd_node_hop[valid_node_mask]] - lo_cost_hop[valid_node_mask]
+                next_hi_cost_from_terminal = cost_from_terminal[hi_bdd_node_hop[valid_node_mask]] - hi_cost_hop[valid_node_mask]
+                cost_from_terminal[hop_indices[valid_node_mask]] = torch.logaddexp(next_lo_cost_from_terminal, next_hi_cost_from_terminal)
+            else:
+                next_lo_cost_from_terminal = cost_from_terminal[lo_bdd_node_hop[valid_node_mask]] + lo_cost_hop[valid_node_mask]
+                next_hi_cost_from_terminal = cost_from_terminal[hi_bdd_node_hop[valid_node_mask]] + hi_cost_hop[valid_node_mask]
+                cost_from_terminal[hop_indices[valid_node_mask]] = torch.minimum(next_lo_cost_from_terminal, next_hi_cost_from_terminal)
+        return cost_from_terminal
 
-            next_lo_cost_from_terminal = self.cost_from_terminal_[lo_bdd_node_hop[valid_node_mask]] + lo_cost_hop[valid_node_mask]
-            next_hi_cost_from_terminal = self.cost_from_terminal_[hi_bdd_node_hop[valid_node_mask]] + hi_cost_hop[valid_node_mask]
-            hop_indices = torch.arange(start_node, end_node, dtype = torch.long)
-            self.cost_from_terminal_[hop_indices[valid_node_mask]] = torch.minimum(next_lo_cost_from_terminal, next_hi_cost_from_terminal)
-        return self.cost_from_terminal_
+    def marginals(self, lo_costs, hi_costs, is_smooth = False):
+        cost_from_root = self.forward_run(lo_costs, hi_costs, is_smooth)
+        cost_from_terminal = self.backward_run(lo_costs, hi_costs, is_smooth)
+        lo_path_costs = torch.empty_like(cost_from_root)
+        hi_path_costs = torch.empty_like(cost_from_root)
+        for hop_index in range(self.nr_hops()):
+            start_node, end_node, lo_bdd_node_hop, hi_bdd_node_hop, lo_cost_hop, hi_cost_hop, valid_node_mask = self.get_hop_data(hop_index, lo_costs, hi_costs)
+            cost_from_root_hop = cost_from_root[start_node:end_node]
+            if not is_smooth:
+                next_cost_to_lo = cost_from_root_hop[valid_node_mask] + lo_cost_hop[valid_node_mask]
+                next_cost_to_hi = cost_from_root_hop[valid_node_mask] + hi_cost_hop[valid_node_mask]
+            else:
+                next_cost_to_lo = cost_from_root_hop[valid_node_mask] - lo_cost_hop[valid_node_mask]
+                next_cost_to_hi = cost_from_root_hop[valid_node_mask] - hi_cost_hop[valid_node_mask]
+            hop_indices = torch.arange(start_node, end_node, dtype = torch.long, device = 'cuda')
+            hop_indices = hop_indices[valid_node_mask]
+            lo_path_costs[hop_indices] = next_cost_to_lo + cost_from_terminal[lo_bdd_node_hop[valid_node_mask]]
+            hi_path_costs[hop_indices] = next_cost_to_hi + cost_from_terminal[hi_bdd_node_hop[valid_node_mask]]
+        if is_smooth:
+            marginal_lo = scatter_logsumexp(lo_path_costs, self.bdd_node_to_layer_map_)
+            marginal_hi = scatter_logsumexp(hi_path_costs, self.bdd_node_to_layer_map_)
+        else:
+            marginal_lo = scatter_min(lo_path_costs, self.bdd_node_to_layer_map_)[0]
+            marginal_hi = scatter_min(hi_path_costs, self.bdd_node_to_layer_map_)[0]
+        return marginal_lo, marginal_hi
+
+    def smooth_solution(self, lo_costs, hi_costs, get_logits = False):
+        marginal_lo, marginal_hi = self.marginals(lo_costs, hi_costs, True)
+        if get_logits:
+            return torch.nn.LogSoftmax(dim = 1)(torch.stack((marginal_lo, marginal_hi), 1))[:, 1]        
+        else:
+            return torch.nn.Softmax(dim = 1)(torch.stack((marginal_lo, marginal_hi), 1))[:, 1]
+
+    def valid_layer_mask(self):
+        mask = torch.ones(self.cuda_solver.nr_layers(), dtype=torch.bool, device = 'cuda')
+        mask[self.bdd_node_to_layer_map_[self.bot_sink_indices_]] = False
+        return mask
+        
+    def valid_bdd_node_mask(self):
+        mask = torch.ones(self.cuda_solver.nr_bdd_nodes(), dtype=torch.bool, device = 'cuda')
+        mask[self.bot_sink_indices_] = False
+        return mask

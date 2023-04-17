@@ -646,6 +646,7 @@ namespace LPMP {
     bool bdd_cuda_parallel_mma<REAL>::compute_direction_bfgs(thrust::device_ptr<REAL> grad_f)
     {
         this->bdds_solution_cuda(grad_f);
+        // this->smooth_solution_cuda(grad_f);
         bool projected = this->lbfgs_solver_.project_gradient(grad_f);
         if (!projected)
         {

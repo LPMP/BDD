@@ -171,6 +171,13 @@ void solution_per_bdd(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long sol_o
 }
 
 template<typename REAL>
+void smooth_solution_per_bdd(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long sol_out_ptr)
+{
+    thrust::device_ptr<REAL> sol_out_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<REAL*>(sol_out_ptr));
+    solver.smooth_solution_cuda(sol_out_ptr_thrust);
+}
+
+template<typename REAL>
 void terminal_layer_indices(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long indices_out_ptr)
 {
     thrust::device_ptr<int> indices_out_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<int*>(indices_out_ptr));
@@ -494,6 +501,10 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
         {
             solution_per_bdd(solver, sol_out_ptr);
         }, "Computes argmin for each constraint and copies in the provided pointer to FP32 memory (size = nr_layers()).")
+        .def("smooth_solution_per_bdd", [](bdd_type_default& solver, const long sol_out_ptr)
+        {
+            smooth_solution_per_bdd(solver, sol_out_ptr);
+        }, "Computes smooth argmin for each constraint and copies in the provided pointer to FP32 memory (size = nr_layers()).")
         .def("terminal_layer_indices", [](bdd_type_default& solver, const long indices_out_ptr)
         {
             terminal_layer_indices(solver, indices_out_ptr);
@@ -727,6 +738,7 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
         .def("get_cum_nr_bdd_nodes_per_hop_dist", &bdd_type_double::get_cum_nr_bdd_nodes_per_hop_dist)
         .def("get_cum_nr_layers_per_hop_dist", &bdd_type_double::get_cum_nr_layers_per_hop_dist)
         .def("get_nr_variables_per_hop_dist", &bdd_type_double::get_nr_variables_per_hop_dist)
+        .def_property("non_learned_lbfgs_step_size", &bdd_type_double::get_lbfgs_step_size, &bdd_type_double::set_lbfgs_step_size)
         .def("constraint_matrix_coeffs", [](const bdd_type_double& solver, const LPMP::ILP_input& ilp)
         {
             return get_constraint_matrix_coeffs(ilp, solver);
@@ -742,6 +754,10 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
         {
             solution_per_bdd(solver, sol_out_ptr);
         }, "Computes argmin for each constraint and copies in the provided pointer to FP32 memory (size = nr_layers()).")
+        .def("smooth_solution_per_bdd", [](bdd_type_double& solver, const long sol_out_ptr)
+        {
+            smooth_solution_per_bdd(solver, sol_out_ptr);
+        }, "Computes smooth argmin for each constraint and copies in the provided pointer to FP32 memory (size = nr_layers()).")
         .def("terminal_layer_indices", [](bdd_type_double& solver, const long indices_out_ptr)
         {
             terminal_layer_indices(solver, indices_out_ptr);

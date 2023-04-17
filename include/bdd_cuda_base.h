@@ -86,6 +86,8 @@ namespace LPMP {
             std::tuple<thrust::device_vector<int>, thrust::device_vector<REAL>, thrust::device_vector<REAL>> sum_marginals_cuda(bool get_sorted = true, bool get_log_probs = true);
 
             void bdds_solution_cuda(thrust::device_ptr<REAL> sol); // Computes argmin for each BDD separately and sets in sol.
+            void smooth_solution_cuda(thrust::device_ptr<REAL> smooth_sol); // Computes smooth argmin.
+
             two_dim_variable_array<REAL> bdds_solution(); // Returns the solution on CPU and laid out in similar way as the output of min_marginals()
 
             void compute_primal_objective_vec(thrust::device_ptr<REAL> primal_obj);

@@ -949,6 +949,44 @@ namespace LPMP {
     }
 
     template<typename REAL>
+    struct ComputeSmoothSolution {
+        const int* primal_index;
+        const REAL* log_marginals_lo;
+        const REAL* log_marginals_hi;
+        REAL* prob_hi;
+        const unsigned long num_vars;
+        __host__ __device__ void operator() (const int i) const
+        {
+            const int primal = primal_index[i];
+            if (primal >= num_vars) {
+                prob_hi[i] = 0.0; 
+                return;
+            }
+            const REAL m_lo = log_marginals_lo[i];
+            const REAL m_hi = log_marginals_hi[i];
+            const REAL c = max(m_lo, m_hi);
+            const REAL logsumexp = c + log(exp(m_lo - c) + exp(m_hi - c));
+            prob_hi[i] = exp(m_hi - logsumexp);
+        }
+    };
+
+    template<typename REAL>
+    void bdd_cuda_base<REAL>::smooth_solution_cuda(thrust::device_ptr<REAL> smooth_sol)
+    {
+        thrust::device_vector<REAL> sum_marg_0, sum_marg_1;
+        thrust::device_vector<int> primal_variable_index;
+
+        std::tie(primal_variable_index, sum_marg_0, sum_marg_1) = sum_marginals_cuda(false, true);
+
+        ComputeSmoothSolution<REAL> compute_smooth_sol({thrust::raw_pointer_cast(primal_variable_index.data()),
+                                                        thrust::raw_pointer_cast(sum_marg_0.data()), 
+                                                        thrust::raw_pointer_cast(sum_marg_1.data()),
+                                                        thrust::raw_pointer_cast(smooth_sol),
+                                                        nr_variables()});
+        thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + nr_layers(), compute_smooth_sol);
+    }
+
+    template<typename REAL>
     two_dim_variable_array<std::array<double,2>> bdd_cuda_base<REAL>::sum_marginals(bool get_log_probs)
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
