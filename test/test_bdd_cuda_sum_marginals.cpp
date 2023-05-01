@@ -5,6 +5,14 @@
 
 using namespace LPMP;
 
+const char * one_simplex_problem = 
+R"(Minimize
+1 x_1 + 2 x_2 + 1 x_3
+Subject To
+x_1 + x_2 + x_3 = 1
+End
+)";
+
 const char * two_simplex_problem = 
 R"(Minimize
 2 x_1 + 3 x_2 + 4 x_3
@@ -30,6 +38,16 @@ End)";
 
 int main(int argc, char** argv)
 {
+    {
+        const ILP_input ilp = ILP_parser::parse_string(one_simplex_problem);
+        bdd_preprocessor pre(ilp);
+
+        bdd_cuda_base<float> solver(pre.get_bdd_collection());
+        solver.update_costs(ilp.objective().begin(), ilp.objective().begin(), ilp.objective().begin(), ilp.objective().end());
+
+        const auto mms = solver.sum_marginals(true);
+    }
+
     {
         const ILP_input ilp = ILP_parser::parse_string(two_simplex_problem);
         bdd_preprocessor pre(ilp);

@@ -73,6 +73,18 @@ __device__ __forceinline__ float atomicMax(float *address, float val)
     return __int_as_float(ret);
 }
 
+__device__ __forceinline__ double atomicMax(double *address, double val)
+{
+    unsigned long long int ret = __double_as_longlong(*address);
+    while(val > __longlong_as_double(ret))
+    {
+        unsigned long long int old = ret;
+        if((ret = atomicCAS((unsigned long long int *)address, old, __double_as_longlong(val))) == old)
+            break;
+    }
+    return __longlong_as_double(ret);
+}
+
 // copied from https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html
 #if !defined(__CUDA_ARCH__) || __CUDA_ARCH__ >= 600
 #else

@@ -1,6 +1,8 @@
 import torch, random
 from BDD.bdd_cuda_learned_mma_py import bdd_cuda_learned_mma
 from torch.autograd.function import once_differentiable
+import bdd_cuda_torch.bdd_torch_base as bdd_torch_base
+from torch.utils.checkpoint import checkpoint as torch_checkpoint
 
 def validate_input_format(*args):
     for arg in args:
@@ -19,14 +21,12 @@ def ComputePrimalSolution(solvers, lo_costs_batch, hi_costs_batch, def_mm_batch,
 
 def GetMarginalProbability(solvers, lo_costs_batch, hi_costs_batch):
     validate_input_format(lo_costs_batch, hi_costs_batch)
-    marg_prob_lo = torch.zeros_like(lo_costs_batch)
-    marg_prob_hi = torch.empty_like(hi_costs_batch)
+    prob_hi = torch.zeros_like(lo_costs_batch)
     layer_start = 0
     for (b, solver) in enumerate(solvers):
-        solver.set_solver_costs(lo_costs_batch[layer_start].data_ptr(), hi_costs_batch[layer_start].data_ptr(), marg_prob_lo[layer_start].data_ptr())
-        solver.sum_marginals(marg_prob_lo[layer_start].data_ptr(), marg_prob_hi[layer_start].data_ptr(), True)
+        solver.set_solver_costs(lo_costs_batch[layer_start].data_ptr(), hi_costs_batch[layer_start].data_ptr(), prob_hi[layer_start].data_ptr())
+        solver.smooth_solution_per_bdd(prob_hi[layer_start].data_ptr())
         layer_start += solver.nr_layers()
-    prob_hi = torch.nn.Softmax(dim = 1)(torch.stack((marg_prob_lo, marg_prob_hi), 1))[:, 1]
     return prob_hi
 
 def GetSumMarginals(solvers, lo_costs_batch, hi_costs_batch, get_logits):
@@ -434,3 +434,31 @@ class ComputePerBDDSolutionsIdentityBackward(torch.autograd.Function):
         # Negative identity as jacobian.
         print(f"Returning grad: min: {grad_per_bdd_solution_hi.min()}, max: {grad_per_bdd_solution_hi.max()}")
         return None, grad_per_bdd_solution_hi * norm_grad, -1.0 * grad_per_bdd_solution_hi * norm_grad
+
+# class SmoothSolutionGradientCheckpoint(torch.autograd.Function):
+#     @staticmethod
+#     def forward(ctx, cuda_solver, lo_costs, hi_costs, get_logits):
+#         # Run the function normally
+#         torch_solver = bdd_torch_base.bdd_torch_base(cuda_solver)
+#         if get_logits:
+#             smooth_sol = torch_solver.smooth_solution_logits(lo_costs, hi_costs)
+#         else:
+#             smooth_sol = torch_solver.smooth_solution(lo_costs, hi_costs)
+#         ctx.save_for_backward(lo_costs, hi_costs)
+#         ctx.get_logits = get_logits
+#         ctx.torch_solver = torch_solver
+#         return smooth_sol
+
+#     @staticmethod
+#     def backward(ctx, grad_output):
+#         # Retrieve the saved inputs from the forward pass
+#         lo_costs, hi_costs = ctx.saved_tensors
+#         # Run the forward pass again with gradient checkpointing enabled
+#         if ctx.get_logits:
+#             y = torch_checkpoint(ctx.torch_solver.smooth_solution_logits, lo_costs, hi_costs)
+#         else:
+#             y = torch_checkpoint(ctx.torch_solver.smooth_solution, lo_costs, hi_costs)
+#         # Compute the gradients using autograd
+#         grad_inputs = torch.autograd.grad((y, ), (lo_costs, hi_costs), grad_output)
+#         # Return the gradients as a tuple
+#         return None, grad_inputs[0], grad_inputs[1], None
