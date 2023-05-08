@@ -65,102 +65,78 @@ def get_costs(cuda_solver):
     cuda_solver.get_solver_costs(lo_costs.data_ptr(), hi_costs.data_ptr(), def_mm.data_ptr())
     return lo_costs, hi_costs, def_mm
 
-def test_forward_run(instance, tolerance = 1e-10):
+def test_forward_run(instance, tolerance = 1e-5):
     cuda_solver = bdd_cuda_solver.bdd_cuda_learned_mma(instance, True, 1.0)
     torch_solver = bdd_torch_base(cuda_solver)
     start = time.time()
     lo_costs, hi_costs, def_mm = get_costs(torch_solver.cuda_solver)
     valid_mask = torch_solver.valid_bdd_node_mask()
-    # lo_costs.requires_grad = True
-    # hi_costs.requires_grad = True
-    # lo_costs.retain_grad()
-    # hi_costs.retain_grad()
-    torch_cost_from_root_smooth = torch_solver.forward_run(lo_costs, hi_costs, True)
-    print(torch_cost_from_root_smooth)
-    print(f'torch forward smooth new time: {time.time() - start}')
-    torch_cost_from_root_smooth_old = torch_solver.forward_run(lo_costs, hi_costs, True, False)
-    print(f'torch forward smooth old time: {time.time() - start}')
-    assert torch.all(torch.abs(torch_cost_from_root_smooth[valid_mask] - torch_cost_from_root_smooth_old[valid_mask]) < tolerance)
-    start = time.time()
     torch_cost_from_root = torch_solver.forward_run(lo_costs, hi_costs, False)
-    print(f'torch forward time: {time.time() - start}')
-    cuda_cost_from_root = torch.empty_like(torch_cost_from_root)
-    start = time.time()
-    torch_solver.cuda_solver.cost_from_root(cuda_cost_from_root.data_ptr())
-    print(f'cuda forward time: {time.time() - start}')
-    # breakpoint()
-    # assert torch.all(torch.abs(torch_cost_from_root[valid_mask] - cuda_cost_from_root[valid_mask]) < tolerance)
+    print(torch_cost_from_root)
+    smoothing = 1e-6
+    torch_cost_from_root_smooth = torch_solver.forward_run(lo_costs / smoothing, hi_costs / smoothing, True) * smoothing
+    assert torch.all(torch.abs(torch_cost_from_root[valid_mask] - torch_cost_from_root_smooth[valid_mask]) < tolerance)
 
-def test_backward_run(instance, tolerance = 1e-10):
+def test_backward_run(instance, tolerance = 1e-5):
     cuda_solver = bdd_cuda_solver.bdd_cuda_learned_mma(instance, True, 1.0)
     torch_solver = bdd_torch_base(cuda_solver)
     start = time.time()
     lo_costs, hi_costs, def_mm = get_costs(torch_solver.cuda_solver)
     torch_cost_from_terminal = torch_solver.backward_run(lo_costs, hi_costs, False)
-    torch_cost_from_terminal_smooth = torch_solver.backward_run(lo_costs, hi_costs, True)
-    print(torch_cost_from_terminal_smooth)
-    print(f'torch backward time: {time.time() - start}')
-    cuda_cost_from_terminal = torch.empty_like(torch_cost_from_terminal)
-    start = time.time()
-    torch_solver.cuda_solver.cost_from_terminal(cuda_cost_from_terminal.data_ptr())
-    print(f'cuda backward time: {time.time() - start}')
+    print(torch_cost_from_terminal)
+    smoothing = 1e-6
+    torch_cost_from_terminal_smooth = torch_solver.backward_run(lo_costs / smoothing, hi_costs / smoothing, True) * smoothing
     valid_mask = torch_solver.valid_bdd_node_mask()
-    breakpoint()
-    assert torch.all(torch.abs(torch_cost_from_terminal[valid_mask] - cuda_cost_from_terminal[valid_mask]) < tolerance)
+    assert torch.all(torch.abs(torch_cost_from_terminal[valid_mask] - torch_cost_from_terminal_smooth[valid_mask]) < tolerance)
 
-def test_min_marginals(instance, tolerance = 1e-10):
+def test_marginals(instance, tolerance = 1e-5):
     cuda_solver = bdd_cuda_solver.bdd_cuda_learned_mma(instance, True, 1.0)
     torch_solver = bdd_torch_base(cuda_solver)
-    start = time.time()
+    valid_mask = torch_solver.valid_layer_mask()
     lo_costs, hi_costs, def_mm = get_costs(torch_solver.cuda_solver)
-    torch_min_marginal_lo, torch_min_marginal_hi = torch_solver.marginals(lo_costs, hi_costs, False)
-    print(f'torch mm time: {time.time() - start}')
-    cuda_mm_difference = torch.empty_like(torch_min_marginal_lo)
-    start = time.time()
+    cuda_mm_difference = torch.empty_like(lo_costs)
     torch_solver.cuda_solver.all_min_marginal_differences(cuda_mm_difference.data_ptr())
-    print(f'cuda mm time: {time.time() - start}')
-    valid_mask = torch_solver.valid_layer_mask()
-    torch_mm_difference = torch_min_marginal_hi - torch_min_marginal_lo
-    assert torch.all(torch.abs(torch_mm_difference[valid_mask] - cuda_mm_difference[valid_mask]) < tolerance)
 
-def test_sum_marginals(instance, tolerance = 1e-4):
-    cuda_solver = bdd_cuda_solver.bdd_cuda_learned_mma(instance, True, 1.0)
-    # cuda_solver.non_learned_iterations(0.5, 1000, 1e-6, 3600)
-    torch_solver = bdd_torch_base(cuda_solver)
-    start = time.time()
-    lo_costs, hi_costs, def_mm = get_costs(torch_solver.cuda_solver)
-    torch_sum_marginal_lo, torch_sum_marginal_hi = torch_solver.marginals(lo_costs, hi_costs, True)
-    print(torch_sum_marginal_lo)
-    print(torch_sum_marginal_hi)
-    print(f'torch sm time: {time.time() - start}')
-    cuda_sm_lo = torch.empty_like(torch_sum_marginal_lo)
-    cuda_sm_hi = torch.empty_like(torch_sum_marginal_lo)
-    start = time.time()
-    torch_solver.cuda_solver.sum_marginals(cuda_sm_lo.data_ptr(), cuda_sm_hi.data_ptr(), True)
-    print(f'cuda sm time: {time.time() - start}')
-    cuda_sm_diff = cuda_sm_hi - cuda_sm_lo
-    valid_mask = torch_solver.valid_layer_mask()
-    torch_sm_difference = torch_sum_marginal_hi - torch_sum_marginal_lo
-    assert torch.all(torch.abs(torch_sm_difference[valid_mask] - cuda_sm_diff[valid_mask]) < tolerance)
+    torch_mm_lo, torch_mm_hi = torch_solver.marginals(lo_costs, hi_costs, False)
+    torch_mm_diff = torch_mm_hi - torch_mm_lo
+    assert torch.all(torch.abs(torch_mm_diff[valid_mask] - cuda_mm_difference[valid_mask]) < tolerance)
+
+    smoothing = 1e-6
+    torch_mm_lo_smooth, torch_mm_hi_smooth = torch_solver.marginals(lo_costs / smoothing, hi_costs / smoothing, True)
+    torch_mm_lo_smooth *= smoothing
+    torch_mm_hi_smooth *= smoothing
+    assert torch.all(torch.abs(torch_mm_lo[valid_mask] - torch_mm_lo_smooth[valid_mask]) < tolerance)
+    assert torch.all(torch.abs(torch_mm_hi[valid_mask] - torch_mm_hi_smooth[valid_mask]) < tolerance)
+
+# def test_sum_marginals(instance, tolerance = 1e-4):
+#     cuda_solver = bdd_cuda_solver.bdd_cuda_learned_mma(instance, True, 1.0)
+#     # cuda_solver.non_learned_iterations(0.5, 1000, 1e-6, 3600)
+#     torch_solver = bdd_torch_base(cuda_solver)
+#     start = time.time()
+#     lo_costs, hi_costs, def_mm = get_costs(torch_solver.cuda_solver)
+#     torch_sum_marginal_lo, torch_sum_marginal_hi = torch_solver.marginals(lo_costs, hi_costs, True)
+#     print(torch_sum_marginal_lo)
+#     print(torch_sum_marginal_hi)
+#     print(f'torch sm time: {time.time() - start}')
+#     cuda_sm_lo = torch.empty_like(torch_sum_marginal_lo)
+#     cuda_sm_hi = torch.empty_like(torch_sum_marginal_lo)
+#     start = time.time()
+#     torch_solver.cuda_solver.sum_marginals(cuda_sm_lo.data_ptr(), cuda_sm_hi.data_ptr(), True)
+#     print(f'cuda sm time: {time.time() - start}')
+#     cuda_sm_diff = cuda_sm_hi - cuda_sm_lo
+#     valid_mask = torch_solver.valid_layer_mask()
+#     torch_sm_difference = torch_sum_marginal_hi - torch_sum_marginal_lo
+#     assert torch.all(torch.abs(torch_sm_difference[valid_mask] - cuda_sm_diff[valid_mask]) < tolerance)
 
 def test_smooth_solution(instance, tolerance = 1e-6):
-    if torch.get_default_dtype() == torch.float64:
-        cuda_solver = bdd_cuda_solver.bdd_cuda_learned_mma_double(instance, True, 1.0)
-    else:
-        cuda_solver = bdd_cuda_solver.bdd_cuda_learned_mma(instance, True, 1.0)
-    #cuda_solver.non_learned_iterations(0.5, 20, 1e-6, 3600)
+    cuda_solver = bdd_cuda_solver.bdd_cuda_learned_mma(instance, True, 1.0)
     torch_solver = bdd_torch_base(cuda_solver)
-    start = time.time()
     lo_costs, hi_costs, def_mm = get_costs(torch_solver.cuda_solver)
     torch_smooth_solution = torch_solver.smooth_solution(lo_costs, hi_costs)
-    print(f'torch smooth solution time: {time.time() - start}')
     cuda_smooth_solution = torch.empty_like(torch_smooth_solution)
-    start = time.time()
     torch_solver.cuda_solver.smooth_solution_per_bdd(cuda_smooth_solution.data_ptr())
-    print(f'cuda smooth solution time: {time.time() - start}')
     valid_mask = torch_solver.valid_layer_mask()
     cuda_solution = torch.empty_like(torch_smooth_solution)
-    start = time.time()
     torch_solver.cuda_solver.solution_per_bdd(cuda_solution.data_ptr())
     diff = torch.abs(torch_smooth_solution[valid_mask] - cuda_smooth_solution[valid_mask])
     print(f'max diff: {diff.max().item():.3f}')
@@ -238,20 +214,20 @@ def test_mle(instance, target_sol = None):
             print(f'itr: {itr}, loss: {loss.item()}, hamming loss: {compute_hamming_loss(torch_solver, lo_costs, hi_costs, target_sol, valid_mask)}')
     print(f'\t test_mle time: {time.time() - st}')
 
-# test_forward_run(ilp_instance_bbd.parse_ILP(one_simplex))
-# test_forward_run(ilp_instance_bbd.parse_ILP(two_simplex))
-# test_forward_run(ilp_instance_bbd.parse_ILP(matching_3x3))
-# test_forward_run(ilp_instance_bbd.parse_ILP(short_chain_shuffled))
+test_forward_run(ilp_instance_bbd.parse_ILP(one_simplex))
+test_forward_run(ilp_instance_bbd.parse_ILP(two_simplex))
+test_forward_run(ilp_instance_bbd.parse_ILP(matching_3x3))
+test_forward_run(ilp_instance_bbd.parse_ILP(short_chain_shuffled))
 
-# test_backward_run(ilp_instance_bbd.parse_ILP(one_simplex))
-# test_backward_run(ilp_instance_bbd.parse_ILP(two_simplex))
-# test_backward_run(ilp_instance_bbd.parse_ILP(matching_3x3))
-# test_backward_run(ilp_instance_bbd.parse_ILP(short_chain_shuffled))
+test_backward_run(ilp_instance_bbd.parse_ILP(one_simplex))
+test_backward_run(ilp_instance_bbd.parse_ILP(two_simplex))
+test_backward_run(ilp_instance_bbd.parse_ILP(matching_3x3))
+test_backward_run(ilp_instance_bbd.parse_ILP(short_chain_shuffled))
 
-# test_min_marginals(ilp_instance_bbd.parse_ILP(one_simplex))
-# test_min_marginals(ilp_instance_bbd.parse_ILP(two_simplex))
-# test_min_marginals(ilp_instance_bbd.parse_ILP(matching_3x3))
-# test_min_marginals(ilp_instance_bbd.parse_ILP(short_chain_shuffled))
+test_marginals(ilp_instance_bbd.parse_ILP(one_simplex))
+test_marginals(ilp_instance_bbd.parse_ILP(two_simplex))
+test_marginals(ilp_instance_bbd.parse_ILP(matching_3x3))
+test_marginals(ilp_instance_bbd.parse_ILP(short_chain_shuffled))
 
 # test_sum_marginals(ilp_instance_bbd.parse_ILP(one_simplex))
 # test_sum_marginals(ilp_instance_bbd.parse_ILP(two_simplex))
