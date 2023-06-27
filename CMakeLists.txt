@@ -1,4 +1,9 @@
-project(LPMP-BDD LANGUAGES CXX)
+project(LPMP-BDD
+#    VERSION 0.1
+    DESCRIPTION "Lagrange decomposition with BDDs for ILPs"
+    HOMEPAGE_URL "https://github.com/LPMP/BDD"
+    LANGUAGES CXX
+)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 

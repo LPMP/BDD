@@ -162,6 +162,8 @@ namespace BDD {
             size_t offset(const size_t bdd_nr) const { assert(bdd_nr < nr_bdds()); return bdd_delimiters[bdd_nr]; }
             template<typename ITERATOR>
                 bool evaluate(const size_t bdd_nr, ITERATOR var_begin, ITERATOR var_end) const;
+
+            // change variable indices according to the given map
             template<typename ITERATOR>
                 void rebase(const size_t bdd_nr, ITERATOR var_map_begin, ITERATOR var_map_end);
             template<typename VAR_MAP>
@@ -179,8 +181,14 @@ namespace BDD {
 
             bool variables_sorted(const size_t bdd_nr) const;
             std::vector<size_t> variables(const size_t bdd_nr) const;
+            size_t nr_variables(const size_t bdd_nr) const;
             std::array<size_t,2> min_max_variables(const size_t bdd_nr) const;
             size_t root_variable(const size_t bdd_nr) const;
+            std::vector<size_t> layer_widths(const size_t bdd_nr) const; // TODO: test
+            std::vector<size_t> layer_offsets(const size_t bdd_nr) const; // TODO: test
+
+            size_t max_variable() const;
+
             // remove bdds with indices occurring in iterator
             template<typename ITERATOR>
                 void remove(ITERATOR bdd_it_begin, ITERATOR bdd_it_end);
@@ -192,6 +200,7 @@ namespace BDD {
 
             template<typename STREAM>
                 void export_graphviz(const size_t bdd_nr, STREAM& s) const;
+            void export_graphviz(const size_t bdd_nr, const std::string& filename) const;
 
             auto get_bdd_instructions(const size_t bdd_nr) const { return std::make_pair(bdd_instructions.begin() + bdd_delimiters[bdd_nr], bdd_instructions.begin() + bdd_delimiters[bdd_nr+1]); }
             auto get_reverse_bdd_instructions(const size_t bdd_nr) const { return std::make_pair(bdd_instructions.begin() + bdd_delimiters[bdd_nr], bdd_instructions.begin() + bdd_delimiters[bdd_nr+1]); }
@@ -208,6 +217,9 @@ namespace BDD {
 
             bool is_bdd(const size_t i) const;
             bool is_qbdd(const size_t bdd_nr) const;
+
+            // return (new) bdd nrs and aux_var_start + nr of auxiliary variables used
+            std::tuple<std::vector<size_t>,size_t> split_qbdd(const size_t bdd_nr, const size_t chunk_size, const size_t aux_var_start);
 
             template<typename STREAM, typename COST_ITERATOR>
                 void write_bdd_lp(STREAM& s, COST_ITERATOR cost_begin, COST_ITERATOR cost_end) const;

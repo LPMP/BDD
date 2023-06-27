@@ -14,7 +14,7 @@
 
 namespace LPMP {
 
-    two_dim_variable_array<size_t> bdd_preprocessor::add_ilp(const ILP_input& input, const bool constraint_groups, const bool normalize)
+    two_dim_variable_array<size_t> bdd_preprocessor::add_ilp(const ILP_input& input, const bool constraint_groups, const bool normalize, const bool split_long_bdds)
     {
         MEASURE_FUNCTION_EXECUTION_TIME;
         assert(bdd_collection.nr_bdds() == 0);
@@ -316,35 +316,58 @@ namespace LPMP {
 
         assert(ineq_to_bdd_nrs.size() == input.constraints().size());
 
-        std::cout << "[bdd preprocessor] final #BDDs = " << bdd_collection.nr_bdds() << "\n";
-
-        // second, preprocess BDDs, TODO: do this separately!
-        /*
-        if(preprocessing_arg.getValue().size() > 0)
+        // split long bdds
+        // TODO: ineq_to_bdd_nrs will not be valid anymore! This cannot work with the learned solver.
+        if(split_long_bdds)
         {
-            for(const std::string& preprocessing : preprocessing_arg.getValue())
+            // compute threshold when less than 1024 nodes are present per layer
+            std::vector<size_t> layer_widths;
+            for (size_t bdd_nr = 0; bdd_nr < bdd_collection.nr_bdds(); ++bdd_nr)
             {
-                if(preprocessing == "bridge")
-                    bdd_pre.set_coalesce_bridge();
-                else if(preprocessing == "subsumption")
-                    bdd_pre.set_coalesce_subsumption();
-                else if(preprocessing == "contiguous_overlap")
-                    bdd_pre.set_coalesce_contiguous_overlap();
-                else if(preprocessing == "subsumption_except_one")
-                    bdd_pre.set_coalesce_subsumption_except_one();
-                else if(preprocessing == "partial_contiguous_overlap")
-                    bdd_pre.set_coalesce_partial_contiguous_overlap();
-                else if(preprocessing == "cliques")
-                    bdd_pre.set_coalesce_cliques();
-                else
-                    throw std::runtime_error("bdd preprocessing argument " + preprocessing + " not recognized.");
+                const auto cur_layer_widths = bdd_collection.layer_widths(bdd_nr);
+                if (layer_widths.size() < cur_layer_widths.size())
+                    layer_widths.resize(cur_layer_widths.size(), 0);
+                for (size_t i = 0; i < cur_layer_widths.size(); ++i)
+                    layer_widths[i] += cur_layer_widths[i];
             }
-            bdd_pre.coalesce_bdd_collection();
 
-            for(size_t bdd_nr=0; bdd_nr<bdd_pre.get_bdd_collection().nr_bdds(); ++bdd_nr)
-                add_bdd(bdd_pre.get_bdd_collection()[bdd_nr]);
+            const size_t max_length_bdd = [&]()
+            {
+                if(*std::max_element(layer_widths.begin(), layer_widths.end()) < 2048 || bdd_collection.nr_bdds() < 128)
+                {
+                    std::cout << "[bdd preprocessor] Too {few|small} BDDs, do not split\n";
+                    return std::numeric_limits<size_t>::max();
+                }
+                for (size_t i = 50; i < std::max(std::ptrdiff_t(layer_widths.size()) - 50, std::ptrdiff_t(0)); ++i)
+                    if (layer_widths[i] < 2048)
+                        return i;
+                return std::numeric_limits<size_t>::max();
+            }();
+            std::cout << "[bdd preprocessor] Split BDDs longer than " << max_length_bdd << "\n";
+
+            if (max_length_bdd < std::numeric_limits<size_t>::max())
+            {
+                std::vector<size_t> bdds_to_remove;
+                size_t aux_var = input.nr_variables();
+                const size_t nr_orig_bdds = bdd_collection.nr_bdds();
+                for (size_t bdd_nr = 0; bdd_nr < nr_orig_bdds; ++bdd_nr)
+                {
+                    if (bdd_collection.nr_variables(bdd_nr) > max_length_bdd)
+                    {
+                        const auto [new_bdd_nrs, new_aux_var] = bdd_collection.split_qbdd(bdd_nr, max_length_bdd, aux_var);
+                        assert(new_bdd_nrs.size() > 0);
+                        aux_var = new_aux_var;
+                        if(!(new_bdd_nrs.size() == 1 && new_bdd_nrs[0] == bdd_nr))
+                            bdds_to_remove.push_back(bdd_nr);
+                    }
+                }
+
+                std::cout << "[bdd preprocessor] Split " << bdds_to_remove.size() << " BDDs\n";
+                bdd_collection.remove(bdds_to_remove.begin(), bdds_to_remove.end());
+            }
         }
-        */
+
+        std::cout << "[bdd preprocessor] final #BDDs = " << bdd_collection.nr_bdds() << "\n";
 
         return ineq_to_bdd_nrs;
     }

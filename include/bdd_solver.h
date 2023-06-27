@@ -57,6 +57,10 @@ namespace LPMP {
 
         bool tighten = false;
 
+        // cuda solver options //
+        bool cuda_split_long_bdds = false;
+        /////////////////////////
+
         // incremental perturbation rounding //
         bool incremental_primal_rounding = false;
         double incremental_initial_perturbation = std::numeric_limits<double>::infinity();
@@ -189,6 +193,8 @@ namespace LPMP {
 
         app.add_option("--smoothing", smoothing, "smoothing, default value = 0 (no smoothing)")
                 ->check(CLI::PositiveNumber);
+
+        app.add_flag("--cuda_split_long_bdds", cuda_split_long_bdds, "split long BDDs into short ones, might make cuda mma faster for problems with a few long inequalities");
 
         auto primal_group = app.add_option_group("primal rounding", "method for obtaining a primal solution from the dual optimization");
         auto incremental_primal_arg = primal_group->add_flag("--incremental_primal", incremental_primal_rounding, "incremental primal rounding flag");

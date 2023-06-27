@@ -3,6 +3,7 @@
 #include <cassert>
 #include <unordered_set>
 #include <unordered_map>
+#include <fstream> // TODO: remove
 
 namespace BDD {
 
@@ -484,6 +485,280 @@ namespace BDD {
         return contiguous_vars(bdd_nr);
     }
 
+    std::tuple<std::vector<size_t>,size_t> bdd_collection::split_qbdd(const size_t bdd_nr, const size_t chunk_size, const size_t aux_var_start)
+    {
+        assert(bdd_nr < nr_bdds());
+        assert(is_qbdd(bdd_nr));
+
+        const auto vars = variables(bdd_nr);
+        if(vars.size() <= chunk_size)
+            return std::make_tuple(std::vector<size_t>{bdd_nr}, aux_var_start);
+
+        const auto layer_widths = this->layer_widths(bdd_nr);
+        const auto layer_offsets = this->layer_offsets(bdd_nr);
+        assert(vars.size() == layer_widths.size() && vars.size() == layer_offsets.size());
+        const size_t nr_chunks = (vars.size() + chunk_size - 1) / chunk_size; // vars.size()/chunk_size rounded up
+        assert(nr_chunks > 0);
+        
+        std::vector<size_t> new_bdd_nrs;
+
+        // for synchronizing additional bdd nodes we need auxiliary variables, which start at aux_var_start
+        std::vector<size_t> aux_vars;
+        aux_vars.reserve(nr_chunks);
+        aux_vars.push_back(aux_var_start);
+        for(size_t chunk_nr=1; chunk_nr+1<nr_chunks; ++chunk_nr)
+        {
+            assert(chunk_nr*chunk_size < layer_widths.size());
+            aux_vars.push_back(aux_vars.back() + layer_widths[chunk_nr*chunk_size]);
+        }
+        assert(aux_vars.size() == nr_chunks-1);
+
+        auto add_bdd_instruction = [&](const size_t index, const size_t lo, const size_t hi)
+        {
+            assert(hi > bdd_instructions.size());
+            bdd_instruction bdd_instr;
+            bdd_instr.index = index;
+            assert(lo > bdd_instructions.size());
+            bdd_instr.lo = lo;
+            bdd_instr.hi = hi;
+            bdd_instructions.push_back(bdd_instr);
+        };
+
+        for (size_t chunk_nr = 0; chunk_nr<nr_chunks; ++chunk_nr)
+        {
+            const size_t first_layer = chunk_nr*chunk_size;
+            const size_t last_layer = std::min((chunk_nr+1)*chunk_size-1, layer_offsets.size()-1);
+            assert(first_layer <= last_layer);
+            assert(last_layer < vars.size());
+
+            const size_t nr_aux_bdd_nodes_head = [&]() -> size_t
+            {
+                if(chunk_nr == 0)
+                    return 0;
+                assert(first_layer > 0);
+                return (layer_widths[first_layer] * (layer_widths[first_layer]+1)) / 2;
+            }();
+
+            const size_t nr_bdd_nodes_chunk = [&]() -> size_t
+            {
+                if (chunk_nr + 1 == nr_chunks)
+                    return bdd_delimiters[bdd_nr + 1] - 2 - layer_offsets[first_layer]; // exclude the terminal instructions for last bdd
+                assert(last_layer + 1 < layer_offsets.size());
+                return layer_offsets[last_layer + 1] - layer_offsets[first_layer];
+            }();
+
+            const size_t nr_aux_bdd_nodes_tail = [&]() -> size_t
+            { 
+                if(chunk_nr == nr_chunks - 1)
+                    return 0;
+                assert(last_layer+1 < layer_widths.size());
+                assert(layer_widths[last_layer+1] > 1); // TODO: also test in such case if everything is correct
+                return (layer_widths[last_layer+1] * (layer_widths[last_layer+1]+1)) / 2 + layer_widths[last_layer+1]-1;
+            }();
+
+            auto aux_bdd_node_idx_tail = [&](const size_t i, const size_t j)
+            {
+                assert(chunk_nr + 1 < nr_chunks);
+                assert(last_layer + 1 < layer_widths.size() && i < layer_widths[last_layer+1]);
+                if(i == 0)
+                    assert(j < layer_widths[last_layer+1]);
+                else
+                    assert(j <= layer_widths[last_layer + 1] - i);
+                // stupid way: explicitly increment counter until found
+                if(i == 0)
+                    return bdd_delimiters.back() + nr_aux_bdd_nodes_head + nr_bdd_nodes_chunk + j;
+
+                size_t idx = layer_widths[last_layer+1];
+                for(size_t c=1; c<i; ++c)
+                    idx += layer_widths[last_layer + 1] - c + 1;
+                assert(idx + j < nr_aux_bdd_nodes_tail);
+                return bdd_delimiters.back() + nr_aux_bdd_nodes_head + nr_bdd_nodes_chunk + idx + j;
+                //const size_t n = layer_widths[last_layer+1];
+                //return layer_offsets[chunk_nr * chunk_size] +
+                //       (n * (n - 1) / 2) - (n - i) * ((n - i) - 1) / 2 + j - i - 1;
+            };
+
+            auto aux_bdd_node_idx_head = [&](const size_t i, const size_t j)
+            {
+                assert(chunk_nr < nr_chunks);
+                assert(chunk_nr > 0);
+                assert(first_layer < layer_widths.size() && i < layer_widths[first_layer]);
+                assert(j <= i);
+                // stupid way: explicitly increment counter until found
+                size_t idx = 0;
+                for(size_t c=0; c<i; ++c)
+                    idx += c+1;
+                assert(idx + j < nr_aux_bdd_nodes_head);
+                return bdd_delimiters.back() + idx + j;
+                //const size_t n = layer_widths[chunk_nr * chunk_size];
+                //return layer_offsets[chunk_nr * chunk_size] +
+                //       (n * (n - 1) / 2) - (n - i) * ((n - i) - 1) / 2 + j - i - 1;
+            };
+
+            const size_t bottom_bdd_idx = bdd_instructions.size() + nr_aux_bdd_nodes_head + nr_bdd_nodes_chunk + nr_aux_bdd_nodes_tail;
+            const size_t top_bdd_idx = bdd_instructions.size() + nr_aux_bdd_nodes_head + nr_bdd_nodes_chunk + nr_aux_bdd_nodes_tail + 1;
+
+            auto head_aux_var = [&](const size_t i)
+            {
+                assert(chunk_nr > 0 && chunk_nr < nr_chunks);
+                assert(i < layer_widths[first_layer]);
+                assert(chunk_nr-1 < aux_vars.size());
+                return aux_vars[chunk_nr-1] + i;
+            };
+
+            auto tail_aux_var = [&](const size_t i)
+            {
+                assert(chunk_nr+1 < nr_chunks);
+                assert(last_layer+1 < layer_widths.size());
+                assert(i < layer_widths[last_layer+1]);
+                assert(chunk_nr < aux_vars.size());
+                return aux_vars[chunk_nr] + i;
+            };
+
+            auto layer_offset = [&](const size_t layer)
+            {
+                assert(layer <= vars.size());
+                if(layer < layer_offsets.size())
+                    return layer_offsets[layer];
+                else
+                    return bdd_delimiters[bdd_nr + 1]-2; // exclude terminal nodes
+            };
+
+            // 1) Construct head auxiliary nodes of current chunk
+            if(chunk_nr > 0)
+            {
+                const size_t last_layer_width = layer_widths[chunk_nr*chunk_size];
+                for(size_t i=0; i+1<last_layer_width; ++i)
+                {
+                    for(size_t j=0; j<=i; ++j)
+                    {
+                        if(j == 0)
+                            add_bdd_instruction(head_aux_var(i),
+                                                aux_bdd_node_idx_head(i + 1, 0),
+                                                aux_bdd_node_idx_head(i + 1, 1));
+                        else
+                            add_bdd_instruction(head_aux_var(i),
+                                                aux_bdd_node_idx_head(i + 1, j + 1),
+                                                bottom_bdd_idx);
+                        assert(bdd_instructions.size() == aux_bdd_node_idx_head(i, j) + 1);
+                    }
+                }
+
+                // connect to first layer of current chunk
+                const size_t i = last_layer_width - 1;
+                for(size_t j=0; j<=i; ++j)
+                {
+                    if(j == 0)
+                        add_bdd_instruction(head_aux_var(i),
+                                            bottom_bdd_idx,
+                                            bdd_delimiters.back() + nr_aux_bdd_nodes_head + j);
+                    else
+                        add_bdd_instruction(head_aux_var(i),
+                                            bdd_delimiters.back() + nr_aux_bdd_nodes_head + j,
+                                            bottom_bdd_idx);
+                }
+            }
+            assert(bdd_delimiters.back() + nr_aux_bdd_nodes_head == bdd_instructions.size());
+
+            // 2) Copy bdd nodes of current chunk
+            if (chunk_nr + 1 < nr_chunks)
+                assert(layer_widths[last_layer + 1] > 1);
+
+            for(size_t bdd_idx = layer_offset(first_layer); bdd_idx<layer_offset(last_layer+1); ++bdd_idx)
+            {
+                bdd_instruction bdd_instr = bdd_instructions[bdd_idx];
+
+                if(bdd_instructions[bdd_instr.lo].is_botsink())
+                    bdd_instr.lo = bottom_bdd_idx;
+                else if (bdd_instructions[bdd_instr.lo].is_topsink())
+                    bdd_instr.lo = top_bdd_idx;
+                else
+                {
+                    bdd_instr.lo = bdd_instructions.size() + (bdd_instr.lo - bdd_idx);
+                    assert(bdd_instr.lo < bdd_delimiters.back() + nr_aux_bdd_nodes_head + nr_bdd_nodes_chunk + nr_aux_bdd_nodes_tail);
+                }
+
+                if(bdd_instructions[bdd_instr.hi].is_botsink())
+                    bdd_instr.hi = bottom_bdd_idx;
+                else if (bdd_instructions[bdd_instr.hi].is_topsink())
+                    bdd_instr.hi = top_bdd_idx;
+                else
+                {
+                    bdd_instr.hi = bdd_instructions.size() + (bdd_instr.hi - bdd_idx);
+                    assert(bdd_instr.hi < bdd_delimiters.back() + nr_aux_bdd_nodes_head + nr_bdd_nodes_chunk + nr_aux_bdd_nodes_tail);
+                }
+
+                bdd_instructions.push_back(bdd_instr);
+            }
+            assert(bdd_delimiters.back() + nr_aux_bdd_nodes_head + nr_bdd_nodes_chunk == bdd_instructions.size());
+
+            // 3) Add tail auxiliary nodes of current chunk
+            if(chunk_nr+1 < nr_chunks)
+            {
+                // todo: merge i=0 and i > 0
+                for (size_t j = 0; j < layer_widths[last_layer + 1]; ++j)
+                {
+                    if (j + 1 == layer_widths[last_layer + 1])
+                        add_bdd_instruction(tail_aux_var(0),
+                                            bottom_bdd_idx,
+                                            aux_bdd_node_idx_tail(1, layer_widths[last_layer + 1] - 1));
+                    else
+                        add_bdd_instruction(tail_aux_var(0),
+                                            aux_bdd_node_idx_tail(1, j),
+                                            bottom_bdd_idx);
+                    assert(bdd_instructions.size() == aux_bdd_node_idx_tail(0, j) + 1);
+                }
+
+                for (size_t i = 1; i + 1 < layer_widths[last_layer+1]; ++i)
+                {
+                    for (size_t j = 0; j < layer_widths[last_layer + 1] - i; ++j)
+                    {
+                        if (j + 1 == layer_widths[last_layer + 1] - i)
+                        {
+                            add_bdd_instruction(tail_aux_var(i),
+                                                bottom_bdd_idx,
+                                                aux_bdd_node_idx_tail(i + 1, layer_widths[last_layer + 1] - i));
+                        }
+                        else
+                        {
+                            add_bdd_instruction(tail_aux_var(i),
+                                                aux_bdd_node_idx_tail(i + 1, j),
+                                                bottom_bdd_idx);
+                        }
+                        assert(bdd_instructions.size() == aux_bdd_node_idx_tail(i, j) + 1);
+                    }
+                }
+
+                add_bdd_instruction(tail_aux_var(layer_widths[last_layer+1]-1),
+                                    bottom_bdd_idx,
+                                    top_bdd_idx);
+                add_bdd_instruction(tail_aux_var(layer_widths[last_layer+1]-1),
+                                    top_bdd_idx,
+                                    bottom_bdd_idx);
+            }
+            assert(bdd_delimiters.back() + nr_aux_bdd_nodes_head + nr_bdd_nodes_chunk + nr_aux_bdd_nodes_tail == bdd_instructions.size());
+
+            // add terminal nodes
+            assert(bdd_instructions.size() == bottom_bdd_idx);
+            bdd_instructions.push_back(bdd_instruction::botsink());
+            assert(bdd_instructions.size() == top_bdd_idx);
+            bdd_instructions.push_back(bdd_instruction::topsink());
+
+            // 4) Finish bdd and update bdd_delimiters
+            bdd_delimiters.push_back(bdd_instructions.size());
+            assert(nr_bdd_nodes(bdd_delimiters.size()-2) == nr_aux_bdd_nodes_head + nr_bdd_nodes_chunk + nr_aux_bdd_nodes_tail + 2);
+            new_bdd_nrs.push_back(bdd_delimiters.size()-2);
+
+            assert(is_qbdd(bdd_delimiters.size()-2));
+       }
+
+       for(const size_t new_bdd_nr : new_bdd_nrs)
+            assert(min_max_variables(new_bdd_nr)[1] < aux_vars.back() + layer_widths[(nr_chunks - 1) * chunk_size]);
+       assert(min_max_variables(new_bdd_nrs.back())[1] + 1 == aux_vars.back() + layer_widths[(nr_chunks - 1) * chunk_size]);
+
+       return std::make_tuple(new_bdd_nrs, aux_vars.back() + layer_widths[(nr_chunks - 1)*chunk_size]);
+    }
+
     bool bdd_collection::bdd_basic_check(const size_t bdd_nr) const
     {
         assert(bdd_nr < nr_bdds());
@@ -764,14 +1039,16 @@ namespace BDD {
             return vars;
 
         std::vector<std::array<size_t,2>> arcs;
-        arcs.reserve(2*nr_bdd_nodes(bdd_nr));
+        //arcs.reserve(2*nr_bdd_nodes(bdd_nr));
         for(size_t i=bdd_delimiters[bdd_nr]; i<bdd_delimiters[bdd_nr+1]-2; ++i)
         {
             const auto& bdd = bdd_instructions[i];
             assert(!bdd.is_terminal());
+            assert(bdd.lo < bdd_instructions.size());
             const auto& lo = bdd_instructions[bdd.lo];
             if(!lo.is_terminal())
                 arcs.push_back({bdd.index, lo.index});
+            assert(bdd.hi < bdd_instructions.size());
             const auto& hi = bdd_instructions[bdd.hi];
             if(!hi.is_terminal())
                 arcs.push_back({bdd.index, hi.index});
@@ -799,7 +1076,7 @@ namespace BDD {
         }
         assert(adjacency_list_delimiters.size() < vars.size()); // at least the last node is not recorded here (no outgoing nodes).
 
-        // topological sort to get variable ordering
+        // topological sort to get variable ordering with Kahn's algorithm
         std::queue<size_t> q;
         std::vector<size_t> vars_ordered;
         vars_ordered.reserve(vars.size());
@@ -827,7 +1104,9 @@ namespace BDD {
                     const size_t next_var = arcs[i][1];
                     assert(incoming_counter.count(next_var) > 0);
                     assert(incoming_counter.find(next_var)->second > 0);
-                    if(incoming_counter[next_var]-- == 1)
+                    auto next_var_it = incoming_counter.find(next_var);
+                    next_var_it->second -= 1;
+                    if(next_var_it->second == 0)
                         q.push(next_var);
                 }
             }
@@ -835,6 +1114,19 @@ namespace BDD {
         
         assert(vars_ordered.size() == vars.size());
         return vars_ordered;
+    }
+
+    size_t bdd_collection::nr_variables(const size_t bdd_nr) const
+    {
+        std::unordered_set<size_t> vars;
+        for(size_t i=bdd_delimiters[bdd_nr]; i<bdd_delimiters[bdd_nr+1]-2; ++i)
+        {
+            assert(!bdd_instructions[i].is_terminal());
+            vars.insert(bdd_instructions[i].index);
+        }
+
+        assert(variables(bdd_nr).size() == vars.size());
+        return vars.size();
     }
 
     std::array<size_t,2> bdd_collection::min_max_variables(const size_t bdd_nr) const
@@ -858,6 +1150,49 @@ namespace BDD {
         assert(nr_bdd_nodes(bdd_nr) > 0);
         assert(!bdd_instructions[bdd_delimiters[bdd_nr]].is_terminal());
         return bdd_instructions[bdd_delimiters[bdd_nr]].index;
+    }
+
+    std::vector<size_t> bdd_collection::layer_widths(const size_t bdd_nr) const
+    {
+        assert(bdd_nr < nr_bdds());
+        assert(is_qbdd(bdd_nr));
+
+        std::vector<size_t> widths;
+        size_t prev_var = std::numeric_limits<size_t>::max();
+
+        for(size_t i=bdd_delimiters[bdd_nr]; i<bdd_delimiters[bdd_nr + 1] - 2; ++i)
+        {
+            const size_t var = bdd_instructions[i].index;
+            if(var != prev_var)
+            {
+                widths.push_back(1);
+                prev_var = var;
+            }
+            else
+                widths.back()++;
+        }
+
+        return widths;
+    }
+
+    std::vector<size_t> bdd_collection::layer_offsets(const size_t bdd_nr) const
+    {
+        assert(bdd_nr < nr_bdds());
+        assert(is_qbdd(bdd_nr));
+
+        std::vector<size_t> offsets;
+        size_t prev_var = std::numeric_limits<size_t>::max();
+        for(size_t i=bdd_delimiters[bdd_nr]; i<bdd_delimiters[bdd_nr + 1] - 2; ++i)
+        {
+            const size_t var = bdd_instructions[i].index;
+            if(var != prev_var)
+            {
+                offsets.push_back(i);
+                prev_var = var;
+            }
+        }
+
+        return offsets;
     }
 
     void bdd_collection::remove(const size_t bdd_nr)
@@ -1023,6 +1358,18 @@ namespace BDD {
     {
         assert(i < bdd_instructions.size());
         return bdd_instructions[i];
+    }
+
+    void bdd_collection::export_graphviz(const size_t bdd_nr, const std::string& filename) const
+    {
+        const std::string dot_file = filename + ".dot";
+        std::fstream f;
+        f.open(dot_file, std::fstream::out | std::ofstream::trunc);
+        export_graphviz(bdd_nr, f);
+        f.close();
+        const std::string png_file = filename + ".png";
+        const std::string convert_command = "dot -Tpng " + dot_file + " > " + png_file;
+        std::system(convert_command.c_str());
     }
 
     size_t bdd_collection::new_bdd()

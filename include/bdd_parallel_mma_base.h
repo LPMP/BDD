@@ -175,6 +175,7 @@ namespace LPMP {
         {
             message_passing_state_ = message_passing_state::none;
             assert(bdd_branch_nodes_.size() == 0); // currently does not support incremental addition of BDDs
+            std::cout << "[bdd parallel mma base] # bdds = " << bdd_col.nr_bdds() << "\n";
             bdd_branch_nodes_.clear();
             const size_t total_nr_bdd_nodes = [&]() {
                 size_t i=0;
@@ -182,7 +183,7 @@ namespace LPMP {
                     i += bdd_col.nr_bdd_nodes(bdd_nr)-2; // do not count terminal nodes
                 return i;
             }();
-            std::cout << "bdd parallel mma base, # total bdd nodes = " << total_nr_bdd_nodes << "\n";
+            std::cout << "[bdd parallel mma base] # total bdd nodes = " << total_nr_bdd_nodes << "\n";
             bdd_branch_nodes_.reserve(total_nr_bdd_nodes);
             bdd_variables_.clear();
             nr_bdds_per_variable_.clear();
@@ -192,7 +193,7 @@ namespace LPMP {
                     max_v = std::max(max_v, bdd_col.min_max_variables(bdd_nr)[1]+1);
                 return max_v;
             }();
-            std::cout << "bdd parallel mma base, # vars = " << nr_vars << "\n";
+            std::cout << "[bdd parallel mma base] # vars = " << nr_vars << "\n";
             nr_bdds_per_variable_.resize(nr_vars, 0);
 
             for(size_t bdd_nr=0; bdd_nr<bdd_col.nr_bdds(); ++bdd_nr)

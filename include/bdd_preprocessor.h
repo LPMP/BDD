@@ -14,12 +14,12 @@ namespace LPMP {
     class bdd_preprocessor {
         public:
             bdd_preprocessor() {};
-            bdd_preprocessor(const ILP_input& ilp, const bool constraint_groups = true, const bool normalize = false)
+            bdd_preprocessor(const ILP_input& ilp, const bool constraint_groups = true, const bool normalize = false, const bool split_long_bdds = false)
             {
-                add_ilp(ilp, constraint_groups, normalize);
+                add_ilp(ilp, constraint_groups, normalize, split_long_bdds);
             }
 
-            two_dim_variable_array<size_t> add_ilp(const ILP_input& ilp, const bool constraint_groups = true, const bool normalize = false);
+            two_dim_variable_array<size_t> add_ilp(const ILP_input& ilp, const bool constraint_groups = true, const bool normalize = false, const bool split_long_bdds = false);
             template<typename VARIABLE_ITERATOR>
                 void add_bdd(BDD::node_ref bdd, VARIABLE_ITERATOR var_begin, VARIABLE_ITERATOR var_end);
 
