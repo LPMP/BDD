@@ -231,9 +231,11 @@ namespace BDD {
                 void write_lp(STREAM& s);
 
             // utility functions
+            void negate(const size_t bdd_nr);
             size_t simplex_constraint(const size_t n);
             size_t not_all_false_constraint(const size_t n);
             size_t all_equal_constraint(const size_t n);
+            size_t cardinality_constraint(const size_t n, const size_t k);
 
             // merge BDDs from another bdd_collection
             void append(const bdd_collection& o);

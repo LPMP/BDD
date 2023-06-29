@@ -564,7 +564,14 @@ namespace BDD {
                     assert(j < layer_widths[last_layer+1]);
                 else
                     assert(j <= layer_widths[last_layer + 1] - i);
+
+                if(i == 0)
+                    return j;
+                return layer_widths[last_layer + 1] +
+                                        layer_widths[last_layer + 1] * (i-1) + j - ((i - 1) * (i - 2)) / 2;
+
                 // stupid way: explicitly increment counter until found
+                /*
                 if(i == 0)
                     return bdd_delimiters.back() + nr_aux_bdd_nodes_head + nr_bdd_nodes_chunk + j;
 
@@ -573,9 +580,7 @@ namespace BDD {
                     idx += layer_widths[last_layer + 1] - c + 1;
                 assert(idx + j < nr_aux_bdd_nodes_tail);
                 return bdd_delimiters.back() + nr_aux_bdd_nodes_head + nr_bdd_nodes_chunk + idx + j;
-                //const size_t n = layer_widths[last_layer+1];
-                //return layer_offsets[chunk_nr * chunk_size] +
-                //       (n * (n - 1) / 2) - (n - i) * ((n - i) - 1) / 2 + j - i - 1;
+                */
             };
 
             auto aux_bdd_node_idx_head = [&](const size_t i, const size_t j)
@@ -584,15 +589,16 @@ namespace BDD {
                 assert(chunk_nr > 0);
                 assert(first_layer < layer_widths.size() && i < layer_widths[first_layer]);
                 assert(j <= i);
+                return bdd_delimiters.back() + (i * (i + 1)) / 2 + j;
+
                 // stupid way: explicitly increment counter until found
+                /*
                 size_t idx = 0;
                 for(size_t c=0; c<i; ++c)
                     idx += c+1;
                 assert(idx + j < nr_aux_bdd_nodes_head);
                 return bdd_delimiters.back() + idx + j;
-                //const size_t n = layer_widths[chunk_nr * chunk_size];
-                //return layer_offsets[chunk_nr * chunk_size] +
-                //       (n * (n - 1) / 2) - (n - i) * ((n - i) - 1) / 2 + j - i - 1;
+                */
             };
 
             const size_t bottom_bdd_idx = bdd_instructions.size() + nr_aux_bdd_nodes_head + nr_bdd_nodes_chunk + nr_aux_bdd_nodes_tail;
@@ -711,20 +717,20 @@ namespace BDD {
 
                 for (size_t i = 1; i + 1 < layer_widths[last_layer+1]; ++i)
                 {
-                    for (size_t j = 0; j < layer_widths[last_layer + 1] - i; ++j)
+                    for (size_t j = 0; j < layer_widths[last_layer + 1] - i + 1; ++j)
                     {
-                        if (j + 1 == layer_widths[last_layer + 1] - i)
-                        {
+                        if (j + 1 == layer_widths[last_layer + 1] - i + 1)
+                            add_bdd_instruction(tail_aux_var(i),
+                                                aux_bdd_node_idx_tail(i + 1, layer_widths[last_layer + 1] - i - 1),
+                                                bottom_bdd_idx);
+                        else if (j + 1 == layer_widths[last_layer + 1] - i)
                             add_bdd_instruction(tail_aux_var(i),
                                                 bottom_bdd_idx,
-                                                aux_bdd_node_idx_tail(i + 1, layer_widths[last_layer + 1] - i));
-                        }
+                                                aux_bdd_node_idx_tail(i + 1, j));
                         else
-                        {
                             add_bdd_instruction(tail_aux_var(i),
                                                 aux_bdd_node_idx_tail(i + 1, j),
                                                 bottom_bdd_idx);
-                        }
                         assert(bdd_instructions.size() == aux_bdd_node_idx_tail(i, j) + 1);
                     }
                 }
@@ -1830,6 +1836,12 @@ namespace BDD {
         return *this;
     }
 
+    void bdd_collection::negate(const size_t bdd_nr)
+    {
+        assert(bdd_nr < nr_bdds());
+        std::swap(bdd_instructions[bdd_delimiters[bdd_nr+1]-1], bdd_instructions[bdd_delimiters[bdd_nr+1]-2]);
+    }
+
     size_t bdd_collection::simplex_constraint(const size_t n)
     {
         assert(n > 0);
@@ -1976,6 +1988,82 @@ namespace BDD {
         bdd_delimiters.push_back(bdd_instructions.size());
         assert(is_bdd(nr_bdds()-1));
         return nr_bdds()-1;
+    }
+
+    size_t bdd_collection::cardinality_constraint(const size_t n, const size_t k)
+    {
+        assert(n > 1);
+        assert(k <= n);
+
+        if (k == 0)
+        {
+            const size_t bdd_nr = not_all_false_constraint(n);
+            negate(bdd_nr);
+            return bdd_nr;
+        }
+        if (k == 1)
+            return simplex_constraint(n);
+
+        std::vector<size_t> layer_offsets;
+        layer_offsets.reserve(n);
+        layer_offsets.push_back(0);
+        auto layer_width = [&](const size_t i) {
+            return std::min(k, i) + 1 - (k - std::min(k, n - i));
+        };
+        for (size_t i = 0; i + 1 < n; ++i)
+            layer_offsets.push_back(layer_offsets.back() + layer_width(i));
+
+        const size_t nr_bdd_nodes = layer_offsets.back() + layer_width(n-1);
+        const size_t top_idx = bdd_delimiters.back() + nr_bdd_nodes;
+        const size_t bot_idx = bdd_delimiters.back() + nr_bdd_nodes + 1;
+
+
+        auto bdd_node_idx = [&](const size_t i, const size_t j)
+        {
+            assert(j <= i);
+
+            if(j > k)
+                return bot_idx;
+            if (j + n - i < k)
+                return bot_idx;
+            if (i == n && j == k)
+                return top_idx;
+            if (i == n && j != k)
+                return bot_idx;
+
+            const size_t idx = layer_offsets[i] + j - (k - std::min(k, n - i));
+
+            if (i + 1 < n)
+                assert(idx < layer_offsets[i+1]);
+
+            return bdd_delimiters.back() + idx;
+        };
+
+        for (size_t i = 0; i < n; ++i)
+        {
+            for (size_t j = k - std::min(k, n - i); j <= std::min(k, i); ++j)
+            {
+                bdd_instruction bdd_instr;
+                bdd_instr.index = i;
+                bdd_instr.lo = bdd_node_idx(i+1, j);
+                bdd_instr.hi = bdd_node_idx(i+1, j+1);
+                bdd_instructions.push_back(bdd_instr);
+                assert(bdd_instructions.size() == bdd_node_idx(i, j) + 1);
+            }
+        }
+
+        assert(bdd_instructions.size() == bdd_delimiters.back() + nr_bdd_nodes);
+
+        assert(bdd_instructions.size() == top_idx);
+        bdd_instructions.push_back(bdd_instruction::topsink());
+        assert(bdd_instructions.size() == bot_idx);
+        bdd_instructions.push_back(bdd_instruction::botsink());
+
+        bdd_delimiters.push_back(bdd_instructions.size());
+        
+        assert(is_qbdd(bdd_delimiters.size()-2));
+
+        return bdd_delimiters.size() - 2;
     }
 
 }
