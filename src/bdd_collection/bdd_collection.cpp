@@ -567,8 +567,9 @@ namespace BDD {
 
                 if(i == 0)
                     return j;
-                return layer_widths[last_layer + 1] +
-                                        layer_widths[last_layer + 1] * (i-1) + j - ((i - 1) * (i - 2)) / 2;
+                return bdd_delimiters.back() + nr_aux_bdd_nodes_head + nr_bdd_nodes_chunk
+                       + layer_widths[last_layer + 1] +
+                       layer_widths[last_layer + 1] * (i-1) + j - ((i - 1) * (i - 2)) / 2;
 
                 // stupid way: explicitly increment counter until found
                 /*

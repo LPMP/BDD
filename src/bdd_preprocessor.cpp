@@ -338,11 +338,13 @@ namespace LPMP {
                     std::cout << "[bdd preprocessor] Too {few|small} BDDs, do not split\n";
                     return std::numeric_limits<size_t>::max();
                 }
-                for (size_t i = 50; i < std::max(std::ptrdiff_t(layer_widths.size()) - 50, std::ptrdiff_t(0)); ++i)
-                    if (layer_widths[i] < 2048)
+                for (size_t i = 500; i < std::max(std::ptrdiff_t(layer_widths.size()) - 50, std::ptrdiff_t(0)); ++i)
+                    if (layer_widths[i] < 1024)
                         return i;
                 return std::numeric_limits<size_t>::max();
             }();
+            std::cout << "[bdd preprocessor] Longest BDD has " << layer_widths.size() << " layers\n";
+
             std::cout << "[bdd preprocessor] Split BDDs longer than " << max_length_bdd << "\n";
 
             if (max_length_bdd < std::numeric_limits<size_t>::max())
