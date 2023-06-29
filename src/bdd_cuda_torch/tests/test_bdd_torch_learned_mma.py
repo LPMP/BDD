@@ -1,12 +1,13 @@
 import torch
-torch.set_default_dtype(torch.float32)
+torch.autograd.set_detect_anomaly(True) 
+# torch.set_default_dtype(torch.float64)
 import time, os
 import numpy as np
 import bdd_cuda_torch.bdd_torch_learned_mma as bdd_torch_learned_mma
 import BDD.ILP_instance_py as ilp_instance_bbd
 import BDD.bdd_cuda_learned_mma_py as bdd_cuda_solver
 import bdd_cuda_torch
-from torch_scatter import scatter_softmax
+from torch_scatter import scatter_softmax, scatter_mean
 import pickle
 
 one_simplex = """Minimize
@@ -160,6 +161,9 @@ def normalize_distribution_weights_softmax(dist_weights, var_indices):
     softmax_scores = scatter_softmax(dist_weights.to(torch.get_default_dtype()), var_indices)
     return softmax_scores.to(torch.get_default_dtype())
 
+def normalize_smoothing(smoothing, bdd_indices):
+    return scatter_mean(smoothing, bdd_indices)
+
 def cuda_lower_bound(cuda_solver, num_iterations):
     cuda_solver.non_learned_iterations(0.5, num_iterations, 0.0, 100)
     return cuda_solver.lower_bound()
@@ -178,16 +182,16 @@ def test_iterations(instance, num_iterations = 50, tolerance = 1e-6):
     cuda_time = time.time() - st
 
     st = time.time()
-    lo_costs, hi_costs, def_mm, _, _, _, _ = bdd_cuda_torch.DualIterations.apply([cuda_solver], lo_costs, hi_costs, def_mm, alpha, 20, torch.tensor([0.5], device = 'cuda'), 5, 0.0, 5, 0, 0.9, False, 0)
-    lo_costs, hi_costs, def_mm, _ = torch_solver.iterations(lo_costs, hi_costs, def_mm, alpha, omega, None, num_iterations - 20)
-    torch_lb = torch_solver.compute_lower_bound(lo_costs, hi_costs, False, def_mm).item()
+    # lo_costs, hi_costs, def_mm, _, _, _, _ = bdd_cuda_torch.DualIterations.apply([cuda_solver], lo_costs, hi_costs, def_mm, alpha, 20, torch.tensor([0.5], device = 'cuda'), 5, 0.0, 5, 0, 0.9, False, 0)
+    lo_costs, hi_costs, def_mm = torch_solver.iterations(lo_costs, hi_costs, def_mm, alpha, omega, num_iterations)
+    torch_lb = torch_solver.compute_lower_bound(lo_costs, hi_costs, None, def_mm).item()
     torch_time = time.time() - st
     print(f'torch LB: {torch_lb}, cuda LB: {cuda_lb}')
     print(f'CUDA time: {cuda_time}')
     print(f'torch time: {torch_time}')
     assert np.abs(torch_lb - cuda_lb) < tolerance
 
-def test_smooth_iterations(instance, starting_itr = 50, smooth_num_iterations = 50, smoothing_factor = 1e-3):
+def test_smooth_iterations(instance, starting_itr = 50, smooth_num_iterations = 50, smoothing = 1e-4):
     cuda_solver = bdd_cuda_solver.bdd_cuda_learned_mma(instance, True, 1.0)
     print(f'Starting LB: {cuda_lower_bound(cuda_solver, starting_itr)}')
 
@@ -200,18 +204,16 @@ def test_smooth_iterations(instance, starting_itr = 50, smooth_num_iterations = 
     primal_variable_index = torch_solver.get_variable_index()
     alpha_feas = torch_solver.get_isotropic_alpha()
     omega_feas = torch.ones_like(alpha_feas) - 0.5
-    smoothing_feas = torch.tensor([smoothing_factor], device = 'cuda')
-    lo_costs /= smoothing_feas
-    hi_costs /= smoothing_feas
-    cost_from_terminal = None
-    for itr in range(smooth_num_iterations):
-        lo_costs, hi_costs, def_mm, cost_from_terminal = torch_solver.iterations(lo_costs, hi_costs, def_mm, alpha_feas, omega_feas, cost_from_terminal, 1, is_smooth = True)
-        torch_lb = torch_solver.compute_lower_bound(lo_costs, hi_costs) * smoothing_feas
-        smooth_lb = torch_solver.compute_lower_bound(lo_costs, hi_costs, True) * smoothing_feas
-        print(f'itr: {itr}, LB: {torch_lb.item()}, Smooth LB: {smooth_lb.item()}')
+    smoothing_feas = torch.tensor([smoothing], device = 'cuda')
+    for outer_itr in range(smooth_num_iterations // 5):
+        st = time.time()
+        lo_costs, hi_costs, def_mm = torch_solver.iterations(lo_costs, hi_costs, def_mm, alpha_feas, omega_feas, 5, smoothing = smoothing_feas)
+        print(f'without grad time: {time.time() - st}, num_iterations: {(outer_itr + 1) * 5}')
+        torch_lb = torch_solver.compute_lower_bound(lo_costs, hi_costs)
+        print(f'LB: {torch_lb.item()}')
 
-def test_grad_iterations(cuda_solver, starting_itr = 1, num_iterations = 10, tolerance = 1e-6):
-    # cuda_solver = bdd_cuda_solver.bdd_cuda_learned_mma(instance, True, 1.0)
+def test_grad_iterations(instance, starting_itr = 1, num_iterations = 3, tolerance = 1e-6):
+    cuda_solver = bdd_cuda_solver.bdd_cuda_learned_mma(instance, True, 1.0)
     print(f'Starting LB: {cuda_lower_bound(cuda_solver, starting_itr)}')
 
     torch_solver = bdd_torch_learned_mma(cuda_solver)
@@ -221,28 +223,33 @@ def test_grad_iterations(cuda_solver, starting_itr = 1, num_iterations = 10, tol
     def_mm = def_mm * 0
 
     primal_variable_index = torch_solver.get_variable_index()
+    bdd_index = torch_solver.get_bdd_index()
     alpha = torch_solver.get_isotropic_alpha()
     omega = torch.zeros_like(alpha)
-    smoothing = torch.tensor([1e-4], device = 'cuda')
-    alpha.requires_grad = True
-    omega.requires_grad = True
-    # smoothing.requires_grad = True
-    opt = torch.optim.Adam([alpha, omega], 1.0)
+    smoothing_per_bdd = torch.ones(cuda_solver.nr_bdds(), device = 'cuda') * 1e-2
+    # smoothing_per_bdd = torch.ones(1, device = 'cuda') * 1e-2
+    # alpha.requires_grad = True
+    # omega.requires_grad = True
+    smoothing_per_bdd.requires_grad = True
+    # opt = torch.optim.Adam([{'params': alpha}, {'params': omega}], lr=1.0)
+    opt = torch.optim.Adam([{'params': smoothing_per_bdd, 'lr': 1e-3}], lr=1.0)
     for itr in range(50):
         omega_feas = torch.sigmoid(omega)
         alpha_feas = normalize_distribution_weights_softmax(alpha, primal_variable_index)
-        smoothing_feas = torch.abs(smoothing)
-        lo_costs_new, hi_costs_new, def_mm_new = torch_solver.iterations(lo_costs, hi_costs, def_mm, alpha_feas, omega_feas, num_iterations, smoothing_factor = smoothing_feas)
-        # lo_costs_new, hi_costs_new, def_mm_new, _ = torch_solver.iterations(lo_costs, hi_costs, def_mm, alpha_feas, omega_feas, num_iterations, smoothing_factor = smoothing_feas)
+        smoothing_feas = torch.abs(smoothing_per_bdd) #+ 1e-6
+        st = time.time()
+        lo_costs_new, hi_costs_new, def_mm_new = torch_solver.iterations(lo_costs, hi_costs, def_mm, alpha_feas, omega_feas, num_iterations, smoothing = smoothing_feas)
+        print(f'with grad time: {time.time() - st}, num_iterations: {num_iterations}')
+        # lo_costs_new, hi_costs_new, def_mm_new, _ = torch_solver.iterations(lo_costs, hi_costs, def_mm, alpha_feas, omega_feas, num_iterations, smoothing = smoothing_feas)
         # lo_costs_new, hi_costs_new, def_mm_new, _, _, _, _ = bdd_cuda_torch.DualIterations.apply([torch_solver.cuda_solver], lo_costs, hi_costs, def_mm, alpha_feas, num_iterations, omega_feas, num_iterations, 0.0, 5, 0, 0.9, False, 0)
         torch_lb = torch_solver.compute_lower_bound(lo_costs_new, hi_costs_new)
         loss = -torch_lb
+        print(f'smoothing_feas: min: {smoothing_feas.min().item()}, max: {smoothing_feas.max().item()}, mean: {smoothing_feas.mean().item()}')
         loss.backward()
         opt.step()
         opt.zero_grad()
         with torch.no_grad():
-            smooth_lb = torch_solver.compute_lower_bound(lo_costs_new, hi_costs_new, smoothing_factor = smoothing_feas)
-            print(f'itr: {itr}, LB: {torch_lb.item()}, Smooth LB: {smooth_lb.item()}, smoothing_feas: {smoothing_feas.item()}')
+            print(f'itr: {itr}, LB: {torch_lb.item()}')
 
     with torch.no_grad():
         omega_feas = torch.sigmoid(omega)
@@ -270,9 +277,12 @@ def test_grad_iterations(cuda_solver, starting_itr = 1, num_iterations = 10, tol
 # test_iterations(sm_instance)
 
 # sm_instance = ilp_instance_bbd.read_ILP('/home/ahabbas/data/learnDBCA/set_cover_random_doge/SetCover_n_rows_1000_n_cols_2000_density_0.05_max_coeff_200_seed_1/instances/0_0.047.lp')
-bdd_repr_path = '/home/ahabbas/data/learnDBCA/set_cover_random_doge/SetCover_n_rows_1000_n_cols_2000_density_0.05_max_coeff_200_seed_1/instances/0_0.047_bdd_repr.pkl'
-bdd_repr = pickle.load(open(bdd_repr_path, 'rb'))
-solver = pickle.loads(bdd_repr['solver_data'])
-# test_smooth_iterations(sm_instance, 200, 300, 1e-3)
-# test_grad_iterations(sm_instance, 1)
-test_grad_iterations(solver, 100)
+sm_instance = ilp_instance_bbd.read_ILP('/home/ahabbas/data/learnDBCA/set_cover_random_doge/SetCover_n_rows_1000_n_cols_2000_density_0.05_max_coeff_200_seed_1/instances/100_0.051.lp')
+# sm_instance = ilp_instance_bbd.read_ILP('/home/ahabbas/data/learnDBCA/set_cover_random_doge/SetCover_n_rows_10000_n_cols_20000_density_0.05_max_coeff_200_seed_1/instances/0_0.044.lp')
+# bdd_repr_path = '/home/ahabbas/data/learnDBCA/set_cover_random_doge/SetCover_n_rows_1000_n_cols_2000_density_0.05_max_coeff_200_seed_1/instances/0_0.047_bdd_repr.pkl'
+# bdd_repr_path = '/home/ahabbas/data/learnDBCA/set_cover_random_doge/SetCover_n_rows_10000_n_cols_20000_density_0.05_max_coeff_200_seed_1/instances/0_0.044_bdd_repr.pkl'
+# bdd_repr = pickle.load(open(bdd_repr_path, 'rb'))
+# solver = pickle.loads(bdd_repr['solver_data'])
+# test_smooth_iterations(sm_instance, 1000, 100, 1e-4)
+test_grad_iterations(sm_instance, 100)
+# test_grad_iterations(solver, 1)

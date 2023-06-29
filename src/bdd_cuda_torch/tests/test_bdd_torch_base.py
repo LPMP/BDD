@@ -71,23 +71,41 @@ def test_forward_run(instance, tolerance = 1e-5):
     start = time.time()
     lo_costs, hi_costs, def_mm = get_costs(torch_solver.cuda_solver)
     valid_mask = torch_solver.valid_bdd_node_mask()
-    torch_cost_from_root = torch_solver.forward_run(lo_costs, hi_costs, False)
+    torch_cost_from_root = torch_solver.forward_run(lo_costs, hi_costs)
     print(torch_cost_from_root)
-    smoothing = 1e-6
-    torch_cost_from_root_smooth = torch_solver.forward_run(lo_costs / smoothing, hi_costs / smoothing, True) * smoothing
+    smoothing = torch.tensor([1e-6], device = 'cuda')
+    torch_cost_from_root_smooth = torch_solver.forward_run(lo_costs, hi_costs, smoothing)
     assert torch.all(torch.abs(torch_cost_from_root[valid_mask] - torch_cost_from_root_smooth[valid_mask]) < tolerance)
+    cuda_cost_from_root = torch.empty_like(torch_cost_from_root)
+    cuda_solver.cost_from_root(cuda_cost_from_root.data_ptr())
+    assert torch.all(torch.abs(torch_cost_from_root[valid_mask] - cuda_cost_from_root[valid_mask]) < 1e-9)
 
 def test_backward_run(instance, tolerance = 1e-5):
     cuda_solver = bdd_cuda_solver.bdd_cuda_learned_mma(instance, True, 1.0)
     torch_solver = bdd_torch_base(cuda_solver)
     start = time.time()
     lo_costs, hi_costs, def_mm = get_costs(torch_solver.cuda_solver)
-    torch_cost_from_terminal = torch_solver.backward_run(lo_costs, hi_costs, False)
+    torch_cost_from_terminal = torch_solver.backward_run(lo_costs, hi_costs)
     print(torch_cost_from_terminal)
-    smoothing = 1e-6
-    torch_cost_from_terminal_smooth = torch_solver.backward_run(lo_costs / smoothing, hi_costs / smoothing, True) * smoothing
+    smoothing = torch.tensor([1e-6], device = 'cuda')
+    torch_cost_from_terminal_smooth = torch_solver.backward_run(lo_costs, hi_costs, smoothing)
     valid_mask = torch_solver.valid_bdd_node_mask()
     assert torch.all(torch.abs(torch_cost_from_terminal[valid_mask] - torch_cost_from_terminal_smooth[valid_mask]) < tolerance)
+    cuda_cost_from_terminal = torch.empty_like(torch_cost_from_terminal)
+    cuda_solver.cost_from_terminal(cuda_cost_from_terminal.data_ptr())
+    assert torch.all(torch.abs(torch_cost_from_terminal[valid_mask] - cuda_cost_from_terminal[valid_mask]) < 1e-9)
+
+def test_lower_bounds(instance, tolerance = 1e-10):
+    cuda_solver = bdd_cuda_solver.bdd_cuda_learned_mma(instance, True, 1.0)
+    torch_solver = bdd_torch_base(cuda_solver)
+    start = time.time()
+    lo_costs, hi_costs, def_mm = get_costs(torch_solver.cuda_solver)
+    valid_mask = torch_solver.valid_bdd_node_mask()
+    torch_cost_from_terminal = torch_solver.backward_run(lo_costs, hi_costs)
+    torch_per_bdd_lb = torch_solver.per_bdd_lower_bound(torch_cost_from_terminal)
+    cuda_per_bdd_lb = torch.empty_like(torch_per_bdd_lb)
+    cuda_solver.lower_bound_per_bdd(cuda_per_bdd_lb.data_ptr())
+    assert torch.all(torch.abs(cuda_per_bdd_lb - torch_per_bdd_lb) < tolerance)
 
 def test_marginals(instance, tolerance = 1e-5):
     cuda_solver = bdd_cuda_solver.bdd_cuda_learned_mma(instance, True, 1.0)
@@ -97,14 +115,12 @@ def test_marginals(instance, tolerance = 1e-5):
     cuda_mm_difference = torch.empty_like(lo_costs)
     torch_solver.cuda_solver.all_min_marginal_differences(cuda_mm_difference.data_ptr())
 
-    torch_mm_lo, torch_mm_hi = torch_solver.marginals(lo_costs, hi_costs, False)
+    torch_mm_lo, torch_mm_hi = torch_solver.marginals(lo_costs, hi_costs)
     torch_mm_diff = torch_mm_hi - torch_mm_lo
     assert torch.all(torch.abs(torch_mm_diff[valid_mask] - cuda_mm_difference[valid_mask]) < tolerance)
 
-    smoothing = 1e-6
-    torch_mm_lo_smooth, torch_mm_hi_smooth = torch_solver.marginals(lo_costs / smoothing, hi_costs / smoothing, True)
-    torch_mm_lo_smooth *= smoothing
-    torch_mm_hi_smooth *= smoothing
+    smoothing = torch.tensor([1e-6], device = 'cuda')
+    torch_mm_lo_smooth, torch_mm_hi_smooth = torch_solver.marginals(lo_costs, hi_costs, smoothing)
     assert torch.all(torch.abs(torch_mm_lo[valid_mask] - torch_mm_lo_smooth[valid_mask]) < tolerance)
     assert torch.all(torch.abs(torch_mm_hi[valid_mask] - torch_mm_hi_smooth[valid_mask]) < tolerance)
 
@@ -132,7 +148,8 @@ def test_smooth_solution(instance, tolerance = 1e-6):
     cuda_solver = bdd_cuda_solver.bdd_cuda_learned_mma(instance, True, 1.0)
     torch_solver = bdd_torch_base(cuda_solver)
     lo_costs, hi_costs, def_mm = get_costs(torch_solver.cuda_solver)
-    torch_smooth_solution = torch_solver.smooth_solution(lo_costs, hi_costs)
+    smoothing = torch.tensor([1.0], device = 'cuda')
+    torch_smooth_solution = torch_solver.smooth_solution(lo_costs, hi_costs, smoothing)
     cuda_smooth_solution = torch.empty_like(torch_smooth_solution)
     torch_solver.cuda_solver.smooth_solution_per_bdd(cuda_smooth_solution.data_ptr())
     valid_mask = torch_solver.valid_layer_mask()
@@ -224,6 +241,11 @@ test_backward_run(ilp_instance_bbd.parse_ILP(two_simplex))
 test_backward_run(ilp_instance_bbd.parse_ILP(matching_3x3))
 test_backward_run(ilp_instance_bbd.parse_ILP(short_chain_shuffled))
 
+test_lower_bounds(ilp_instance_bbd.parse_ILP(one_simplex))
+test_lower_bounds(ilp_instance_bbd.parse_ILP(two_simplex))
+test_lower_bounds(ilp_instance_bbd.parse_ILP(matching_3x3))
+test_lower_bounds(ilp_instance_bbd.parse_ILP(short_chain_shuffled))
+
 test_marginals(ilp_instance_bbd.parse_ILP(one_simplex))
 test_marginals(ilp_instance_bbd.parse_ILP(two_simplex))
 test_marginals(ilp_instance_bbd.parse_ILP(matching_3x3))
@@ -238,6 +260,9 @@ test_smooth_solution(ilp_instance_bbd.parse_ILP(one_simplex))
 test_smooth_solution(ilp_instance_bbd.parse_ILP(two_simplex))
 test_smooth_solution(ilp_instance_bbd.parse_ILP(matching_3x3))
 test_smooth_solution(ilp_instance_bbd.parse_ILP(short_chain_shuffled))
+
+instance = ilp_instance_bbd.read_ILP('/home/ahabbas/data/learnDBCA/set_cover_random_doge/SetCover_n_rows_1000_n_cols_2000_density_0.05_max_coeff_200_seed_1/instances/100_0.051.lp')
+test_lower_bounds(instance)
 
 # test_smooth_solution_grad(ilp_instance_bbd.parse_ILP(one_simplex), [0, 1, 0])
 # test_mle(ilp_instance_bbd.parse_ILP(one_simplex), [0, 1, 0])
