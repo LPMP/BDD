@@ -331,15 +331,16 @@ namespace LPMP {
                     layer_widths[i] += cur_layer_widths[i];
             }
 
-            const size_t max_length_bdd = [&]()
+            const size_t max_length_bdd = [&]() -> size_t
             {
                 if(*std::max_element(layer_widths.begin(), layer_widths.end()) < 2048 || bdd_collection.nr_bdds() < 128)
                 {
                     std::cout << "[bdd preprocessor] Too {few|small} BDDs, do not split\n";
                     return std::numeric_limits<size_t>::max();
                 }
+                // return (size_t) 1000;
                 for (size_t i = 500; i < std::max(std::ptrdiff_t(layer_widths.size()) - 50, std::ptrdiff_t(0)); ++i)
-                    if (layer_widths[i] < 1024)
+                    if (layer_widths[i] < 2048)
                         return i;
                 return std::numeric_limits<size_t>::max();
             }();
