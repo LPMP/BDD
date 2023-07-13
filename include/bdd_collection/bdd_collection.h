@@ -1,11 +1,13 @@
 #pragma once
 
-#include "bdd_manager/bdd_mgr.h"
+#include "../bdd_manager/bdd_mgr.h"
 #include <vector>
 #include <iterator>
 #include <unordered_map> // TODO: replace with faster hash map
+#include <unordered_set> // TODO: replace with faster hash map
 #include <iterator>
 #include <iostream> // TODO: remove
+#include <ostream>
 
 namespace BDD {
 
@@ -217,9 +219,10 @@ namespace BDD {
 
             bool is_bdd(const size_t i) const;
             bool is_qbdd(const size_t bdd_nr) const;
+            void assert_qbdd(const size_t bdd_nr) const;
 
             // return (new) bdd nrs and aux_var_start + nr of auxiliary variables used
-            std::tuple<std::vector<size_t>,size_t> split_qbdd(const size_t bdd_nr, const size_t chunk_size, const size_t aux_var_start);
+            std::tuple<std::vector<size_t>,size_t> split_qbdd(const size_t bdd_nr, const size_t chunk_size, const size_t aux_var_start, const bool with_implication_bdd = false);
 
             template<typename STREAM, typename COST_ITERATOR>
                 void write_bdd_lp(STREAM& s, COST_ITERATOR cost_begin, COST_ITERATOR cost_end) const;
@@ -232,6 +235,9 @@ namespace BDD {
 
             // utility functions
             void negate(const size_t bdd_nr);
+            template <typename ITERATOR>
+            void invert(const size_t bdd_nr, ITERATOR var_begin, ITERATOR var_end);
+            void invert(const size_t bdd_nr, const size_t var);
             size_t simplex_constraint(const size_t n);
             size_t not_all_false_constraint(const size_t n);
             size_t all_equal_constraint(const size_t n);
@@ -361,9 +367,7 @@ namespace BDD {
             assert(std::distance(bdd_it_begin, bdd_it_end) <= nr_bdds());
             assert(std::is_sorted(bdd_it_begin, bdd_it_end));
             for(size_t i=0; i+1<std::distance(bdd_it_begin, bdd_it_end); ++i)
-            {
                 assert(*(bdd_it_begin+i) < *(bdd_it_begin+i+1));
-            }
 
             if(nr_bdds_remove == 0)
                 return;
@@ -495,9 +499,9 @@ namespace BDD {
 
             constexpr static size_t bdd_and_th = 49; // can be up to 49
 
+            // TODO: possibly do recursive bipartitioning for intersection of many BDDs
             if(nr_bdds > bdd_and_th)
             {
-                // TODO: remove intermediate intersection bdds
                 std::vector<size_t> bdd_nrs(bdd_begin, bdd_end);
                 std::sort(bdd_nrs.begin(), bdd_nrs.end(), [&](const size_t bdd_nr_1, const size_t bdd_nr_2) {
                         const auto [first_var_1, last_var_1] = this->min_max_variables(bdd_nr_1);
@@ -512,14 +516,27 @@ namespace BDD {
                         });
                 std::reverse(bdd_nrs.begin(), bdd_nrs.end());
 
+                std::vector<size_t> intermed_bdd_nrs;
+
                 while(bdd_nrs.size() >= bdd_and_th)
                 {
-                    size_t new_bdd_nr = bdd_and(bdd_nrs.end()-bdd_and_th, bdd_nrs.end());
+                    intermed_bdd_nrs.push_back(bdd_and(bdd_nrs.end() - bdd_and_th, bdd_nrs.end()));
                     bdd_nrs.resize(bdd_nrs.size()-bdd_and_th);
-                    bdd_nrs.push_back(new_bdd_nr);
+                    bdd_nrs.push_back(intermed_bdd_nrs.back());
                 }
 
-                return bdd_and(bdd_nrs.begin(), bdd_nrs.end());
+                if (bdd_nrs.size() > 1)
+                {
+                    const size_t bdd_nr = bdd_and(bdd_nrs.begin(), bdd_nrs.end());
+                    assert(this->nr_bdds() == bdd_nr + 1);
+                    remove(intermed_bdd_nrs.begin(), intermed_bdd_nrs.end());
+                }
+                else
+                {
+                    assert(bdd_nrs[0] == intermed_bdd_nrs.back());
+                    remove(intermed_bdd_nrs.begin(), intermed_bdd_nrs.end() - 1);
+                }
+                return this->nr_bdds() - 1;
             }
 
             switch(nr_bdds) {
@@ -778,7 +795,6 @@ namespace BDD {
                 for(size_t i=bdd_delimiters[bdd_nr]; i<bdd_delimiters[bdd_nr+1]-2; ++i)
                 {
                     const bdd_instruction& instr = bdd_instructions[i];
-                    std::cout << "bdd_nr " << bdd_nr << ", i = " << i - bdd_delimiters[bdd_nr] << ", var = " << instr.index << "\n";
                     assert(!instr.is_terminal());
                     if(instr.index != cur_var)
                     {
@@ -806,6 +822,19 @@ namespace BDD {
                 }
             }
             s << "End\n"; 
+        }
+
+        template <typename ITERATOR>
+        void bdd_collection::invert(const size_t bdd_nr, ITERATOR var_begin, ITERATOR var_end)
+        {
+            assert(bdd_nr < nr_bdds());
+            std::unordered_set<size_t> vars(var_begin, var_end);
+            for(size_t bdd_idx=bdd_delimiters[bdd_nr]; bdd_idx<bdd_delimiters[bdd_nr+1]-2; ++bdd_idx)
+            {
+                auto& bdd_instr = bdd_instructions[bdd_idx];
+                if(vars.count(bdd_instr.index) > 0)
+                    std::swap(bdd_instr.lo, bdd_instr.hi);
+            }
         }
 
 }

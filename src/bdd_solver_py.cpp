@@ -38,7 +38,6 @@ PYBIND11_MODULE(bdd_solver_py, m) {
         .def_readwrite("wedelin_kappa_min", &LPMP::bdd_solver_options::wedelin_kappa_min)
         .def_readwrite("wedelin_kappa_max", &LPMP::bdd_solver_options::wedelin_kappa_max)
         .def_readwrite("wedelin_kappa_step", &LPMP::bdd_solver_options::wedelin_kappa_step)
-        .def_readwrite("constraint_groups", &LPMP::bdd_solver_options::constraint_groups)
         .def("auto_set_parameters",  &LPMP::bdd_solver_options::set_solver_type);
 
     py::enum_<LPMP::bdd_solver_options::bdd_solver_impl>(bdd_opts, "bdd_solver_types")

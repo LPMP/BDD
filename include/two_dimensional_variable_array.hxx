@@ -477,11 +477,11 @@ namespace LPMP {
             // first calculate amount of memory needed in bytes
             const auto s = std::distance(begin, end);
             std::vector<size_t> offsets;
-            offsets.reserve(s);
+            offsets.reserve(s+1);
             offsets.push_back(0);
             for(auto it=begin; it!=end; ++it) {
                 assert(*it >= 0);
-                offsets.push_back( offsets.back() + *it );
+                offsets.push_back(offsets.back() + *it);
             }
             return offsets;
         }

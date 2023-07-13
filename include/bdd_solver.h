@@ -59,6 +59,7 @@ namespace LPMP {
 
         // cuda solver options //
         bool cuda_split_long_bdds = false;
+        bool cuda_split_long_bdds_implication_bdd = false;
         /////////////////////////
 
         // incremental perturbation rounding //
@@ -83,8 +84,6 @@ namespace LPMP {
         bool statistics = false;
         std::string export_bdd_lp_file = "";
         std::string export_bdd_graph_file = "";
-
-        bool constraint_groups = true; // allow constraint groups to be formed e.g. from indicators in the input lp files
 
         // export difficult part of the problems including zero and undecided min-marginals 
         std::string export_difficult_core = "";
@@ -163,8 +162,6 @@ namespace LPMP {
         app.add_option("--improvement_slope", improvement_slope, "termination criterion: improvement between iterations as compared to improvement after first iterations, default value = " + std::to_string(improvement_slope))
             ->check(CLI::Range(0.0, 1.0));
 
-        app.add_option("--constraint_groups", constraint_groups, "allow multiple constraints to be fused into one, default = true");
-
         app.add_option("-l, --time_limit", time_limit, "time limit in seconds, default value = 3600")
             ->check(CLI::PositiveNumber);
 
@@ -195,6 +192,7 @@ namespace LPMP {
                 ->check(CLI::PositiveNumber);
 
         app.add_flag("--cuda_split_long_bdds", cuda_split_long_bdds, "split long BDDs into short ones, might make cuda mma faster for problems with a few long inequalities");
+        app.add_flag("--cuda_split_long_bdds_with_implication_bdd", cuda_split_long_bdds_implication_bdd, "split long BDDs into short ones and additionally construct implication BDD");
 
         auto primal_group = app.add_option_group("primal rounding", "method for obtaining a primal solution from the dual optimization");
         auto incremental_primal_arg = primal_group->add_flag("--incremental_primal", incremental_primal_rounding, "incremental primal rounding flag");

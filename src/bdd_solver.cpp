@@ -176,7 +176,7 @@ namespace LPMP {
             return false;
         }();
 
-        bdd_preprocessor bdd_pre(options.ilp, options.constraint_groups, normalize_constraints, options.cuda_split_long_bdds);
+        bdd_preprocessor bdd_pre(options.ilp, normalize_constraints, options.cuda_split_long_bdds, options.cuda_split_long_bdds_implication_bdd);
 
         std::cout << std::setprecision(10);
 

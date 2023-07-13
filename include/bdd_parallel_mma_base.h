@@ -198,6 +198,8 @@ namespace LPMP {
 
             for(size_t bdd_nr=0; bdd_nr<bdd_col.nr_bdds(); ++bdd_nr)
             {
+                if(!bdd_col.is_qbdd(bdd_nr))
+                    bdd_col.export_graphviz(bdd_nr, std::string("kwas"));
                 assert(bdd_col.is_qbdd(bdd_nr));
                 assert(bdd_col.is_reordered(bdd_nr));
             }

@@ -1,4 +1,6 @@
 #include "bdd_collection/bdd_collection.h"
+#include "bdd_manager/bdd_mgr.h"
+#include "transitive_closure_dag.h"
 #include <queue>
 #include <cassert>
 #include <unordered_set>
@@ -485,10 +487,13 @@ namespace BDD {
         return contiguous_vars(bdd_nr);
     }
 
-    std::tuple<std::vector<size_t>,size_t> bdd_collection::split_qbdd(const size_t bdd_nr, const size_t chunk_size, const size_t aux_var_start)
+    std::tuple<std::vector<size_t>,size_t> bdd_collection::split_qbdd(const size_t bdd_nr, const size_t chunk_size, const size_t aux_var_start, const bool with_implication_bdd)
     {
         assert(bdd_nr < nr_bdds());
+        assert(chunk_size > 0);
         assert(is_qbdd(bdd_nr));
+
+        const size_t nr_bdds_before = nr_bdds();
 
         const auto vars = variables(bdd_nr);
         if(vars.size() <= chunk_size)
@@ -504,7 +509,7 @@ namespace BDD {
 
         // for synchronizing additional bdd nodes we need auxiliary variables, which start at aux_var_start
         std::vector<size_t> aux_vars;
-        aux_vars.reserve(nr_chunks);
+        aux_vars.reserve(nr_chunks-1);
         aux_vars.push_back(aux_var_start);
         for(size_t chunk_nr=1; chunk_nr+1<nr_chunks; ++chunk_nr)
         {
@@ -512,6 +517,28 @@ namespace BDD {
             aux_vars.push_back(aux_vars.back() + layer_widths[chunk_nr*chunk_size]);
         }
         assert(aux_vars.size() == nr_chunks-1);
+
+        constexpr size_t HEAD = 13;
+        constexpr size_t TAIL = 47;
+        auto aux_var = [&](const size_t chunk_nr, const size_t HEAD_OR_TAIL, const size_t i)
+        {
+            if (HEAD_OR_TAIL == HEAD)
+            {
+                assert(chunk_nr > 0 && chunk_nr < nr_chunks);
+                assert(i < layer_widths[chunk_nr * chunk_size]);
+                assert(chunk_nr - 1 < aux_vars.size());
+                return aux_vars[chunk_nr - 1] + i;
+            }
+            else
+            {
+                assert(HEAD_OR_TAIL == TAIL);
+                assert(chunk_nr + 1 < nr_chunks);
+                assert((chunk_nr + 1) * chunk_size < layer_widths.size());
+                assert(i < layer_widths[(chunk_nr + 1) * chunk_size]);
+                assert(chunk_nr < aux_vars.size());
+                return aux_vars[chunk_nr] + i;
+            }
+        };
 
         auto add_bdd_instruction = [&](const size_t index, const size_t lo, const size_t hi)
         {
@@ -566,7 +593,7 @@ namespace BDD {
                     assert(j <= layer_widths[last_layer + 1] - i);
 
                 if(i == 0)
-                    return j;
+                    return bdd_delimiters.back() + nr_aux_bdd_nodes_head + nr_bdd_nodes_chunk + j;
                 return bdd_delimiters.back() + nr_aux_bdd_nodes_head + nr_bdd_nodes_chunk
                        + layer_widths[last_layer + 1] +
                        layer_widths[last_layer + 1] * (i-1) + j - ((i - 1) * (i - 2)) / 2;
@@ -607,19 +634,12 @@ namespace BDD {
 
             auto head_aux_var = [&](const size_t i)
             {
-                assert(chunk_nr > 0 && chunk_nr < nr_chunks);
-                assert(i < layer_widths[first_layer]);
-                assert(chunk_nr-1 < aux_vars.size());
-                return aux_vars[chunk_nr-1] + i;
+                return aux_var(chunk_nr, HEAD, i);
             };
 
             auto tail_aux_var = [&](const size_t i)
             {
-                assert(chunk_nr+1 < nr_chunks);
-                assert(last_layer+1 < layer_widths.size());
-                assert(i < layer_widths[last_layer+1]);
-                assert(chunk_nr < aux_vars.size());
-                return aux_vars[chunk_nr] + i;
+                return aux_var(chunk_nr, TAIL, i);
             };
 
             auto layer_offset = [&](const size_t layer)
@@ -762,6 +782,151 @@ namespace BDD {
        for(const size_t new_bdd_nr : new_bdd_nrs)
             assert(min_max_variables(new_bdd_nr)[1] < aux_vars.back() + layer_widths[(nr_chunks - 1) * chunk_size]);
        assert(min_max_variables(new_bdd_nrs.back())[1] + 1 == aux_vars.back() + layer_widths[(nr_chunks - 1) * chunk_size]);
+
+       assert(nr_bdds() == nr_bdds_before + nr_chunks);
+
+       // If more than two BDDs were created: Add an additional bdd that encodes all implications given through inspecting the transitive closure of the BDD DAG.
+       if(with_implication_bdd && new_bdd_nrs.size() > 2)
+       {
+            std::vector<std::array<size_t, 2>> bdd_arcs;
+            bdd_arcs.reserve(nr_bdd_nodes(bdd_nr) * 2);
+            for (size_t bdd_idx = bdd_delimiters[bdd_nr]; bdd_idx < bdd_delimiters[bdd_nr + 1] - 2; ++bdd_idx)
+            {
+                const auto bdd_instr = bdd_instructions[bdd_idx];
+                if (!bdd_instructions[bdd_instr.lo].is_terminal())
+                    bdd_arcs.push_back({bdd_idx - bdd_delimiters[bdd_nr], bdd_instr.lo - bdd_delimiters[bdd_nr]});
+                if (!bdd_instructions[bdd_instr.hi].is_terminal())
+                    bdd_arcs.push_back({bdd_idx - bdd_delimiters[bdd_nr], bdd_instr.hi - bdd_delimiters[bdd_nr]});
+            }
+
+            // TODO: build transitive closure only for needed subgraph of BDD
+            LPMP::transitive_closure tc(bdd_arcs);
+            for(auto& [i,j] : bdd_arcs)
+                std::swap(i, j);
+            LPMP::transitive_closure tc_backward(bdd_arcs);
+            std::vector<size_t> tc_bdd_nrs;
+
+            // for each affected layer exactly one node must be taken
+            for(size_t chunk_nr=1; chunk_nr < nr_chunks; ++chunk_nr)
+            {
+                std::vector<size_t> layer_aux_vars;
+                layer_aux_vars.reserve(layer_widths[chunk_nr * chunk_size]);
+
+                for (size_t i = 0; i < layer_widths[chunk_nr * chunk_size]; ++i)
+                    layer_aux_vars.push_back(aux_var(chunk_nr, HEAD, i));
+
+                tc_bdd_nrs.push_back(simplex_constraint(layer_aux_vars.size()));
+                rebase(tc_bdd_nrs.back(), layer_aux_vars.begin(), layer_aux_vars.end());
+            }
+
+            assert(nr_bdds() == nr_bdds_before + nr_chunks + tc_bdd_nrs.size());
+            assert(tc_bdd_nrs.size() == nr_chunks - 1);
+
+            // for each pair of subsequent affected layers check which pairs of nodes are connected by a directed path. 
+            // If yes, they form an implication which needs to be encoded.
+            for(size_t chunk_nr=1; chunk_nr+1 < nr_chunks; ++chunk_nr)
+            {
+                const size_t first_layer = chunk_size * chunk_nr;
+                for(size_t chunk_nr_2 = chunk_nr; chunk_nr_2 + 1 < nr_chunks; ++chunk_nr_2) // TODO: possibly not needed, use only subsequent layers 
+                {
+                    const size_t last_layer = (chunk_nr_2 + 1) * chunk_size - 1;
+                    assert(last_layer + 1 < vars.size());
+                    for (size_t i1 = 0; i1 < layer_widths[first_layer]; ++i1)
+                    {
+                        const size_t aux_var_1 = aux_var(chunk_nr, HEAD, layer_widths[first_layer] - 1 - i1);
+                        std::vector<size_t> tc_bdd_vars = {aux_var_1};
+                        const size_t bdd_idx_1 = layer_offsets[first_layer] + i1;
+
+                        for (size_t i2 = 0; i2 < layer_widths[last_layer + 1]; ++i2)
+                        {
+                            const size_t aux_var_2 = aux_var(chunk_nr_2, TAIL, layer_widths[last_layer + 1] - 1 - i2);
+                            const size_t bdd_idx_2 = layer_offsets[last_layer + 1] + i2;
+                            if (tc(bdd_idx_1 - bdd_delimiters[bdd_nr], bdd_idx_2 - bdd_delimiters[bdd_nr]))
+                                tc_bdd_vars.push_back(aux_var_2);
+                        }
+
+                        std::reverse(tc_bdd_vars.begin() + 1, tc_bdd_vars.end()); // bring variable into ascending order again
+                        assert(tc_bdd_vars.size() > 1);
+                        if (tc_bdd_vars.size() == layer_widths[last_layer + 1] + 1)
+                            continue;
+                        tc_bdd_nrs.push_back(not_all_false_constraint(tc_bdd_vars.size()));
+                        rebase(tc_bdd_nrs.back(), tc_bdd_vars.begin(), tc_bdd_vars.end()); // &
+                        invert(tc_bdd_nrs.back(), aux_var_1);
+                    }
+                }
+            }
+            //std::cout << "[bdd preprocessor] # implication conditions = " << tc_bdd_nrs.size() - nr_chunks << " forward\n";
+
+            // reverse implications
+            for (size_t chunk_nr = 1; chunk_nr + 1 < nr_chunks; ++chunk_nr)
+            {
+                const size_t first_layer = chunk_size * (chunk_nr+1);
+                for(size_t chunk_nr_2 = 1; chunk_nr_2 <= chunk_nr; ++chunk_nr_2) // TODO: possibly not needed, use only subsequent layers 
+                {
+                    const size_t last_layer = (chunk_nr_2 ) * chunk_size - 1;
+                    assert(last_layer < first_layer);
+                    for (size_t i1 = 0; i1 < layer_widths[first_layer]; ++i1)
+                    {
+                        const size_t aux_var_1 = aux_var(chunk_nr, TAIL, layer_widths[first_layer] - 1 - i1);
+                        std::vector<size_t> tc_bdd_vars;
+                        const size_t bdd_idx_1 = layer_offsets[first_layer] + i1;
+
+                        for (size_t i2 = 0; i2 < layer_widths[last_layer + 1]; ++i2)
+                        {
+                            const size_t aux_var_2 = aux_var(chunk_nr_2, HEAD, layer_widths[last_layer + 1] - 1 - i2);
+                            const size_t bdd_idx_2 = layer_offsets[last_layer + 1] + i2;
+                            if (tc_backward(bdd_idx_1 - bdd_delimiters[bdd_nr], bdd_idx_2 - bdd_delimiters[bdd_nr]))
+                                tc_bdd_vars.push_back(aux_var_2);
+                        }
+
+                        std::reverse(tc_bdd_vars.begin(), tc_bdd_vars.end()); // bring variable into ascending order again
+                        tc_bdd_vars.push_back(aux_var_1);
+                        assert(tc_bdd_vars.size() > 1);
+                        if (tc_bdd_vars.size() == layer_widths[last_layer + 1] + 1)
+                            continue;
+                        tc_bdd_nrs.push_back(not_all_false_constraint(tc_bdd_vars.size()));
+                        rebase(tc_bdd_nrs.back(), tc_bdd_vars.begin(), tc_bdd_vars.end()); 
+                        invert(tc_bdd_nrs.back(), aux_var_1);
+                    }
+                }
+            }
+
+            //std::cout << "[bdd preprocessor] # implication conditions = " << tc_bdd_nrs.size() - nr_chunks << " in total\n";
+
+            assert(nr_bdds() == nr_bdds_before + nr_chunks + tc_bdd_nrs.size());
+
+            // no implications based on transitive closure found means we can remove the additional bdd
+            if(tc_bdd_nrs.size() == nr_chunks - 1)
+            {
+                std::cout << "[bdd preprocessor] Split BDD " << bdd_nr << " has no non-trivial implications, do not add implication BDD\n";
+                remove(tc_bdd_nrs.begin(), tc_bdd_nrs.end());
+            }
+            else
+            {
+                assert(tc_bdd_nrs.size() >= nr_chunks);
+                assert(nr_bdds() == nr_bdds_before + nr_chunks + tc_bdd_nrs.size());
+                size_t new_bdd_nr = bdd_and(tc_bdd_nrs.begin(), tc_bdd_nrs.end());
+                reorder(new_bdd_nr);
+                assert(nr_bdds() == nr_bdds_before + nr_chunks + tc_bdd_nrs.size() + 1);
+                if (!is_qbdd(new_bdd_nr))
+                {
+                    std::cout << "implication bdd not qbdd\n";
+                    tc_bdd_nrs.push_back(new_bdd_nr);
+                    new_bdd_nr = make_qbdd(new_bdd_nr);
+                }
+                assert(nr_bdds() == nr_bdds_before + nr_chunks + tc_bdd_nrs.size() + 1);
+                remove(tc_bdd_nrs.begin(), tc_bdd_nrs.end());
+                assert(new_bdd_nr + 1 == nr_bdds() + tc_bdd_nrs.size());
+                new_bdd_nrs.push_back(nr_bdds() - 1);
+                assert(is_qbdd(new_bdd_nrs.back()));
+            }
+       }
+
+       for(const size_t new_bdd_nr : new_bdd_nrs)
+            assert(is_qbdd(new_bdd_nr));
+
+       assert(nr_bdds() == nr_bdds_before + new_bdd_nrs.size());
+       assert(new_bdd_nrs.size() == nr_chunks || new_bdd_nrs.size() == nr_chunks + 1);
 
        return std::make_tuple(new_bdd_nrs, aux_vars.back() + layer_widths[(nr_chunks - 1)*chunk_size]);
     }
@@ -1623,6 +1788,7 @@ namespace BDD {
         // rebase back to original variables
         o.rebase(new_bdd_nr, vars.begin(), vars.end());
         rebase(bdd_nr, vars.begin(), vars.end());
+        assert(is_qbdd(new_bdd_nr));
         return new_bdd_nr;
     }
 
@@ -1841,6 +2007,16 @@ namespace BDD {
     {
         assert(bdd_nr < nr_bdds());
         std::swap(bdd_instructions[bdd_delimiters[bdd_nr+1]-1], bdd_instructions[bdd_delimiters[bdd_nr+1]-2]);
+    }
+
+    void bdd_collection::invert(const size_t bdd_nr, const size_t var)
+    {
+        for (size_t bdd_idx = bdd_delimiters[bdd_nr]; bdd_idx < bdd_delimiters[bdd_nr + 1] - 2; ++bdd_idx)
+        {
+            auto &bdd_instr = bdd_instructions[bdd_idx];
+            if (var == bdd_instr.index)
+                std::swap(bdd_instr.lo, bdd_instr.hi);
+        }
     }
 
     size_t bdd_collection::simplex_constraint(const size_t n)

@@ -16,6 +16,9 @@ target_link_libraries(lineq_bdd ILP_input LPMP-BDD)
 add_library(convert_pb_to_bdd convert_pb_to_bdd.cpp)
 target_link_libraries(convert_pb_to_bdd ILP_input lineq_bdd LPMP-BDD)
 
+add_library(transitive_closure_dag transitive_closure_dag.cpp)
+target_link_libraries(transitive_closure_dag LPMP-BDD)
+
 add_library(bdd_preprocessor bdd_preprocessor.cpp)
 target_link_libraries(bdd_preprocessor ILP_input convert_pb_to_bdd lineq_bdd LPMP-BDD)
 
