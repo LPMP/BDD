@@ -126,6 +126,13 @@ inline void checkCudaError(cudaError_t status, std::string errorMsg)
     }
 }
 
+inline size_t getMaximumOccupancy()
+{
+    cudaDeviceProp deviceProp;
+    cudaGetDeviceProperties(&deviceProp, get_cuda_device());
+    return deviceProp.multiProcessorCount * deviceProp.maxThreadsPerMultiProcessor;    
+}
+
 inline std::tuple<thrust::device_vector<int>, thrust::device_vector<int>> get_unique_with_counts(const thrust::device_vector<int>& input)
 {
     assert(thrust::is_sorted(input.begin(), input.end()));

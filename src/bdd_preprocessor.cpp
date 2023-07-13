@@ -288,7 +288,7 @@ namespace LPMP {
                     layer_widths[i] = std::max(layer_widths[i+1], layer_widths[i]);
             }
 
-            const size_t max_length_bdd = [&]()
+            const size_t max_length_bdd = [&]() -> size_t
             {
                 if(*std::max_element(layer_widths.begin(), layer_widths.end()) < 2048 || bdd_collection.nr_bdds() < 128)
                 {
