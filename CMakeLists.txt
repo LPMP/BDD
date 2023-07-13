@@ -29,17 +29,67 @@ target_compile_features(LPMP-BDD INTERFACE cxx_std_17)
 target_compile_options(LPMP-BDD INTERFACE -fPIC)
 target_compile_options(LPMP-BDD INTERFACE -fvisibility=hidden)
 target_compile_options(LPMP-BDD INTERFACE -fvisibility-inlines-hidden)
-#target_compile_options(LPMP-BDD INTERFACE -Wall -Wextra -Wpedantic -Werror)
-target_include_directories(LPMP-BDD INTERFACE external/Eigen)
-target_include_directories(LPMP-BDD INTERFACE external/tsl-robin-map/include)
-target_include_directories(LPMP-BDD INTERFACE external/PEGTL/include)
-target_include_directories(LPMP-BDD INTERFACE external/CLI11/include)
-target_include_directories(LPMP-BDD INTERFACE external/pybind11)
-target_include_directories(LPMP-BDD INTERFACE external/cereal/include/)
 
-find_package(Thrust REQUIRED CONFIG PATHS external/thrust/)
+# external dependencies
+set(CPM_DOWNLOAD_VERSION 0.34.0)
+
+if(CPM_SOURCE_CACHE)
+  set(CPM_DOWNLOAD_LOCATION "${CPM_SOURCE_CACHE}/cpm/CPM_${CPM_DOWNLOAD_VERSION}.cmake")
+elseif(DEFINED ENV{CPM_SOURCE_CACHE})
+  set(CPM_DOWNLOAD_LOCATION "$ENV{CPM_SOURCE_CACHE}/cpm/CPM_${CPM_DOWNLOAD_VERSION}.cmake")
+else()
+  set(CPM_DOWNLOAD_LOCATION "${CMAKE_BINARY_DIR}/cmake/CPM_${CPM_DOWNLOAD_VERSION}.cmake")
+endif()
+
+if(NOT (EXISTS ${CPM_DOWNLOAD_LOCATION}))
+  message(STATUS "Downloading CPM.cmake to ${CPM_DOWNLOAD_LOCATION}")
+  file(DOWNLOAD
+       https://github.com/TheLartians/CPM.cmake/releases/download/v${CPM_DOWNLOAD_VERSION}/CPM.cmake
+       ${CPM_DOWNLOAD_LOCATION}
+  )
+endif()
+
+include(${CPM_DOWNLOAD_LOCATION})
+
+CPMAddPackage("gh:taocpp/PEGTL#main")
+target_include_directories(LPMP-BDD INTERFACE "${PEGTL_SOURCE_DIR}/include")
+
+CPMAddPackage("gh:CLIUtils/CLI11#main")
+target_include_directories(LPMP-BDD INTERFACE "${CLI11_SOURCE_DIR}/include")
+
+CPMAddPackage("gl:libeigen/eigen#master")
+target_include_directories(LPMP-BDD INTERFACE "${eigen_SOURCE_DIR}")
+
+CPMAddPackage("gh:Tessil/robin-map#master")
+target_include_directories(LPMP-BDD INTERFACE "${robin-map_SOURCE_DIR}/include")
+
+CPMAddPackage(
+    NAME pybind11
+    GIT_BRANCH master
+    GITHUB_REPOSITORY pybind/pybind11
+    OPTIONS
+    "PYBIND11_CPP_STANDARD -std=c++17"
+    "PYBIND11_INSTALL ON CACHE BOOL"
+)
+target_include_directories(LPMP-BDD INTERFACE "${pybind11_SOURCE_DIR}/pybind11")
+add_subdirectory(${pybind11_SOURCE_DIR})
+
+CPMAddPackage("gh:NVIDIA/thrust#main")
+find_package(Thrust REQUIRED CONFIG PATHS "${thrust_SOURCE_DIR}")
 thrust_create_target(Thrust)
 target_link_libraries(LPMP-BDD INTERFACE Thrust)
+
+CPMAddPackage(
+    NAME cereal
+    GIT_BRANCH master
+    GITHUB_REPOSITORY USCiLab/cereal
+    OPTIONS
+    "BUILD_DOC OFF"
+    "BUILD_SANDBOX OFF"
+)
+target_include_directories(LPMP-BDD INTERFACE "${cereal_SOURCE_DIR}/include")
+
+#target_compile_options(LPMP-BDD INTERFACE -Wall -Wextra -Wpedantic -Werror)
 
 find_package(OpenMP)
 if(OpenMP_CXX_FOUND)
@@ -55,10 +105,6 @@ if(OpenMP_CXX_FOUND AND WITH_CUDA)
 endif()
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
-set(PYBIND11_CPP_STANDARD -std=c++17)
-set(PYBIND11_INSTALL ON CACHE BOOL "enable pybind11 bindings.")
-add_subdirectory(external/pybind11)
 
 add_subdirectory(src)
 enable_testing()

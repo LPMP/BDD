@@ -11,8 +11,8 @@
 #ifdef _OPENMP
 #include <omp.h>
 #endif
-#ifdef CUDA
-#include ""
+#ifdef WITH_CUDA
+#include "cuda_utils.h"
 #endif
 
 namespace LPMP {
@@ -288,6 +288,12 @@ namespace LPMP {
                     layer_widths[i] = std::max(layer_widths[i+1], layer_widths[i]);
             }
 
+#ifdef WITH_CUDA
+            const size_t maximum_occupancy = getMaximumOccupancy();
+#else
+            const size_t maximum_occupancy = 1024;
+#endif
+
             const size_t max_length_bdd = [&]() -> size_t
             {
                 if(*std::max_element(layer_widths.begin(), layer_widths.end()) < 2048 || bdd_collection.nr_bdds() < 128)
@@ -296,7 +302,7 @@ namespace LPMP {
                     return std::numeric_limits<size_t>::max();
                 }
                 for (size_t i = 200; i < std::max(std::ptrdiff_t(layer_widths.size()) - 50, std::ptrdiff_t(0)); ++i)
-                    if (layer_widths[i] < 1024)
+                    if (layer_widths[i] < maximum_occupancy)
                         return i;
                 return std::numeric_limits<size_t>::max();
             }();
