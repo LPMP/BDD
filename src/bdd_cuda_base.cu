@@ -31,7 +31,6 @@ namespace LPMP {
     template<typename REAL>
     bdd_cuda_base<REAL>::bdd_cuda_base(const BDD::bdd_collection& bdd_col)
     {
-        std::cout<<"Maximum GPU occupany: "<<getMaximumOccupancy()<<"\n";
         assert(bdd_col.nr_bdds() > 0);
         initialize(bdd_col);
         thrust::device_vector<int> bdd_hop_dist_root, bdd_depth;

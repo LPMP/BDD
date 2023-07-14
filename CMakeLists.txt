@@ -21,7 +21,7 @@ endif()
 
 cmake_minimum_required(VERSION 3.20) # does not work with 3.13
 
-set(CMAKE_CUDA_ARCHITECTURES OFF)
+set(CMAKE_CUDA_ARCHITECTURES native)
 
 add_library(LPMP-BDD INTERFACE)
 target_include_directories(LPMP-BDD INTERFACE include/)
@@ -65,14 +65,13 @@ target_include_directories(LPMP-BDD INTERFACE "${robin-map_SOURCE_DIR}/include")
 
 CPMAddPackage(
     NAME pybind11
-    GIT_BRANCH master
+    GIT_TAG master
     GITHUB_REPOSITORY pybind/pybind11
     OPTIONS
     "PYBIND11_CPP_STANDARD -std=c++17"
     "PYBIND11_INSTALL ON CACHE BOOL"
 )
-target_include_directories(LPMP-BDD INTERFACE "${pybind11_SOURCE_DIR}/pybind11")
-add_subdirectory(${pybind11_SOURCE_DIR})
+find_package(pybind11 REQUIRED)
 
 CPMAddPackage("gh:NVIDIA/thrust#main")
 find_package(Thrust REQUIRED CONFIG PATHS "${thrust_SOURCE_DIR}")
@@ -81,7 +80,7 @@ target_link_libraries(LPMP-BDD INTERFACE Thrust)
 
 CPMAddPackage(
     NAME cereal
-    GIT_BRANCH master
+    GIT_TAG master
     GITHUB_REPOSITORY USCiLab/cereal
     OPTIONS
     "BUILD_DOC OFF"

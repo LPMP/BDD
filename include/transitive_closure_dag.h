@@ -3,6 +3,9 @@
 #include <vector>
 #include <array>
 #include <ostream>
+#include <algorithm>
+#include <assert.h>
+
 
 namespace LPMP {
 

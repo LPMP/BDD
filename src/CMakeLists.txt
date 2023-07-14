@@ -69,7 +69,7 @@ if(WITH_CUDA)
 endif()
 
 add_library(bdd_solver bdd_solver.cpp)
-target_link_libraries(bdd_solver bdd_mma bdd_mma_smooth bdd_parallel_mma bdd_parallel_mma_smooth bdd_cuda bdd_multi_parallel_mma bdd_preprocessor ILP_parser OPB_parser ILP_input mm_primal_decoder LPMP-BDD pthread)
+target_link_libraries(bdd_solver bdd_mma bdd_mma_smooth bdd_parallel_mma bdd_parallel_mma_smooth bdd_cuda bdd_multi_parallel_mma bdd_mgr bdd_preprocessor ILP_parser OPB_parser ILP_input mm_primal_decoder LPMP-BDD pthread)
 if(WITH_CUDA)
     target_link_libraries(bdd_solver bdd_cuda_base bdd_cuda_parallel_mma bdd_multi_parallel_mma_base incremental_mm_agreement_rounding_cuda)
     target_compile_options(bdd_solver PRIVATE "$<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CUDA>>:--generate-line-info>")
@@ -81,7 +81,7 @@ endif()
 target_link_libraries(LPMP-BDD INTERFACE bdd_solver)
 
 add_executable(bdd_solver_cl bdd_solver_cl.cpp)
-target_link_libraries(bdd_solver_cl LPMP-BDD)
+target_link_libraries(bdd_solver_cl bdd_solver LPMP-BDD)
 
 add_executable(convert_lp_to_opb convert_lp_to_opb.cpp)
 target_link_libraries(convert_lp_to_opb LPMP-BDD)

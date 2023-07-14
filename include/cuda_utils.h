@@ -14,6 +14,7 @@
 #include "time_measure_util.h"
 #include <thrust/iterator/constant_iterator.h>
 #include <thrust/random.h>
+#include <thrust/extrema.h>
 
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
@@ -126,31 +127,6 @@ inline void checkCudaError(cudaError_t status, std::string errorMsg)
     }
 }
 
-inline size_t getMaximumOccupancy()
-{
-    cudaDeviceProp deviceProp;
-    cudaGetDeviceProperties(&deviceProp, get_cuda_device());
-    return deviceProp.multiProcessorCount * deviceProp.maxThreadsPerMultiProcessor;    
-}
-
-inline std::tuple<thrust::device_vector<int>, thrust::device_vector<int>> get_unique_with_counts(const thrust::device_vector<int>& input)
-{
-    assert(thrust::is_sorted(input.begin(), input.end()));
-    thrust::device_vector<int> unique_counts(input.size() + 1);
-    thrust::device_vector<int> unique_values(input.size());
-
-    auto new_end = thrust::unique_by_key_copy(input.begin(), input.end(), thrust::make_counting_iterator(0), unique_values.begin(), unique_counts.begin());
-    int num_unique = std::distance(unique_values.begin(), new_end.first);
-    unique_values.resize(num_unique);
-    unique_counts.resize(num_unique + 1); // contains smallest index of each unique element.
-    
-    unique_counts[num_unique] = input.size();
-    thrust::adjacent_difference(unique_counts.begin(), unique_counts.end(), unique_counts.begin());
-    unique_counts = thrust::device_vector<int>(unique_counts.begin() + 1, unique_counts.end());
-
-    return {unique_values, unique_counts};
-}
-
 template<typename T>
 inline thrust::device_vector<T> repeat_values(const thrust::device_vector<T>& values, const thrust::device_vector<int>& counts)
 {
@@ -180,13 +156,6 @@ inline thrust::device_vector<T> concatenate(const thrust::device_vector<T>& a, c
     thrust::copy(a.begin(), a.end(), ab.begin());
     thrust::copy(b.begin(), b.end(), ab.begin() + a.size());
     return ab;
-}
-
-inline void coo_sorting(thrust::device_vector<int>& i, thrust::device_vector<int>& j)
-{
-    auto first = thrust::make_zip_iterator(thrust::make_tuple(i.begin(), j.begin()));
-    auto last = thrust::make_zip_iterator(thrust::make_tuple(i.end(), j.end()));
-    thrust::sort(first, last);
 }
 
 template<typename T>

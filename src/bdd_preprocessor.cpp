@@ -12,10 +12,17 @@
 #include <omp.h>
 #endif
 #ifdef WITH_CUDA
-#include "cuda_utils.h"
+#include <cuda_runtime.h>
 #endif
 
 namespace LPMP {
+
+    inline size_t getMaximumOccupancy()
+    {
+        cudaDeviceProp deviceProp;
+        cudaGetDeviceProperties(&deviceProp, 0);
+        return deviceProp.multiProcessorCount * deviceProp.maxThreadsPerMultiProcessor;    
+    }
 
     two_dim_variable_array<size_t> bdd_preprocessor::add_ilp(const ILP_input& input, const bool normalize, const bool split_long_bdds, const bool add_split_implication_bdd)
     {
