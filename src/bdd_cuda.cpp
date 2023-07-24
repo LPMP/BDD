@@ -82,6 +82,54 @@ namespace LPMP {
     template void bdd_cuda<double>::update_costs(std::vector<float>::const_iterator, std::vector<float>::const_iterator, std::vector<float>::const_iterator, std::vector<float>::const_iterator);
 
     template<typename REAL>
+    template<typename VECTOR>
+    VECTOR bdd_cuda<REAL>::net_solver_costs()
+    {
+#ifdef WITH_CUDA
+        return pimpl->pmma.net_solver_costs();
+#endif
+    }
+
+    // template std::vector<float> bdd_cuda<float>::net_solver_costs();
+    // template std::vector<double> bdd_cuda<double>::net_solver_costs();
+
+#ifdef WITH_CUDA
+    template thrust::device_vector<float> bdd_cuda<float>::net_solver_costs();
+    template thrust::device_vector<double> bdd_cuda<double>::net_solver_costs();
+#endif
+
+    template<typename REAL>
+    template<typename VECTOR>
+    VECTOR bdd_cuda<REAL>::bdds_solution_vec()
+    {
+#ifdef WITH_CUDA
+        return pimpl->pmma.bdds_solution_vec();
+#endif
+    }
+
+    // template std::vector<float> bdd_cuda<float>::bdds_solution_vec();
+    // template std::vector<double> bdd_cuda<double>::bdds_solution_vec();
+
+#ifdef WITH_CUDA
+    template thrust::device_vector<float> bdd_cuda<float>::bdds_solution_vec();
+    template thrust::device_vector<double> bdd_cuda<double>::bdds_solution_vec();
+#endif
+
+    template<typename REAL>
+    template<typename ITERATOR>
+    void bdd_cuda<REAL>::make_dual_feasible(ITERATOR grad_begin, ITERATOR grad_end)
+    {
+        #ifdef WITH_CUDA
+            pimpl->pmma.make_dual_feasible(grad_begin, grad_end);
+        #endif
+    }
+    template void bdd_cuda<float>::make_dual_feasible(float*, float*);
+    template void bdd_cuda<float>::make_dual_feasible(std::vector<float>::iterator, std::vector<float>::iterator);
+    
+    template void bdd_cuda<double>::make_dual_feasible(double*, double*);
+    template void bdd_cuda<double>::make_dual_feasible(std::vector<double>::iterator, std::vector<double>::iterator);
+
+    template<typename REAL>
     void bdd_cuda<REAL>::backward_run()
     {
 #ifdef WITH_CUDA

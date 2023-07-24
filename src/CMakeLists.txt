@@ -37,6 +37,9 @@ target_link_libraries(bdd_parallel_mma LPMP-BDD)
 add_library(bdd_parallel_mma_smooth bdd_parallel_mma_smooth.cpp)
 target_link_libraries(bdd_parallel_mma_smooth LPMP-BDD) 
 
+add_library(lbfgs lbfgs.cu)
+target_link_libraries(lbfgs LPMP-BDD) 
+
 if(WITH_CUDA)
     add_library(incremental_mm_agreement_rounding_cuda incremental_mm_agreement_rounding_cuda.cu)
     target_link_libraries(incremental_mm_agreement_rounding_cuda LPMP-BDD)

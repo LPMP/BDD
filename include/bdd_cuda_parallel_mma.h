@@ -22,6 +22,8 @@ namespace LPMP {
             // delta_lo_ -> delta_hi_/#BDDs, delta_hi_ -> delta_hi_/#BDDs
             void normalize_delta(thrust::device_vector<REAL>& delta_lo_hi) const;
 
+            thrust::device_vector<REAL> net_solver_costs() const;
+
         protected:
             void min_marginals_from_directional_costs(const int hop_index, const REAL omega_scalar);
 

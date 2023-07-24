@@ -807,7 +807,14 @@ namespace LPMP {
         }
     };
 
-    
+    template<typename REAL>
+    thrust::device_vector<REAL> bdd_cuda_base<REAL>::bdds_solution_vec()
+    {
+        thrust::device_vector<REAL> sol(nr_layers());
+        bdds_solution_cuda(sol.data());
+        return sol;
+    }
+
     template<typename REAL>
     void bdd_cuda_base<REAL>::bdds_solution_cuda(thrust::device_ptr<REAL> sol)
     {
@@ -902,6 +909,47 @@ namespace LPMP {
         // Take costs from terminal for root nodes and arrange lb's per bdd so that corresponding value for each BDD can be found at the BDD index.
         thrust::scatter(cost_from_terminal_.begin(), cost_from_terminal_.begin() + nr_bdds_, this->bdd_index_.begin(), lb_per_bdd);
     }
+
+    template<typename REAL>
+    struct make_dual_feasible_kernel {
+        const int* primal_index;
+        const int* num_bdds_per_var;
+        const REAL* grad_delta;
+        REAL* gradient;
+        __host__ __device__ void operator()(const int layer_index)
+        {
+            const int primal_var = primal_index[layer_index];
+            if (primal_var == INT_MAX)  // terminal node.
+                gradient[layer_index] = 0.0;
+            else
+                gradient[layer_index] -= grad_delta[primal_var] / num_bdds_per_var[primal_var];
+        }
+    };
+
+    template<typename REAL>
+    template<typename ITERATOR>
+    void bdd_cuda_base<REAL>::make_dual_feasible(ITERATOR grad_begin, ITERATOR grad_end) const
+    {
+        assert(std::distance(grad_begin, grad_end) == this->nr_layers());
+        thrust::device_vector<REAL> delta_grad(this->nr_variables());
+        auto first_val = thrust::make_permutation_iterator(grad_begin, this->primal_variable_sorting_order_.begin());
+        auto first_out_val = delta_grad.begin();
+
+        thrust::equal_to<int> binary_pred;
+        auto new_end = thrust::reduce_by_key(this->primal_variable_index_sorted_.begin(), this->primal_variable_index_sorted_.end() - this->nr_bdds_, first_val, 
+                            thrust::make_discard_iterator(), first_out_val, binary_pred, thrust::plus<REAL>());
+
+        make_dual_feasible_kernel<REAL> maintain_feasibility_grad_func({
+            thrust::raw_pointer_cast(this->primal_variable_index_.data()),
+            thrust::raw_pointer_cast(this->num_bdds_per_var_.data()),
+            thrust::raw_pointer_cast(delta_grad.data()),
+            thrust::raw_pointer_cast(&(*grad_begin))});
+
+        thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + this->nr_layers(), maintain_feasibility_grad_func);
+    }
+
+    template void bdd_cuda_base<float>::make_dual_feasible(thrust::device_vector<float>::iterator, thrust::device_vector<float>::iterator) const;
+    template void bdd_cuda_base<double>::make_dual_feasible(thrust::device_vector<double>::iterator, thrust::device_vector<double>::iterator) const;
 
     template<typename REAL>
     void bdd_cuda_base<REAL>::get_solver_costs(thrust::device_ptr<REAL> lo_cost_out_ptr, 
