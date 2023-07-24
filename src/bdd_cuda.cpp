@@ -90,9 +90,6 @@ namespace LPMP {
 #endif
     }
 
-    // template std::vector<float> bdd_cuda<float>::net_solver_costs();
-    // template std::vector<double> bdd_cuda<double>::net_solver_costs();
-
 #ifdef WITH_CUDA
     template thrust::device_vector<float> bdd_cuda<float>::net_solver_costs();
     template thrust::device_vector<double> bdd_cuda<double>::net_solver_costs();
@@ -107,9 +104,6 @@ namespace LPMP {
 #endif
     }
 
-    // template std::vector<float> bdd_cuda<float>::bdds_solution_vec();
-    // template std::vector<double> bdd_cuda<double>::bdds_solution_vec();
-
 #ifdef WITH_CUDA
     template thrust::device_vector<float> bdd_cuda<float>::bdds_solution_vec();
     template thrust::device_vector<double> bdd_cuda<double>::bdds_solution_vec();
@@ -123,11 +117,11 @@ namespace LPMP {
             pimpl->pmma.make_dual_feasible(grad_begin, grad_end);
         #endif
     }
-    template void bdd_cuda<float>::make_dual_feasible(float*, float*);
-    template void bdd_cuda<float>::make_dual_feasible(std::vector<float>::iterator, std::vector<float>::iterator);
-    
-    template void bdd_cuda<double>::make_dual_feasible(double*, double*);
-    template void bdd_cuda<double>::make_dual_feasible(std::vector<double>::iterator, std::vector<double>::iterator);
+
+#ifdef WITH_CUDA
+    template void bdd_cuda<float>::make_dual_feasible(thrust::device_vector<float>::iterator, thrust::device_vector<float>::iterator);   
+    template void bdd_cuda<double>::make_dual_feasible(thrust::device_vector<double>::iterator, thrust::device_vector<double>::iterator);
+#endif
 
     template<typename REAL>
     void bdd_cuda<REAL>::backward_run()
