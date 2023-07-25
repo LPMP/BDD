@@ -24,6 +24,7 @@ namespace LPMP {
             void backward_run(); 
 
             std::vector<char> incremental_mm_agreement_rounding(const double init_delta, const double delta_grwoth_rate, const int num_itr_lb, const int num_rounds = 500);
+
         private:
 
             class impl;

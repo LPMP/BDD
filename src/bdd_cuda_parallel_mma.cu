@@ -424,6 +424,58 @@ namespace LPMP {
     }
 
     template<typename REAL>
+    struct compute_net_costs_func {
+        const int* primal_index;
+        const REAL* lo_cost;
+        const REAL* hi_cost;
+        const REAL* deffered_mm_diff;
+        REAL* net_cost;
+        __host__ __device__ void operator()(const int layer_index)
+        {
+            const int primal_var = primal_index[layer_index];
+            if (primal_var == INT_MAX)
+                return; // terminal node.
+            
+            net_cost[layer_index] = hi_cost[layer_index] - lo_cost[layer_index] + deffered_mm_diff[layer_index];
+        }
+    };
+
+    template<typename REAL>
+    thrust::device_vector<REAL> bdd_cuda_parallel_mma<REAL>::net_solver_costs() const
+    {
+        thrust::device_vector<REAL> net_cost(this->nr_layers());
+
+        compute_net_costs_func<REAL> net_costs_func({
+            thrust::raw_pointer_cast(this->primal_variable_index_.data()),
+            thrust::raw_pointer_cast(this->lo_cost_.data()),
+            thrust::raw_pointer_cast(this->hi_cost_.data()),
+            thrust::raw_pointer_cast(this->deffered_mm_diff_.data()),
+            thrust::raw_pointer_cast(net_cost.data())});
+
+        thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + this->nr_layers(), net_costs_func);
+        return net_cost;
+    }
+
+    template<typename REAL>
+    struct add_scaled_product_func {
+        const REAL stepsize;
+        __host__ __device__ REAL operator()(const REAL& hi_cost, const REAL& gradient) const {
+            return hi_cost + stepsize * gradient;
+        }
+    };
+
+    template<typename REAL>
+    template<typename ITERATOR>
+    void bdd_cuda_parallel_mma<REAL>::gradient_step(ITERATOR grad_begin, ITERATOR grad_end, double step_size)
+    {
+        assert(std::distance(grad_begin, grad_end) == this->hi_cost.size());
+        thrust::transform(this->hi_cost.begin(), this->hi_cost.end(), grad_begin, this->hi_cost_.begin(), 
+            add_scaled_product_func<REAL>({step_size}));
+        this->flush_forward_states();
+        this->flush_backward_states();
+    }
+
+    template<typename REAL>
     void bdd_cuda_parallel_mma<REAL>::flush_mm(thrust::device_ptr<REAL> mm_diff_ptr)
     {   // Makes min marginals INF so that they can be populated again by in-place minimization
         thrust::fill(mm_lo_local_.begin(), mm_lo_local_.end(), CUDART_INF_F_HOST);
