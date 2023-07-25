@@ -25,15 +25,6 @@ namespace LPMP {
 
             std::vector<char> incremental_mm_agreement_rounding(const double init_delta, const double delta_grwoth_rate, const int num_itr_lb, const int num_rounds = 500);
 
-            template<typename VECTOR>
-            VECTOR net_solver_costs() const;
-
-            template<typename VECTOR>
-            VECTOR bdds_solution_vec();
-
-            template<typename ITERATOR>
-            void make_dual_feasible(ITERATOR grad_begin, ITERATOR grad_end) const;
-
         private:
 
             class impl;

@@ -72,6 +72,7 @@ namespace LPMP {
 
             template<typename REAL_arg>
             void update_costs(const thrust::device_vector<REAL_arg>& cost_delta_0, const thrust::device_vector<REAL_arg>& cost_delta_1);
+            
             template<typename REAL_arg>
             void update_costs(const thrust::device_ptr<const REAL_arg> cost_delta_0, const size_t delta_0_size,
                             const thrust::device_ptr<const REAL_arg> cost_delta_1, const size_t delta_1_size);

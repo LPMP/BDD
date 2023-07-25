@@ -24,6 +24,9 @@ namespace LPMP {
 
             thrust::device_vector<REAL> net_solver_costs() const;
 
+            template<typename ITERATOR>
+            void gradient_step(ITERATOR grad_begin, ITERATOR grad_end, double step_size);
+
         protected:
             void min_marginals_from_directional_costs(const int hop_index, const REAL omega_scalar);
 

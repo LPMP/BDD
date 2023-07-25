@@ -9,6 +9,7 @@
 #include "bdd_parallel_mma.h"
 #include "bdd_parallel_mma_smooth.h"
 #include "bdd_multi_parallel_mma.h"
+#include "lbfgs.h"
 #include "incremental_mm_agreement_rounding.hxx"
 #include <variant> 
 #include <optional>
@@ -49,7 +50,7 @@ namespace LPMP {
         double time_limit = 3600;
         //////////////////////////
 
-        enum class bdd_solver_impl { sequential_mma, mma_cuda, parallel_mma, hybrid_parallel_mma } bdd_solver_impl_;
+        enum class bdd_solver_impl { sequential_mma, mma_cuda, parallel_mma, hybrid_parallel_mma, lbfgs } bdd_solver_impl_;
         enum class bdd_solver_precision { single_prec, double_prec } bdd_solver_precision_ = bdd_solver_precision::single_prec;
         bool solution_statistics = false;
 
@@ -61,6 +62,12 @@ namespace LPMP {
         bool cuda_split_long_bdds = false;
         bool cuda_split_long_bdds_implication_bdd = false;
         /////////////////////////
+
+        // lbfgs solver options //
+        double step_size = 1e-6;
+        const double required_relative_lb_increase = 1e-6;
+        const double step_size_decrease_factor = 0.8;
+        const double step_size_increase_factor = 1.1;
 
         // incremental perturbation rounding //
         bool incremental_primal_rounding = false;

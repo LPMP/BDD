@@ -457,6 +457,25 @@ namespace LPMP {
     }
 
     template<typename REAL>
+    struct add_scaled_product_func {
+        const REAL stepsize;
+        __host__ __device__ REAL operator()(const REAL& hi_cost, const REAL& gradient) const {
+            return hi_cost + stepsize * gradient;
+        }
+    };
+
+    template<typename REAL>
+    template<typename ITERATOR>
+    void bdd_cuda_parallel_mma<REAL>::gradient_step(ITERATOR grad_begin, ITERATOR grad_end, double step_size)
+    {
+        assert(std::distance(grad_begin, grad_end) == this->hi_cost.size());
+        thrust::transform(this->hi_cost.begin(), this->hi_cost.end(), grad_begin, this->hi_cost_.begin(), 
+            add_scaled_product_func<REAL>({step_size}));
+        this->flush_forward_states();
+        this->flush_backward_states();
+    }
+
+    template<typename REAL>
     void bdd_cuda_parallel_mma<REAL>::flush_mm(thrust::device_ptr<REAL> mm_diff_ptr)
     {   // Makes min marginals INF so that they can be populated again by in-place minimization
         thrust::fill(mm_lo_local_.begin(), mm_lo_local_.end(), CUDART_INF_F_HOST);

@@ -4,34 +4,37 @@
 #include <thrust/for_each.h>
 #include <thrust/inner_product.h>
 #include <thrust/host_vector.h>
+#ifdef WITH_CUDA
+#include "bdd_cuda_parallel_mma.h"
 #include <thrust/device_vector.h>
+#endif
 
 namespace LPMP {
 
-    template<typename VECTOR, typename REAL>
-    lbfgs<VECTOR, REAL>::lbfgs(const size_t _num_variables, const int _history_size, 
-        const double _init_lb_increase, const double _init_step_size, const double _req_rel_lb_increase, 
+    template<class SOLVER, typename VECTOR, typename REAL>
+    lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection& bdd_col, const int _history_size, 
+        const double _init_step_size, const double _req_rel_lb_increase, 
         const double _step_size_decrease_factor, const double _step_size_increase_factor) : 
-        num_variables(_num_variables), m(_history_size), 
-        init_lb_increase(_init_lb_increase), step_size(_init_step_size), required_relative_lb_increase(_req_rel_lb_increase),
+        SOLVER(bdd_col),
+        m(_history_size), 
+        step_size(_init_step_size), required_relative_lb_increase(_req_rel_lb_increase),
         step_size_decrease_factor(_step_size_decrease_factor), step_size_increase_factor(_step_size_increase_factor)
     {
-        prev_x = VECTOR(num_variables);
-        prev_grad_f = VECTOR(num_variables);
+        prev_x = VECTOR(this->nr_layers());
+        prev_grad_f = VECTOR(this->nr_layers());
         rho_inv_history = std::vector<REAL>(m);
         s_history = std::vector<VECTOR>(m);
         y_history = std::vector<VECTOR>(m);
         std::cout<<"[lbfgs] Initialized LBFGS with history size: "<<m<<"\n";
     }
 
-    template<typename VECTOR, typename REAL>
-    template<typename SOLVER>
-    void lbfgs<VECTOR, REAL>::store_iterate(const SOLVER& s)
+    template<class SOLVER, typename VECTOR, typename REAL>
+    void lbfgs<SOLVER, VECTOR, REAL>::store_iterate()
     {
         // TODO: Provide following two functions in all solvers.
         // should return thrust::device_vector fror GPU and thrust::host_vector/std::vector for CPU solvers.
-        VECTOR cur_x = s.net_solver_costs();
-        VECTOR cur_grad_f = s.bdds_solution_vec();
+        VECTOR cur_x = this->net_solver_costs();
+        VECTOR cur_grad_f = this->bdds_solution_vec();
         
         assert(cur_x.size() == prev_x.size());
         assert(cur_grad_f.size() == prev_x.size());
@@ -73,41 +76,49 @@ namespace LPMP {
         }
     }
 
-    template<typename VECTOR, typename REAL>
-    template<typename SOLVER>
-    void lbfgs<VECTOR, REAL>::iteration(SOLVER& s)
+    template<class SOLVER, typename VECTOR, typename REAL>
+    void lbfgs<SOLVER, VECTOR, REAL>::iteration()
     {
-        // 1. Update LBFGS states:
-        this->store_iterate(s);
+        // Check if enough history accumulated
+        if (this->update_possible())
+        {
+            // Compute LBFGS update direction. This can be infeasible.
+            VECTOR grad_lbfgs = this->compute_update_direction();
 
-        // 2. Check if enough history accumulated
-       if (!this->update_possible())
-            return;
+            // Make the update direction dual feasible by making it sum to zero for all primal variables.
+            this->make_dual_feasible(grad_lbfgs.begin(), grad_lbfgs.end()); //TODO: Implement for all solvers
 
-        // 3. Compute LBFGS update direction. This can be infeasible.
-        VECTOR grad_lbfgs = this->compute_update_direction();
+            // Apply the update by choosing appropriate step size:
+            this->search_step_size_and_apply(grad_lbfgs);
+        }
 
-        // 4. Make the update direction dual feasible by making it sum to zero for all primal variables.
-        s.make_dual_feasible(grad_lbfgs.begin(), grad_lbfgs.end()); //TODO: Implement for all solvers
-        
-        // 5. Apply the update by choosing appropriate step size:
-        this->apply_update(s, grad_lbfgs);
+        if (!init_lb_valid)
+        {
+            const double lb_pre = this->lower_bound();
+            this->iteration();
+            const double lb_post = this->lower_bound();
+            this->init_lb_increase = lb_post - lb_pre;
+        }
+        else
+            this->iteration(); // MMA iteration
+
+        // Update LBFGS states:
+        this->store_iterate();
     }
 
-    template<typename VECTOR, typename REAL>
-    template<typename SOLVER>
-    void lbfgs<VECTOR, REAL>::search_step_size_and_apply(SOLVER& s, const VECTOR& update)
+    template<class SOLVER, typename VECTOR, typename REAL>
+    void lbfgs<SOLVER, VECTOR, REAL>::search_step_size_and_apply(const VECTOR& update)
     {    
-        const REAL lb_pre = s.lower_bound();
+        const REAL lb_pre = this->lower_bound();
         auto calculate_rel_change = [&]() {
-            return (s.lower_bound() - lb_pre) / (1e-9 + this->init_lb_increase);
+            return (this->lower_bound() - lb_pre) / (1e-9 + this->init_lb_increase);
         };
         double prev_step_size = 0.0;
         auto apply_update = [&](const REAL new_step_size) 
         {
             double net_step_size = new_step_size - prev_step_size;
             if (net_step_size != 0.0)
-                s.update_dual_costs_with_step_size(update.begin(), update.end(), net_step_size); // TODO: implement for each solver.
+                this->gradient_step(update.begin(), update.end(), net_step_size); // TODO: implement for each solver.
             prev_step_size = net_step_size;
         };
 
@@ -148,7 +159,6 @@ namespace LPMP {
         this->num_unsuccessful_lbfgs_updates_ = 0;
     }
 
-
     template<typename REAL>
     struct update_q
     {
@@ -174,11 +184,11 @@ namespace LPMP {
         }
     };
 
-    template<typename VECTOR, typename REAL>
-    VECTOR lbfgs<VECTOR, REAL>::compute_update_direction()
+    template<class SOLVER, typename VECTOR, typename REAL>
+    VECTOR lbfgs<SOLVER, VECTOR, REAL>::compute_update_direction()
     {
         assert(this->update_possible());
-        VECTOR direction(num_variables);
+        VECTOR direction(this->nr_layers());
 
         const int n = s_history[0].size();
 
@@ -223,32 +233,41 @@ namespace LPMP {
         return direction;
     }
 
-    template<typename VECTOR, typename REAL>
-    void lbfgs<VECTOR, REAL>::flush_states()
+    template<class SOLVER, typename VECTOR, typename REAL>
+    void lbfgs<SOLVER, VECTOR, REAL>::flush_lbfgs_states()
     {
+        num_unsuccessful_lbfgs_updates_ = 0;
         num_stored = 0;
         next_insertion_index = 0;
         prev_states_stored = false;
         initial_rho_inv = 0.0;
         initial_rho_inv_valid = false;
+        init_lb_valid = false;
     }
 
-    template<typename VECTOR, typename REAL>
-    void lbfgs<VECTOR, REAL>::next_itr_without_storage()
+    template<class SOLVER, typename VECTOR, typename REAL>
+    void lbfgs<SOLVER, VECTOR, REAL>::next_itr_without_storage()
     {
         num_stored = max(num_stored - 1, 0);
     }
 
-    template<typename VECTOR, typename REAL>
-    bool lbfgs<VECTOR, REAL>::update_possible()
+    template<class SOLVER, typename VECTOR, typename REAL>
+    bool lbfgs<SOLVER, VECTOR, REAL>::update_possible()
     {
-        if (num_stored < m)
+        if (num_stored < m || num_unsuccessful_lbfgs_updates_ > 5 || !init_lb_valid)
             return false;
         return true;
     }
 
-    template class lbfgs<thrust::host_vector<float>, float>;
-    template class lbfgs<thrust::device_vector<float>, float>;
-    template class lbfgs<thrust::host_vector<double>, double>;
-    template class lbfgs<thrust::device_vector<double>, double>;
+    template<class SOLVER, typename VECTOR, typename REAL>
+    void lbfgs<SOLVER, VECTOR, REAL>::update_costs(const VECTOR& cost_delta_0, const VECTOR& cost_delta_1)
+    {
+        this->flush_lbfgs_states();
+        this->update_costs(cost_delta_0, cost_delta_1);
+    }
+
+#ifdef WITH_CUDA
+    template class lbfgs<bdd_cuda_parallel_mma<float>, thrust::device_vector<float>, float>;
+    template class lbfgs<bdd_cuda_parallel_mma<double>, thrust::device_vector<double>, double>;
+#endif
 }
