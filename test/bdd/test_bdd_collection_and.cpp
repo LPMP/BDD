@@ -39,9 +39,5 @@ int main(int argc, char** argv)
 
     node_ref covering_ineq_intersect_transformed = collection.export_bdd(mgr, covering_ineq_coll_intersect); 
 
-    //std::fstream fs;
-    //fs.open ("kwas.dot", std::fstream::in | std::fstream::out | std::ofstream::trunc);
-    //collection.export_graphviz(covering_ineq_coll_intersect, fs);
-
     test(covering_ineq_intersect == covering_ineq_intersect_transformed); 
 }

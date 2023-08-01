@@ -6,6 +6,7 @@
 #include <tsl/robin_set.h>
 #include <cmath>
 #include <atomic>
+#include "bdd_logging.h"
 #include "time_measure_util.h"
 #include "two_dimensional_variable_array.hxx"
 #ifdef _OPENMP
@@ -19,19 +20,69 @@ namespace LPMP {
 
     inline size_t getMaximumOccupancy()
     {
+#ifdef WITH_CUDA
         cudaDeviceProp deviceProp;
         cudaGetDeviceProperties(&deviceProp, 0);
-        return deviceProp.multiProcessorCount * deviceProp.maxThreadsPerMultiProcessor;    
+        return deviceProp.multiProcessorCount * deviceProp.maxThreadsPerMultiProcessor;
+#else
+        return 0;
+#endif
     }
 
-    two_dim_variable_array<size_t> bdd_preprocessor::add_ilp(const ILP_input& input, const bool normalize, const bool split_long_bdds, const bool add_split_implication_bdd)
+    size_t compute_split_length(const BDD::bdd_collection& bdd_collection)
+    {
+        std::vector<size_t> layer_widths;
+        for (size_t bdd_nr = 0; bdd_nr < bdd_collection.nr_bdds(); ++bdd_nr)
+        {
+            const auto cur_layer_widths = bdd_collection.layer_widths(bdd_nr);
+            if (layer_widths.size() < cur_layer_widths.size())
+            {
+                layer_widths.reserve(2 * cur_layer_widths.size());
+                layer_widths.resize(cur_layer_widths.size(), 0);
+            }
+            for (size_t i = 0; i < cur_layer_widths.size(); ++i)
+                layer_widths[i] += cur_layer_widths[i];
+
+        }
+
+        bdd_log << "[bdd preprocessor] Longest BDD has " << layer_widths.size() << " layers\n";
+
+        // to account for smaller intermediate layer widths take maximum of all subsequent layers into account
+        for (ptrdiff_t i = layer_widths.size() - 2; i >= 0; --i)
+            layer_widths[i] = std::max(layer_widths[i + 1], layer_widths[i]);
+
+#ifdef WITH_CUDA
+        const size_t maximum_occupancy = getMaximumOccupancy();
+#else
+        const size_t maximum_occupancy = 1024;
+#endif
+
+        size_t max_length_bdd = [&]() -> size_t
+        {
+            if (*std::max_element(layer_widths.begin(), layer_widths.end()) < 2048 || bdd_collection.nr_bdds() < 128)
+            {
+                bdd_log << "[bdd preprocessor] Too {few|small} BDDs, do not split\n";
+                return std::numeric_limits<size_t>::max();
+            }
+            for (size_t i = 200; i < std::max(std::ptrdiff_t(layer_widths.size()) - 50, std::ptrdiff_t(0)); ++i)
+                if (layer_widths[i] < maximum_occupancy)
+                    return i;
+            return std::numeric_limits<size_t>::max();
+        }();
+
+        bdd_log << "[bdd preprocessor] Split BDDs longer than " << max_length_bdd << " layers\n";
+
+        return max_length_bdd;
+    }
+
+    two_dim_variable_array<size_t> bdd_preprocessor::add_ilp(const ILP_input& input, const bool normalize, const bool split_long_bdds, const bool add_split_implication_bdd, const size_t split_length)
     {
         MEASURE_FUNCTION_EXECUTION_TIME;
         assert(bdd_collection.nr_bdds() == 0);
         // first transform linear inequalities into BDDs
-        std::cout << "[bdd preprocessor] convert " << input.constraints().size() << " linear inequalities.\n";
+        bdd_log << "[bdd preprocessor] convert " << input.constraints().size() << " linear inequalities.\n";
         if(normalize)
-            std::cout << "[bdd preprocessor] normalize constraints\n";
+            bdd_log << "[bdd preprocessor] normalize constraints\n";
 
         std::vector<size_t> ineq_nrs;
         two_dim_variable_array<size_t> bdd_nrs;
@@ -41,7 +92,7 @@ namespace LPMP {
 #else
         const size_t nr_threads = 1;
 #endif
-        std::cout << "[bdd preprocessor] #threads = " << nr_threads << "\n";
+        bdd_log << "[bdd preprocessor] #threads = " << nr_threads << "\n";
 
         // for variable copies when using coefficient decomposition transformation to BDDs
         std::atomic<size_t> extra_var_counter = input.nr_variables();
@@ -139,8 +190,8 @@ namespace LPMP {
                         if(normalize)
                             throw std::runtime_error("coefficient decomposition BDDs may not be sorted w.r.t. variable indices"); 
 
-                        std::cout << "[bdd preprocessor] convert inequality " << constraint.identifier << " through coefficient decomposition. max coeff: "<< max_coeff << ", nr_vars: " << nr_vars << "\n";
-                        input.write_lp(std::cout, constraint);
+                        bdd_log << "[bdd preprocessor] convert inequality " << constraint.identifier << " through coefficient decomposition. max coeff: "<< max_coeff << ", nr_vars: " << nr_vars << "\n";
+                        input.write_lp(bdd_log, constraint);
                         auto [bdd, var_split] = converter.coefficient_decomposition_convert_to_bdd(constraint.coefficients, constraint.ineq, constraint.right_hand_side);
 
                         if(bdd.is_topsink())
@@ -275,47 +326,18 @@ namespace LPMP {
 
         // split long bdds
         // TODO: ineq_to_bdd_nrs will not be valid anymore! This cannot work with the learned solver.
-        if(split_long_bdds)
+        if(split_long_bdds || split_length < std::numeric_limits<size_t>::max())
         {
-            // compute threshold when less than 1024 nodes are present per layer
-            std::vector<size_t> layer_widths;
-            for (size_t bdd_nr = 0; bdd_nr < bdd_collection.nr_bdds(); ++bdd_nr)
+            const size_t max_length_bdd = [&]()
             {
-                const auto cur_layer_widths = bdd_collection.layer_widths(bdd_nr);
-                if (layer_widths.size() < cur_layer_widths.size())
+                if (split_length < std::numeric_limits<size_t>::max())
                 {
-                    layer_widths.reserve(2*cur_layer_widths.size());
-                    layer_widths.resize(cur_layer_widths.size(), 0);
+                    bdd_log << "[bdd preprocessor] force split BDDs longer than " << split_length << "\n";
+                    return split_length;
                 }
-                for (size_t i = 0; i < cur_layer_widths.size(); ++i)
-                    layer_widths[i] += cur_layer_widths[i];
-
-                // to account for smaller intermediate layer widths take maximum of all subsequent layers into account
-                for(ptrdiff_t i=layer_widths.size()-2; i>=0; --i)
-                    layer_widths[i] = std::max(layer_widths[i+1], layer_widths[i]);
-            }
-
-#ifdef WITH_CUDA
-            const size_t maximum_occupancy = getMaximumOccupancy();
-#else
-            const size_t maximum_occupancy = 1024;
-#endif
-
-            const size_t max_length_bdd = [&]() -> size_t
-            {
-                if(*std::max_element(layer_widths.begin(), layer_widths.end()) < 2048 || bdd_collection.nr_bdds() < 128)
-                {
-                    std::cout << "[bdd preprocessor] Too {few|small} BDDs, do not split\n";
-                    return std::numeric_limits<size_t>::max();
-                }
-                for (size_t i = 200; i < std::max(std::ptrdiff_t(layer_widths.size()) - 50, std::ptrdiff_t(0)); ++i)
-                    if (layer_widths[i] < maximum_occupancy)
-                        return i;
-                return std::numeric_limits<size_t>::max();
+                else
+                    return compute_split_length(bdd_collection);
             }();
-            std::cout << "[bdd preprocessor] Longest BDD has " << layer_widths.size() << " layers\n";
-
-            std::cout << "[bdd preprocessor] Split BDDs longer than " << max_length_bdd << " layers\n";
 
             if (max_length_bdd < std::numeric_limits<size_t>::max())
             {
@@ -342,7 +364,7 @@ namespace LPMP {
                 for (size_t bdd_nr = 0; bdd_nr < bdd_collection.nr_bdds(); ++bdd_nr)
                     assert(bdd_collection.is_qbdd(bdd_nr));
 
-                std::cout << "[bdd preprocessor] Split " << bdds_to_remove.size() << " BDDs\n";
+                bdd_log << "[bdd preprocessor] Split " << bdds_to_remove.size() << " BDDs\n";
                 bdd_collection.remove(bdds_to_remove.begin(), bdds_to_remove.end());
             }
         }
@@ -350,7 +372,7 @@ namespace LPMP {
         for (size_t bdd_nr = 0; bdd_nr < bdd_collection.nr_bdds(); ++bdd_nr)
             assert(bdd_collection.is_qbdd(bdd_nr));
 
-        std::cout << "[bdd preprocessor] final #BDDs = " << bdd_collection.nr_bdds() << "\n";
+        bdd_log << "[bdd preprocessor] final #BDDs = " << bdd_collection.nr_bdds() << "\n";
 
         return ineq_to_bdd_nrs;
     }

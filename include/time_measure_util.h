@@ -6,7 +6,7 @@
 #include <iostream>
 #include <tuple>
 #include <utility>
-
+#include "bdd_logging.h"
 
 class MeasureExecutionTime
 {
@@ -17,7 +17,7 @@ class MeasureExecutionTime
         MeasureExecutionTime(const std::string& caller):caller(caller),begin(std::chrono::steady_clock::now()){}
         ~MeasureExecutionTime(){
             const auto duration=std::chrono::steady_clock::now()-begin;
-            std::cout << "execution time for " << caller << " is "<<std::chrono::duration_cast<std::chrono::milliseconds>(duration).count()<<" ms\n";
+            LPMP::bdd_log << "execution time for " << caller << " is "<<std::chrono::duration_cast<std::chrono::milliseconds>(duration).count()<<" ms\n";
         }
 };
 
@@ -37,9 +37,9 @@ class time_elapse_aggregator
 
         ~time_elapse_aggregator()
         {
-            std::cout << "cumulative execution time for ";
-            std::cout << function_name;
-            std::cout << " is "<< std::chrono::duration_cast<std::chrono::milliseconds>(duration).count() << " ms\n"; 
+            LPMP::bdd_log << "cumulative execution time for ";
+            LPMP::bdd_log << function_name;
+            LPMP::bdd_log << " is " << std::chrono::duration_cast<std::chrono::milliseconds>(duration).count() << " ms\n"; 
         }
 };
 

@@ -15,7 +15,6 @@ namespace LPMP {
             bdd_cuda(bdd_cuda&&);
             bdd_cuda& operator=(bdd_cuda&&);
             ~bdd_cuda();
-            //void set_cost(const double c, const size_t var);
             template<typename ITERATOR>
                 void update_costs(ITERATOR cost_lo_begin, ITERATOR cost_lo_end, ITERATOR cost_hi_begin, ITERATOR cost_hi_end);
             double lower_bound();

@@ -8,8 +8,6 @@ An integer linear program solver using a Lagrange decomposition into binary deci
 
 `git clone https://github.com/LPMP/BDD`
 
-`git submodule update --remote --recursive --init`
-
 Then continue with creating a build folder and use cmake:
 
 `mkdir build && cd build && cmake ..`
@@ -58,7 +56,6 @@ All solvers are exposed to Python. To install Python solver do:
 ```bash
 git clone git@github.com:LPMP/BDD.git
 cd BDD
-git submodule update --init --recursive
 python setup.py install
 ```
 For information about Python interface see [test_bdd_solver_py.py](test/test_bdd_solver_py.py).

@@ -97,14 +97,42 @@ void test_cuda_mma(const test_instance& instance)
     test_solver(instance, opts);
 }
 
+void test_lbfgs_parallel_mma(const test_instance& instance)
+{
+    std::cout << "solving " << instance.filename << " with lbfgs parallel mma\n";
+    std::vector<std::string> opts = {
+            "-s", "lbfgs_parallel_mma",
+            "--incremental_primal",
+            "--incremental_initial_perturbation", "1.0",
+            "--incremental_perturbation_growth_rate", "1.05",
+            "--precision", "double"
+            };
+    test_solver(instance, opts);
+}
+
+void test_lbfgs_cuda_mma(const test_instance& instance)
+{
+    std::cout << "solving " << instance.filename << " with lbfgs cuda mma\n";
+    std::vector<std::string> opts = {
+            "-s", "lbfgs_cuda_mma",
+            "--incremental_primal",
+            "--incremental_initial_perturbation", "1.0",
+            "--incremental_perturbation_growth_rate", "1.05",
+            "--precision", "double"
+            };
+    test_solver(instance, opts);
+}
+
 int main(int argc, char** argv)
 {
     for(const auto& instance : test_instances) 
     {
         test_mma(instance);
         test_parallel_mma(instance);
+        test_lbfgs_parallel_mma(instance)
 #ifdef WITH_CUDA
         test_cuda_mma(instance);
+        test_lbfgs_cuda_mma(instance);
 #endif
     }
 }

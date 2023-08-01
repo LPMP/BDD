@@ -12,12 +12,13 @@ namespace LPMP {
     class bdd_preprocessor {
         public:
             bdd_preprocessor() {};
-            bdd_preprocessor(const ILP_input& ilp, const bool normalize = false, const bool split_long_bdds = false, const bool add_split_implication_bdd = false)
+            bdd_preprocessor(const ILP_input& ilp, const bool normalize = false, const bool split_long_bdds = false, const bool add_split_implication_bdd = false, const size_t split_length = std::numeric_limits<size_t>::max())
             {
-                add_ilp(ilp, normalize, split_long_bdds, add_split_implication_bdd);
+                add_ilp(ilp, normalize, split_long_bdds, add_split_implication_bdd, split_length);
             }
 
-            two_dim_variable_array<size_t> add_ilp(const ILP_input& ilp, const bool normalize = false, const bool split_long_bdds = false, const bool add_split_implication_bdd = false);
+            two_dim_variable_array<size_t> add_ilp(const ILP_input& ilp, const bool normalize = false, const bool split_long_bdds = false, const bool add_split_implication_bdd = false, const size_t split_length = std::numeric_limits<size_t>::max());
+
             template<typename VARIABLE_ITERATOR>
                 void add_bdd(BDD::node_ref bdd, VARIABLE_ITERATOR var_begin, VARIABLE_ITERATOR var_end);
 

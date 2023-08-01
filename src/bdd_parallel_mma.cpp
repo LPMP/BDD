@@ -72,7 +72,7 @@ namespace LPMP {
     template<typename REAL>
     void bdd_parallel_mma<REAL>::iteration()
     {
-        pimpl->base.parallel_mma();
+        pimpl->base.iteration();
     }
 
     template<typename REAL>
