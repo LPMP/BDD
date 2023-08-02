@@ -6,7 +6,7 @@
 #include "bdd_logging.h"
 #include <deque>
 #ifdef WITH_CUDA
-#include "cuda_utils.h"
+// #include "cuda_utils.h"
 #include <thrust/for_each.h>
 #include <thrust/inner_product.h>
 #include <thrust/host_vector.h>
@@ -294,7 +294,7 @@ class lbfgs : public SOLVER
             alpha_history.push_back(alpha);
 
 #ifdef WITH_CUDA
-            update_q<REAL> update_q_func({alpha, thrust::raw_pointer_cast(y_history[i].data()), thrust::raw_pointer_cast(direction.data())});
+            update_q<REAL> update_q_func({alpha, thrust::raw_pointer_cast(history[i].y.data()), thrust::raw_pointer_cast(direction.data())});
             thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + n, update_q_func);
 #else
             update_q<REAL> update_q_func({alpha, history[i].y.data(), direction.data()});
@@ -304,7 +304,7 @@ class lbfgs : public SOLVER
         }
 
 #ifdef WITH_CUDA
-        REAL last_y_norm = thrust::inner_product(y_history.back().begin(), y_history.back().end(), y_history.back().begin(), (REAL)0.0);
+        REAL last_y_norm = thrust::inner_product(history.back().y.begin(), history.back().y.end(), history.back().y.begin(), (REAL)0.0);
 #else
         REAL last_y_norm = std::inner_product(history.back().y.begin(), history.back().y.end(), history.back().y.begin(), (REAL)0.0);
 #endif
