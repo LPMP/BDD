@@ -187,6 +187,13 @@ namespace LPMP {
         app.add_flag("--cuda_split_long_bdds_with_implication_bdd", cuda_split_long_bdds_implication_bdd, "split long BDDs into short ones and additionally construct implication BDD");
         app.add_option("--cuda_split_long_bdds_length", cuda_split_long_bdds_length, "split long BDDs into shorter ones of the specified length");
 
+        // LBFGS
+        app.add_option("--lbfgs_history_size", lbfgs_history_size, "history size for LBFGS, default = " + std::to_string(lbfgs_history_size));
+        app.add_option("--lbfgs_step_size", lbfgs_step_size, "initial step size for LBFGS, default = " + std::to_string(lbfgs_step_size));
+        app.add_option("--lbfgs_required_relative_lb_increase", lbfgs_required_relative_lb_increase, "required relative increase in dual lower bound for LBFGS to apply an update, default = " + std::to_string(lbfgs_required_relative_lb_increase));
+        app.add_option("--lbfgs_step_size_decrease_factor", lbfgs_step_size_decrease_factor, "decrease factor in line search for LBFGS, default = " + std::to_string(lbfgs_step_size_decrease_factor));
+        app.add_option("--lbfgs_step_size_increase_factor", lbfgs_step_size_increase_factor, "increase factor in line search for LBFGS, default = " + std::to_string(lbfgs_step_size_increase_factor));
+
         auto primal_group = app.add_option_group("primal rounding", "method for obtaining a primal solution from the dual optimization");
         auto incremental_primal_arg = primal_group->add_flag("--incremental_primal", incremental_primal_rounding, "incremental primal rounding flag");
         auto wedelin_primal_arg = primal_group->add_flag("--wedelin_primal", wedelin_primal_rounding, "Wedelin primal rounding flag");
@@ -466,13 +473,15 @@ namespace LPMP {
             if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::single_prec)
                 solver = std::move(bdd_lbfgs_cuda_mma<float>(
                     bdd_pre.get_bdd_collection(), costs.begin(), costs.end(),
-                    options.step_size, options.required_relative_lb_increase, 
-                    options.step_size_decrease_factor, options.step_size_increase_factor));
+                    options.lbfgs_history_size,
+                    options.lbfgs_step_size, options.lbfgs_required_relative_lb_increase, 
+                    options.lbfgs_step_size_decrease_factor, options.lbfgs_step_size_increase_factor));
             else if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::double_prec)
                 solver = std::move(bdd_lbfgs_cuda_mma<double>(
                     bdd_pre.get_bdd_collection(), costs.begin(), costs.end(),
-                    options.step_size, options.required_relative_lb_increase, 
-                    options.step_size_decrease_factor, options.step_size_increase_factor));
+                    options.lbfgs_history_size,
+                    options.lbfgs_step_size, options.lbfgs_required_relative_lb_increase, 
+                    options.lbfgs_step_size_decrease_factor, options.lbfgs_step_size_increase_factor));
             else
                 throw std::runtime_error("only float and double precision allowed");
             bdd_log << "[bdd solver] constructed LBFGS CUDA based mma solver\n"; 
@@ -484,13 +493,15 @@ namespace LPMP {
             if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::single_prec)
                 solver = std::move(bdd_lbfgs_parallel_mma<float>(
                     bdd_pre.get_bdd_collection(), costs.begin(), costs.end(),
-                    options.step_size, options.required_relative_lb_increase, 
-                    options.step_size_decrease_factor, options.step_size_increase_factor));
+                    options.lbfgs_history_size,
+                    options.lbfgs_step_size, options.lbfgs_required_relative_lb_increase, 
+                    options.lbfgs_step_size_decrease_factor, options.lbfgs_step_size_increase_factor));
             else if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::double_prec)
                 solver = std::move(bdd_lbfgs_parallel_mma<double>(
                     bdd_pre.get_bdd_collection(), costs.begin(), costs.end(),
-                    options.step_size, options.required_relative_lb_increase, 
-                    options.step_size_decrease_factor, options.step_size_increase_factor));
+                    options.lbfgs_history_size,
+                    options.lbfgs_step_size, options.lbfgs_required_relative_lb_increase, 
+                    options.lbfgs_step_size_decrease_factor, options.lbfgs_step_size_increase_factor));
             else
                 throw std::runtime_error("only float and double precision allowed");
             bdd_log << "[bdd solver] constructed LBFGS parallel mma solver\n"; 

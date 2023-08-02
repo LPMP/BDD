@@ -36,45 +36,56 @@ class lbfgs : public SOLVER
         void update_costs(
             ITERATOR cost_delta_0_begin, ITERATOR cost_delta_0_end,
             ITERATOR cost_delta_1_begin, ITERATOR cost_delta_1_end);
-        void update_costs(const thrust::device_vector<REAL>& cost_0, const thrust::device_vector<REAL>& cost_1);
+#ifdef WITH_CUDA
+        void update_costs(const thrust::device_vector<REAL> &cost_0, const thrust::device_vector<REAL> &cost_1);
+#endif
 
-        private:
-            void store_iterate();
-            VECTOR compute_update_direction();
-            void search_step_size_and_apply(const VECTOR &update);
-            void flush_lbfgs_states();
-            bool update_possible();
-            void next_itr_without_storage();
+    private:
+        void store_iterate();
+        VECTOR compute_update_direction();
+        void search_step_size_and_apply(const VECTOR &update);
+        void flush_lbfgs_states();
+        bool update_possible();
+        void next_itr_without_storage();
 
-            struct history {
-                VECTOR s, y; // difference of x, grad_x f(x) resp.
-                REAL rho_inv;
-            };
-            std::deque<history> history;
-            void push_back_history(const VECTOR &s, const VECTOR &y, const REAL rho_inv);
+        struct history
+        {
+            VECTOR s, y; // difference of x, grad_x f(x) resp.
+            REAL rho_inv;
+        };
+        std::deque<history> history;
+        void push_back_history(const VECTOR &s, const VECTOR &y, const REAL rho_inv);
 
-            VECTOR prev_x, prev_grad_f;
-            const int m;
-            double step_size;
-            double init_lb_increase;
-            bool init_lb_valid = false;
-            const double required_relative_lb_increase, step_size_decrease_factor, step_size_increase_factor;
-            int num_unsuccessful_lbfgs_updates_ = 0;
-            double initial_rho_inv = 0.0;
+        VECTOR prev_x, prev_grad_f;
+        const int m;
+        double step_size;
+        double init_lb_increase;
+        bool init_lb_valid = false;
+        const double required_relative_lb_increase, step_size_decrease_factor, step_size_increase_factor;
+        int num_unsuccessful_lbfgs_updates_ = 0;
+        double initial_rho_inv = 0.0;
 
-            bool prev_states_stored = false;
-            bool initial_rho_inv_valid = false;
-    };
+        bool prev_states_stored = false;
+        bool initial_rho_inv_valid = false;
+};
 
-    template <class SOLVER, typename VECTOR, typename REAL>
-    lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int _history_size,
-                                       const double _init_step_size, const double _req_rel_lb_increase,
-                                       const double _step_size_decrease_factor, const double _step_size_increase_factor)
-        : SOLVER(bdd_col),
-          m(_history_size),
-          step_size(_init_step_size), required_relative_lb_increase(_req_rel_lb_increase),
-          step_size_decrease_factor(_step_size_decrease_factor), step_size_increase_factor(_step_size_increase_factor)
-    {
+template <class SOLVER, typename VECTOR, typename REAL>
+lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int _history_size,
+                                   const double _init_step_size, const double _req_rel_lb_increase,
+                                   const double _step_size_decrease_factor, const double _step_size_increase_factor)
+    : SOLVER(bdd_col),
+      m(_history_size),
+      step_size(_init_step_size), required_relative_lb_increase(_req_rel_lb_increase),
+      step_size_decrease_factor(_step_size_decrease_factor), step_size_increase_factor(_step_size_increase_factor)
+{
+        bdd_log << "[lbfgs] Initialized LBFGS with"
+                << "\n\t\t\thistory size: " << m
+                << "\t\t\t initial step size " << step_size
+                << "\n\t\t\trequired relative lb increase " << required_relative_lb_increase
+                << "\n\t\t\tstep size decrease factor " << step_size_decrease_factor
+                << "\n\t\t\tstep size increase factor " << step_size_increase_factor
+                << "\n\t\t\thistory size" << m << "\n";
+
         assert(step_size > 0.0);
         assert(step_size_decrease_factor > 0.0 && step_size_decrease_factor < 1.0);
         assert(step_size_increase_factor > 1.0);
@@ -83,12 +94,6 @@ class lbfgs : public SOLVER
 
         prev_x = VECTOR(this->nr_layers());
         prev_grad_f = VECTOR(this->nr_layers());
-
-        bdd_log << "[lbfgs] Initialized LBFGS with history size: " << m
-                << ", initial step size " << step_size 
-                << ", required relative lb increase " << required_relative_lb_increase
-                << ", step size decrease factor " << step_size_decrease_factor 
-                << " and step size increase factor " << step_size_increase_factor << "\n";
     }
 
     template <class SOLVER, typename VECTOR, typename REAL>
@@ -368,6 +373,7 @@ class lbfgs : public SOLVER
         static_cast<SOLVER*>(this)->update_costs(cost_delta_0_begin, cost_delta_0_end, cost_delta_1_begin, cost_delta_1_end);
     }
 
+#ifdef WITH_CUDA
     template<class SOLVER, typename VECTOR, typename REAL>
     void lbfgs<SOLVER, VECTOR, REAL>::update_costs(const thrust::device_vector<REAL>& cost_0, const thrust::device_vector<REAL>& cost_1)
     {
@@ -375,5 +381,6 @@ class lbfgs : public SOLVER
         static_cast<SOLVER*>(this)->update_costs(cost_0, cost_1);
 
     }
+#endif
 
 }

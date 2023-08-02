@@ -64,10 +64,11 @@ namespace LPMP {
         /////////////////////////
 
         // lbfgs solver options //
-        double step_size = 1e-6;
-        const double required_relative_lb_increase = 1e-6;
-        const double step_size_decrease_factor = 0.8;
-        const double step_size_increase_factor = 1.1;
+        double lbfgs_step_size = 1e-6;
+        size_t lbfgs_history_size = 5;
+        double lbfgs_required_relative_lb_increase = 1e-6;
+        double lbfgs_step_size_decrease_factor = 0.8;
+        double lbfgs_step_size_increase_factor = 1.1;
 
         // incremental perturbation rounding //
         bool incremental_primal_rounding = false;
