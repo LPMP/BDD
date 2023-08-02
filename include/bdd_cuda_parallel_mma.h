@@ -51,4 +51,25 @@ namespace LPMP {
 
             thrust::device_vector<REAL> mm_lo_local_; // Contains mm_lo for last computed hop. Memory allocated is as per max(cum_nr_layers_per_hop_dist_).
     };
+
+    template<typename REAL>
+    struct add_scaled_product_func {
+        const REAL stepsize;
+        __host__ __device__ REAL operator()(const REAL& hi_cost, const REAL& gradient) const {
+            return hi_cost + stepsize * gradient;
+        }
+    };
+
+    template<typename REAL>
+    template<typename ITERATOR>
+    void bdd_cuda_parallel_mma<REAL>::gradient_step(ITERATOR grad_begin, ITERATOR grad_end, double step_size)
+    {
+        assert(std::distance(grad_begin, grad_end) == this->hi_cost_.size());
+        thrust::transform(this->hi_cost_.begin(), this->hi_cost_.end(), grad_begin, this->hi_cost_.begin(), 
+            add_scaled_product_func<REAL>({REAL(step_size)}));
+        this->flush_forward_states();
+        this->flush_backward_states();
+    }
+
+ 
 }
