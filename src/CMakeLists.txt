@@ -68,10 +68,10 @@ if(WITH_CUDA)
     target_link_libraries(bdd_multi_parallel_mma bdd_multi_parallel_mma_base)
 endif()
 
-add_library(bdd_lbfgs_cuda_mma bdd_lbfgs_cuda_mma.cpp)
+add_library(bdd_lbfgs_cuda_mma bdd_lbfgs_cuda_mma.cu)
 target_link_libraries(bdd_lbfgs_cuda_mma LPMP-BDD)
 
-add_library(bdd_lbfgs_parallel_mma bdd_lbfgs_parallel_mma.cpp)
+add_library(bdd_lbfgs_parallel_mma bdd_lbfgs_parallel_mma.cu)
 target_link_libraries(bdd_lbfgs_parallel_mma LPMP-BDD)
 
 add_library(bdd_solver bdd_solver.cpp)

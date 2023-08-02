@@ -36,6 +36,7 @@ class lbfgs : public SOLVER
         void update_costs(
             ITERATOR cost_delta_0_begin, ITERATOR cost_delta_0_end,
             ITERATOR cost_delta_1_begin, ITERATOR cost_delta_1_end);
+        void update_costs(const thrust::device_vector<REAL>& cost_0, const thrust::device_vector<REAL>& cost_1);
 
         private:
             void store_iterate();
@@ -365,6 +366,14 @@ class lbfgs : public SOLVER
     {
         flush_lbfgs_states();
         static_cast<SOLVER*>(this)->update_costs(cost_delta_0_begin, cost_delta_0_end, cost_delta_1_begin, cost_delta_1_end);
+    }
+
+    template<class SOLVER, typename VECTOR, typename REAL>
+    void lbfgs<SOLVER, VECTOR, REAL>::update_costs(const thrust::device_vector<REAL>& cost_0, const thrust::device_vector<REAL>& cost_1)
+    {
+        flush_lbfgs_states();
+        static_cast<SOLVER*>(this)->update_costs(cost_0, cost_1);
+
     }
 
 }

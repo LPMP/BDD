@@ -10,6 +10,7 @@
 
 #include "bdd_cuda_parallel_mma.h"
 #include "bdd_cuda_learned_mma.h"
+#include "lbfgs.h"
 #include "run_solver_util.h"
 
 namespace LPMP {
@@ -356,11 +357,18 @@ struct mm_type_to_sol {
     template std::vector<char> incremental_mm_agreement_rounding_cuda(bdd_cuda_parallel_mma<double>& , double , const double, const int, const bool, const int);
     template std::vector<char> incremental_mm_agreement_rounding_cuda(bdd_cuda_learned_mma<float>& , double , const double, const int, const bool, const int);
     template std::vector<char> incremental_mm_agreement_rounding_cuda(bdd_cuda_learned_mma<double>& , double , const double, const int, const bool, const int);
+    template std::vector<char> incremental_mm_agreement_rounding_cuda(lbfgs<bdd_cuda_parallel_mma<float>, thrust::device_vector<float>, float>& , double , const double, const int, const bool, const int);
+    template std::vector<char> incremental_mm_agreement_rounding_cuda(lbfgs<bdd_cuda_parallel_mma<double>, thrust::device_vector<double>, double>& , double , const double, const int, const bool, const int);
 
 
     template std::vector<char> perturb_primal_costs(bdd_cuda_parallel_mma<float>& , const double, const bool );
     template std::vector<char> perturb_primal_costs(bdd_cuda_parallel_mma<double>& , const double, const bool );
     template std::vector<char> perturb_primal_costs(bdd_cuda_learned_mma<float>& , const double, const bool );
     template std::vector<char> perturb_primal_costs(bdd_cuda_learned_mma<double>& , const double, const bool );
+    template std::vector<char> perturb_primal_costs(lbfgs<bdd_cuda_parallel_mma<float>, thrust::device_vector<float>, float>& , const double, const bool );
+    template std::vector<char> perturb_primal_costs(lbfgs<bdd_cuda_parallel_mma<double>, thrust::device_vector<double>, double>& , const double, const bool );
+
+
+
 
 }
