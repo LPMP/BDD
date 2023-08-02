@@ -267,6 +267,10 @@ namespace LPMP {
             bdd_solver_impl_ = bdd_solver_impl::parallel_mma;
         else if(solver_type == "fastdog_hybrid")
             bdd_solver_impl_ = bdd_solver_impl::hybrid_parallel_mma;
+        else if(solver_type == "fastdog_gpu_lbfgs")
+            bdd_solver_impl_ = bdd_solver_impl::lbfgs_cuda_mma;
+        else if(solver_type == "fastdog_cpu_lbfgs")
+            bdd_solver_impl_ = bdd_solver_impl::lbfgs_parallel_mma;
         else
             std::runtime_error("invalid solver_type specified.");
         max_iter = 20000;
@@ -460,9 +464,15 @@ namespace LPMP {
             if(options.smoothing != 0)
                 throw std::runtime_error("no smoothing implemented for LBFGS mma cuda");
             if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::single_prec)
-                solver = std::move(bdd_lbfgs_cuda_mma<float>(bdd_pre.get_bdd_collection(), costs.begin(), costs.end()));
+                solver = std::move(bdd_lbfgs_cuda_mma<float>(
+                    bdd_pre.get_bdd_collection(), costs.begin(), costs.end(),
+                    options.step_size, options.required_relative_lb_increase, 
+                    options.step_size_decrease_factor, options.step_size_increase_factor));
             else if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::double_prec)
-                solver = std::move(bdd_lbfgs_cuda_mma<double>(bdd_pre.get_bdd_collection(), costs.begin(), costs.end()));
+                solver = std::move(bdd_lbfgs_cuda_mma<double>(
+                    bdd_pre.get_bdd_collection(), costs.begin(), costs.end(),
+                    options.step_size, options.required_relative_lb_increase, 
+                    options.step_size_decrease_factor, options.step_size_increase_factor));
             else
                 throw std::runtime_error("only float and double precision allowed");
             bdd_log << "[bdd solver] constructed LBFGS CUDA based mma solver\n"; 
@@ -472,9 +482,15 @@ namespace LPMP {
             if(options.smoothing != 0)
                 throw std::runtime_error("no smoothing implemented for LBFGS parallel mma");
             if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::single_prec)
-                solver = std::move(bdd_lbfgs_parallel_mma<float>(bdd_pre.get_bdd_collection(), costs.begin(), costs.end()));
+                solver = std::move(bdd_lbfgs_parallel_mma<float>(
+                    bdd_pre.get_bdd_collection(), costs.begin(), costs.end(),
+                    options.step_size, options.required_relative_lb_increase, 
+                    options.step_size_decrease_factor, options.step_size_increase_factor));
             else if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::double_prec)
-                solver = std::move(bdd_lbfgs_parallel_mma<double>(bdd_pre.get_bdd_collection(), costs.begin(), costs.end()));
+                solver = std::move(bdd_lbfgs_parallel_mma<double>(
+                    bdd_pre.get_bdd_collection(), costs.begin(), costs.end(),
+                    options.step_size, options.required_relative_lb_increase, 
+                    options.step_size_decrease_factor, options.step_size_increase_factor));
             else
                 throw std::runtime_error("only float and double precision allowed");
             bdd_log << "[bdd solver] constructed LBFGS parallel mma solver\n"; 

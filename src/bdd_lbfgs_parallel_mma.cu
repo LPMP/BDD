@@ -9,22 +9,32 @@ namespace LPMP {
     template<typename REAL>
     class bdd_lbfgs_parallel_mma<REAL>::impl {
         public:
-            impl(BDD::bdd_collection& bdd_col);
+            impl(BDD::bdd_collection& bdd_col, const int _history_size,
+                const double _init_step_size, const double _req_rel_lb_increase,
+                const double _step_size_decrease_factor, const double _step_size_increase_factor);
 
             lbfgs<bdd_parallel_mma_base<bdd_branch_instruction<REAL, uint16_t>>, std::vector<REAL>, REAL> mma;
     };
 
     template<typename REAL>
-    bdd_lbfgs_parallel_mma<REAL>::impl::impl(BDD::bdd_collection& bdd_col)
-    : mma(bdd_col, 5) // history size
+    bdd_lbfgs_parallel_mma<REAL>::impl::impl(BDD::bdd_collection& bdd_col, const int _history_size,
+                const double _init_step_size, const double _req_rel_lb_increase,
+                const double _step_size_decrease_factor, const double _step_size_increase_factor)
+    : mma(bdd_col, _history_size,
+        _init_step_size, _req_rel_lb_increase,
+        _step_size_decrease_factor, _step_size_increase_factor)
     {
     }
 
     template<typename REAL>
-    bdd_lbfgs_parallel_mma<REAL>::bdd_lbfgs_parallel_mma(BDD::bdd_collection& bdd_col)
+    bdd_lbfgs_parallel_mma<REAL>::bdd_lbfgs_parallel_mma(BDD::bdd_collection& bdd_col, const int _history_size,
+                const double _init_step_size, const double _req_rel_lb_increase,
+                const double _step_size_decrease_factor, const double _step_size_increase_factor)
     {
         MEASURE_FUNCTION_EXECUTION_TIME; 
-        pimpl = std::make_unique<impl>(bdd_col);
+        pimpl = std::make_unique<impl>(bdd_col, _history_size,
+            _init_step_size, _req_rel_lb_increase,
+            _step_size_decrease_factor, _step_size_increase_factor);
     }
 
     template<typename REAL>

@@ -298,8 +298,8 @@ class lbfgs : public SOLVER
             thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + n, update_q_func);
 #else
             update_q<REAL> update_q_func({alpha, history[i].y.data(), direction.data()});
-            for(size_t i=0; i<n; ++i)
-                update_q_func(i);
+            for(size_t j = 0; j < n; ++j)
+                update_q_func(j);
 #endif
         }
 
@@ -325,8 +325,8 @@ class lbfgs : public SOLVER
 #else
             const REAL beta = current_rho * std::inner_product(history[i].y.begin(), history[i].y.end(), direction.begin(), (REAL)0.0);
             update_r<REAL> update_r_func({alpha_history[i], beta, history[i].s.data(), direction.data()});
-            for (size_t i = 0; i < n; ++i)
-                update_r_func(i);
+            for (size_t j = 0; j < n; ++j)
+                update_r_func(j);
 #endif
         }
         return direction;
