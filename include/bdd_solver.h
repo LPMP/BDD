@@ -33,7 +33,6 @@ namespace LPMP {
         bdd_solver_options() {};
         bdd_solver_options(const std::string& ilp_file_path);
         bdd_solver_options(ILP_input& _ilp);
-        void set_solver_type(const std::string& solver_type);
 
         std::string input_file;
         std::string input_string;

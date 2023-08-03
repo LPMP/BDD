@@ -108,7 +108,7 @@ namespace LPMP {
                 return parse_ilp_string(options.input_string);
             }
             else
-                return ILP_input();
+                return options.ilp;
         }();
     }
 
@@ -265,26 +265,6 @@ namespace LPMP {
     }
 
     bdd_solver_options::bdd_solver_options(ILP_input& _ilp) : ilp(_ilp) {}
-
-    void bdd_solver_options::set_solver_type(const std::string& solver_type)
-    {
-        if(solver_type == "fastdog_gpu")
-            bdd_solver_impl_ = bdd_solver_impl::mma_cuda;
-        else if(solver_type == "fastdog_cpu")
-            bdd_solver_impl_ = bdd_solver_impl::parallel_mma;
-        else if(solver_type == "fastdog_hybrid")
-            bdd_solver_impl_ = bdd_solver_impl::hybrid_parallel_mma;
-        else if(solver_type == "fastdog_gpu_lbfgs")
-            bdd_solver_impl_ = bdd_solver_impl::lbfgs_cuda_mma;
-        else if(solver_type == "fastdog_cpu_lbfgs")
-            bdd_solver_impl_ = bdd_solver_impl::lbfgs_parallel_mma;
-        else
-            std::runtime_error("invalid solver_type specified.");
-        max_iter = 20000;
-        incremental_primal_rounding = true;
-        incremental_initial_perturbation = 1.1;
-        incremental_primal_rounding_num_itr = 150;
-    }
 
     /*
     bdd_solver::bdd_solver(int argc, char** argv)

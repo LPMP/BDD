@@ -35,23 +35,32 @@ opts = bdd_solver_options(ilp)
 # Or read .lp file from disk as:
 # opts = bdd_solver_options("PATH_TO_LP_FILE.LP")
 
-# Set solver options from preset categories:
-opts.auto_set_parameters("fastdog_gpu") # valid options are "fastdog_cpu", "fastdog_gpu", "fastdog_hybrid"
-
-# OR manually set options:
-# opts.dual_max_iter = 20000 # maximum allowed number of iterations, solver can terminate early due to convergence criteria below:
-# opts.dual_tolerance = 1e-6
-# opts.dual_improvement_slope = 1e-9
-# opts.dual_time_limit = 3600 # seconds
-# opts.incremental_primal_rounding = True # do rounding based on FastDOG paper.
-# opts.incremental_initial_perturbation = 1.1
-# opts.incremental_growth_rate = 1.2
-# opts.incremental_primal_num_itr_lb = 500 # number of iterations of dual solver
-# opts.incremental_primal_num_rounds = 150 # overall max. number of rounding iterations. Solver terminates when first solution is found.
+# set options:
+opts.dual_max_iter = 2000 # maximum allowed number of iterations, solver can terminate early due to convergence criteria below:
+opts.dual_tolerance = 1e-6
+opts.dual_improvement_slope = 1e-7
+opts.dual_time_limit = 3600 # seconds
+opts.incremental_primal_rounding = True # do rounding based on FastDOG paper.
+opts.incremental_initial_perturbation = 1.1
+opts.incremental_growth_rate = 1.1
+opts.incremental_primal_num_itr_lb = 100 # number of iterations of dual solver
+opts.incremental_primal_num_rounds = 100 # overall max. number of rounding iterations. Solver terminates when first solution is found.
 
 # Set solver type. Available options are:
-#    mma_cuda -> GPU solver, parallel_mma -> CPU solver, sequential_mma -> CPU sequential, hybrid_parallel_mma -> CPU/GPU hybrid
-# opts.bdd_solver_type = bdd_solver_options.bdd_solver_types.mma_cuda 
+#    lbfgs_cuda_mma -> FastDOG GPU + LBFGS solver, 
+#    lbfgs_parallel_mma -> FastDOG CPU + LBFGS solver, 
+#    mma_cuda -> FastDOG GPU solver, 
+#    parallel_mma -> FastDOG CPU solver, 
+#    sequential_mma -> CPU sequential, 
+#    hybrid_parallel_mma -> CPU/GPU hybrid
+opts.bdd_solver_type = bdd_solver_options.bdd_solver_types.mma_cuda 
+
+# LBFGS specific parameters (only used if solver type is lbfgs_cuda_mma or lbfgs_parallel_mma):
+opts.lbfgs_step_size = 1e-5
+opts.lbfgs_history_size = 5
+opts.lbfgs_required_relative_lb_increase = 1e-6
+opts.lbfgs_step_size_decrease_factor = 0.8
+opts.lbfgs_step_size_increase_factor = 1.1
 
 # Initialize solver:
 solver = bdd_solver(opts)

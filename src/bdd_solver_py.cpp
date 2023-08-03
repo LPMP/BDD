@@ -38,13 +38,22 @@ PYBIND11_MODULE(bdd_solver_py, m) {
         .def_readwrite("wedelin_kappa_min", &LPMP::bdd_solver_options::wedelin_kappa_min)
         .def_readwrite("wedelin_kappa_max", &LPMP::bdd_solver_options::wedelin_kappa_max)
         .def_readwrite("wedelin_kappa_step", &LPMP::bdd_solver_options::wedelin_kappa_step)
-        .def("auto_set_parameters",  &LPMP::bdd_solver_options::set_solver_type);
+        .def_readwrite("lbfgs_step_size", &LPMP::bdd_solver_options::lbfgs_step_size)
+        .def_readwrite("lbfgs_history_size", &LPMP::bdd_solver_options::lbfgs_history_size)
+        .def_readwrite("lbfgs_required_relative_lb_increase", &LPMP::bdd_solver_options::lbfgs_required_relative_lb_increase)
+        .def_readwrite("lbfgs_step_size_decrease_factor", &LPMP::bdd_solver_options::lbfgs_step_size_decrease_factor)
+        .def_readwrite("lbfgs_step_size_increase_factor", &LPMP::bdd_solver_options::lbfgs_step_size_increase_factor)
+        .def_readwrite("cuda_split_long_bdds", &LPMP::bdd_solver_options::cuda_split_long_bdds)
+        .def_readwrite("cuda_split_long_bdds_implication_bdd", &LPMP::bdd_solver_options::cuda_split_long_bdds_implication_bdd)
+        .def_readwrite("cuda_split_long_bdds_length", &LPMP::bdd_solver_options::cuda_split_long_bdds_length);
 
     py::enum_<LPMP::bdd_solver_options::bdd_solver_impl>(bdd_opts, "bdd_solver_types")
         .value("sequential_mma", LPMP::bdd_solver_options::bdd_solver_impl::sequential_mma)
         .value("mma_cuda", LPMP::bdd_solver_options::bdd_solver_impl::mma_cuda)
         .value("parallel_mma", LPMP::bdd_solver_options::bdd_solver_impl::parallel_mma)
-        .value("hybrid_parallel_mma", LPMP::bdd_solver_options::bdd_solver_impl::hybrid_parallel_mma);
+        .value("hybrid_parallel_mma", LPMP::bdd_solver_options::bdd_solver_impl::hybrid_parallel_mma)
+        .value("lbfgs_parallel_mma", LPMP::bdd_solver_options::bdd_solver_impl::lbfgs_parallel_mma)
+        .value("lbfgs_cuda_mma", LPMP::bdd_solver_options::bdd_solver_impl::lbfgs_cuda_mma);
 
      py::class_<LPMP::bdd_solver>(m, "bdd_solver")
         .def(py::init<LPMP::bdd_solver_options>())

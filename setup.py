@@ -95,6 +95,10 @@ class CMakeBuild(build_ext):
                       '-DPYTHON_EXECUTABLE=' + sys.executable,
                       '-DWITH_CUDA=ON'
                     ]
+        # if 'CUDA_PATH' in os.environ:
+        #     cuda_path = os.environ['CUDA_HOME']
+        #     print(f'Using CUDA from {cuda_path}')
+        #     cmake_args.append('-DCUDAToolkit_ROOT=' + cuda_path)
         if is_tool('ninja'):
             #   '-DCMAKE_GENERATOR=Ninja' # Use Ninja instead of make for faster compilation.
             cmake_args.append('-DCMAKE_GENERATOR=Ninja')
@@ -123,7 +127,7 @@ class CMakeBuild(build_ext):
 
 setup(
     name='BDD',
-    version='0.0.2',
+    version='0.0.3',
     description='Bindings for solving 0-1 integer linear programs via BDDs',
     packages=find_packages('src'),
     package_dir={'':'src'},
