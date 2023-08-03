@@ -46,7 +46,7 @@ class lbfgs : public SOLVER
         VECTOR compute_update_direction();
         void search_step_size_and_apply(const VECTOR &update);
         void flush_lbfgs_states();
-        bool update_possible();
+        bool lbfgs_update_possible() const;
         void next_itr_without_storage();
 
         struct history
@@ -55,19 +55,31 @@ class lbfgs : public SOLVER
             REAL rho_inv;
         };
         std::deque<history> history;
-        void push_back_history(const VECTOR &s, const VECTOR &y, const REAL rho_inv);
 
         VECTOR prev_x, prev_grad_f;
         const int m;
         double step_size;
-        double init_lb_increase;
-        bool init_lb_valid = false;
+        //double init_lb_increase;
+        //bool init_lb_valid = false;
         const double required_relative_lb_increase, step_size_decrease_factor, step_size_increase_factor;
         int num_unsuccessful_lbfgs_updates_ = 0;
         double initial_rho_inv = 0.0;
 
+        std::deque<REAL> lb_history;
+
         bool prev_states_stored = false;
         bool initial_rho_inv_valid = false;
+
+        double mma_lb_increase_per_time = 0.0;
+        double lbfgs_lb_increase_per_time = 0.0;
+        size_t mma_iterations = 0;
+        size_t lbfgs_iterations = 0;
+
+        enum class solver_type {mma, lbfgs};
+        solver_type choose_solver() const;
+
+        void mma_iteration();
+        void lbfgs_iteration();
 };
 
 template <class SOLVER, typename VECTOR, typename REAL>
@@ -80,12 +92,12 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
       step_size_decrease_factor(_step_size_decrease_factor), step_size_increase_factor(_step_size_increase_factor)
 {
         bdd_log << "[lbfgs] Initialized LBFGS with"
-                << "\n\t\t\thistory size: " << m
-                << "\t\t\t initial step size: " << step_size
-                << "\n\t\t\trequired relative lb increase: " << required_relative_lb_increase
-                << "\n\t\t\tstep size decrease factor: " << step_size_decrease_factor
-                << "\n\t\t\tstep size increase factor: " << step_size_increase_factor 
-                << "\n";
+                << "\n[lbfgs]\thistory size: " << m
+                << "\n[lbfgs]\tinitial step size " << step_size
+                << "\n[lbfgs]\trequired relative lb increase " << required_relative_lb_increase
+                << "\n[lbfgs]\tstep size decrease factor " << step_size_decrease_factor
+                << "\n[lbfgs]\tstep size increase factor " << step_size_increase_factor
+                << "\n[lbfgs]\thistory size" << m << "\n";
 
         assert(step_size > 0.0);
         assert(step_size_decrease_factor > 0.0 && step_size_decrease_factor < 1.0);
@@ -161,40 +173,37 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
     template<class SOLVER, typename VECTOR, typename REAL>
     void lbfgs<SOLVER, VECTOR, REAL>::iteration()
     {
+        if (lb_history.empty())
+            lb_history.push_back(this->lower_bound());
+
         // Check if enough history accumulated
-        if (this->update_possible())
+        if (this->choose_solver() == solver_type::lbfgs)
         {
-            // Compute LBFGS update direction. This can be infeasible.
-            VECTOR grad_lbfgs = this->compute_update_direction();
-
-            // Make the update direction dual feasible by making it sum to zero for all primal variables.
-            this->make_dual_feasible(grad_lbfgs.begin(), grad_lbfgs.end()); //TODO: Implement for all solvers
-
-            // Apply the update by choosing appropriate step size:
-            this->search_step_size_and_apply(grad_lbfgs);
-        }
-
-        if (!init_lb_valid)
-        {
-            const double lb_pre = this->lower_bound();
-            static_cast<SOLVER*>(this)->iteration();
-            const double lb_post = this->lower_bound();
-            this->init_lb_increase = lb_post - lb_pre;
-            init_lb_valid = true; // TODO: correct?
+           lbfgs_iteration(); 
+           //mma_iteration();
         }
         else
-            static_cast<SOLVER*>(this)->iteration(); // MMA iteration
+           mma_iteration();
 
         // Update LBFGS states:
         this->store_iterate();
+        lb_history.push_back(this->lower_bound());
     }
 
     template<class SOLVER, typename VECTOR, typename REAL>
     void lbfgs<SOLVER, VECTOR, REAL>::search_step_size_and_apply(const VECTOR& update)
-    {    
+    {
         const REAL lb_pre = this->lower_bound();
         auto calculate_rel_change = [&]() {
-            return (this->lower_bound() - lb_pre) / (1e-9 + this->init_lb_increase);
+            assert(lb_history.size() >= m);
+            const double cur_lb_increase = lb_history.back() - *(lb_history.rbegin()+1);
+            const double past_lb_increase = *(lb_history.rbegin()+m-1) - *(lb_history.rbegin()+m);
+            assert(cur_lb_increase >= 0.0);
+            assert(past_lb_increase >= 0.0);
+            const double ratio = cur_lb_increase / (1e-9 + past_lb_increase);
+            bdd_log << "[lbfgs] cur lb increase = " << cur_lb_increase << ", past lb increase = " << past_lb_increase << ", cur/past lb increase = " << ratio << "\n";
+            return ratio;
+            //return (this->lower_bound() - lb_pre) / (1e-9 + this->init_lb_increase);
         };
         double prev_step_size = 0.0;
         auto apply_update = [&](const REAL new_step_size) 
@@ -281,7 +290,7 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
     template<class SOLVER, typename VECTOR, typename REAL>
     VECTOR lbfgs<SOLVER, VECTOR, REAL>::compute_update_direction()
     {
-        assert(this->update_possible());
+        assert(this->lbfgs_update_possible());
         //VECTOR direction(this->nr_layers());
         VECTOR direction = this->bdds_solution_vec();
 
@@ -348,7 +357,7 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
         prev_states_stored = false;
         initial_rho_inv = 0.0;
         initial_rho_inv_valid = false;
-        init_lb_valid = false;
+        //init_lb_valid = false;
     }
 
     template<class SOLVER, typename VECTOR, typename REAL>
@@ -358,9 +367,9 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
     }
 
     template<class SOLVER, typename VECTOR, typename REAL>
-    bool lbfgs<SOLVER, VECTOR, REAL>::update_possible()
+    bool lbfgs<SOLVER, VECTOR, REAL>::lbfgs_update_possible() const
     {
-        if (history.size() < m || num_unsuccessful_lbfgs_updates_ > 5 || !init_lb_valid)
+        if (history.size() < m || num_unsuccessful_lbfgs_updates_ > 5) // || !init_lb_valid)
             return false;
         return true;
     }
@@ -385,5 +394,77 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
 
     }
 #endif
+
+    template<class SOLVER, typename VECTOR, typename REAL>
+    void lbfgs<SOLVER, VECTOR, REAL>::mma_iteration()
+    {
+        const double lb_before = this->lower_bound();
+        const auto pre = std::chrono::steady_clock::now();
+        static_cast<SOLVER *>(this)->iteration();
+        const auto post = std::chrono::steady_clock::now();
+        const double lb_after = this->lower_bound();
+        mma_lb_increase_per_time = (lb_after - lb_before) / std::chrono::duration<double>(post - pre).count();
+        bdd_log << "[lbfgs] mma lb increase over time = " << mma_lb_increase_per_time << "\n";
+        mma_iterations++;
+    }
+
+    template<class SOLVER, typename VECTOR, typename REAL>
+    void lbfgs<SOLVER, VECTOR, REAL>::lbfgs_iteration()
+    {
+        const double lb_before = this->lower_bound();
+        const auto pre = std::chrono::steady_clock::now();
+
+        // Compute LBFGS update direction. This can be infeasible.
+        VECTOR grad_lbfgs = this->compute_update_direction();
+
+        // Make the update direction dual feasible by making it sum to zero for all primal variables.
+        this->make_dual_feasible(grad_lbfgs.begin(), grad_lbfgs.end()); // TODO: Implement for all solvers
+
+        // Apply the update by choosing appropriate step size:
+        this->search_step_size_and_apply(grad_lbfgs);
+        static_cast<SOLVER*>(this)->iteration();
+
+        const auto post = std::chrono::steady_clock::now();
+        const double lb_after = this->lower_bound();
+        assert(lb_after >= lb_before - 1e-6);
+        lbfgs_lb_increase_per_time = (lb_after - lb_before) / std::chrono::duration<double>(post - pre).count();
+        std::cout << "[lbfgs] lbfgs pre lb = " << lb_before << ", after lb = " << lb_after << "\n";
+        bdd_log << "[lbfgs] lbfgs lb increase over time = " << lbfgs_lb_increase_per_time << "\n";
+        lbfgs_iterations++;
+    }
+
+    template<class SOLVER, typename VECTOR, typename REAL>
+    typename lbfgs<SOLVER, VECTOR, REAL>::solver_type lbfgs<SOLVER, VECTOR, REAL>::choose_solver() const
+    {
+        if (!lbfgs_update_possible())
+        {
+            bdd_log << "[lbfgs] Do mma iterations for collecting states\n";
+            return solver_type::mma;
+        }
+
+        if (double(lbfgs_iterations) / double(mma_iterations + 1e-9) > 50.0)
+        {
+            bdd_log << "[lbfgs] Do mma iterations to estimate mma improvement\n";
+            return solver_type::mma;
+        }
+
+        if(double(mma_iterations)/double(lbfgs_iterations+1e-9) > 50.0)
+        {
+            bdd_log << "[lbfgs] Do lbfgs iterations to estimate lbfgs improvement\n";
+            return solver_type::lbfgs;
+        }
+
+        if(mma_lb_increase_per_time > lbfgs_lb_increase_per_time)
+        {
+            bdd_log << "[lbfgs] mma lb increase per time = " << mma_lb_increase_per_time << " > lbfgs lb increase per time = " << lbfgs_lb_increase_per_time << ", choose mma\n";
+            return solver_type::mma;
+        }
+        else
+        {
+            bdd_log << "[lbfgs] mma lb increase per time = " << mma_lb_increase_per_time << " < lbfgs lb increase per time = " << lbfgs_lb_increase_per_time << ", choose lbfgs\n";
+            return solver_type::lbfgs;
+        }
+    }
+
 
 }
