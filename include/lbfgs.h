@@ -37,7 +37,8 @@ class lbfgs : public SOLVER
             ITERATOR cost_delta_0_begin, ITERATOR cost_delta_0_end,
             ITERATOR cost_delta_1_begin, ITERATOR cost_delta_1_end);
 #ifdef WITH_CUDA
-        void update_costs(const thrust::device_vector<REAL> &cost_0, const thrust::device_vector<REAL> &cost_1);
+        template<typename REAL_arg>
+        void update_costs(const thrust::device_vector<REAL_arg> &cost_0, const thrust::device_vector<REAL_arg> &cost_1);
 #endif
 
     private:
@@ -80,11 +81,11 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
 {
         bdd_log << "[lbfgs] Initialized LBFGS with"
                 << "\n\t\t\thistory size: " << m
-                << "\t\t\t initial step size " << step_size
-                << "\n\t\t\trequired relative lb increase " << required_relative_lb_increase
-                << "\n\t\t\tstep size decrease factor " << step_size_decrease_factor
-                << "\n\t\t\tstep size increase factor " << step_size_increase_factor
-                << "\n\t\t\thistory size" << m << "\n";
+                << "\t\t\t initial step size: " << step_size
+                << "\n\t\t\trequired relative lb increase: " << required_relative_lb_increase
+                << "\n\t\t\tstep size decrease factor: " << step_size_decrease_factor
+                << "\n\t\t\tstep size increase factor: " << step_size_increase_factor 
+                << "\n";
 
         assert(step_size > 0.0);
         assert(step_size_decrease_factor > 0.0 && step_size_decrease_factor < 1.0);
@@ -201,7 +202,7 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
             double net_step_size = new_step_size - prev_step_size;
             if (net_step_size != 0.0)
                 this->gradient_step(update.begin(), update.end(), net_step_size); // TODO: implement for each solver.
-            prev_step_size = net_step_size;
+            prev_step_size = new_step_size;
         };
 
         size_t num_updates = 0;
@@ -212,17 +213,17 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
         {
             apply_update(this->step_size);
             curr_rel_change = calculate_rel_change();
+            bdd_log << "[lbfgs] perform update step with step size " << this->step_size << ", curr_rel_change: "<<curr_rel_change<<"\n";
             if (best_rel_improvement < curr_rel_change)
             {
                 best_rel_improvement = curr_rel_change;
                 best_step_size = this->step_size;
             }
+
             if (curr_rel_change <= 0.0)
                 this->step_size *= this->step_size_decrease_factor;
             else if (curr_rel_change < required_relative_lb_increase)
                 this->step_size *= this->step_size_increase_factor;
-
-            bdd_log << "[lbfgs] perform update step with step size " << this->step_size << "\n";
 
             if (num_updates > 5)
             {
@@ -230,6 +231,7 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
                     apply_update(best_step_size);
                 else
                 {
+                    bdd_log<<"[lbfgs] step size selection unsuccessful.\n";
                     apply_update(0.0);
                     this->num_unsuccessful_lbfgs_updates_ += 1;
                 }
@@ -375,7 +377,8 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
 
 #ifdef WITH_CUDA
     template<class SOLVER, typename VECTOR, typename REAL>
-    void lbfgs<SOLVER, VECTOR, REAL>::update_costs(const thrust::device_vector<REAL>& cost_0, const thrust::device_vector<REAL>& cost_1)
+    template<typename REAL_arg>
+    void lbfgs<SOLVER, VECTOR, REAL>::update_costs(const thrust::device_vector<REAL_arg>& cost_0, const thrust::device_vector<REAL_arg>& cost_1)
     {
         flush_lbfgs_states();
         static_cast<SOLVER*>(this)->update_costs(cost_0, cost_1);
