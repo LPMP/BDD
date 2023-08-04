@@ -600,6 +600,8 @@ namespace LPMP {
                     else if constexpr( // GPU rounding
                             std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<float>>
                             || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<double>>
+                            || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_lbfgs_cuda_mma<float>>
+                            || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_lbfgs_cuda_mma<double>>
                             )
                     {
                     return s.incremental_mm_agreement_rounding(options.incremental_initial_perturbation, options.incremental_growth_rate, options.incremental_primal_num_itr_lb, options.incremental_primal_rounding_num_itr);
