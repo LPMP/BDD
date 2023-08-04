@@ -133,14 +133,16 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
         {
             VECTOR cur_s(cur_x.size()); // compute x_k - x_{k-1}
 #ifdef WITH_CUDA
-            thrust::transform(cur_x.begin(), cur_x.end(), prev_x.begin(), cur_s.begin(), thrust::minus<REAL>());
+            //thrust::transform(cur_x.begin(), cur_x.end(), prev_x.begin(), cur_s.begin(), thrust::minus<REAL>());
+            thrust::transform(cur_x.begin(), cur_x.end(), prev_x.begin(), cur_s.begin(), _1 - _2);
 #else
             std::transform(cur_x.begin(), cur_x.end(), prev_x.begin(), cur_s.begin(), std::minus<REAL>());
 #endif
             // compute grad_f_k - grad_f_{k-1}, but since we have maximization problem and lbfgs updates are derived for minimization so multiply gradients by -1.
             VECTOR cur_y(cur_grad_f.size());
 #ifdef WITH_CUDA
-            thrust::transform(prev_grad_f.begin(), prev_grad_f.end(), cur_grad_f.begin(), cur_y.begin(), thrust::minus<REAL>());
+            //thrust::transform(prev_grad_f.begin(), prev_grad_f.end(), cur_grad_f.begin(), cur_y.begin(), thrust::minus<REAL>());
+            thrust::transform(prev_grad_f.begin(), prev_grad_f.end(), cur_grad_f.begin(), cur_y.begin(), _1 - _2);
             REAL rho_inv = thrust::inner_product(cur_s.begin(), cur_s.end(), cur_y.begin(), (REAL) 0.0);
 #else
             std::transform(prev_grad_f.begin(), prev_grad_f.end(), cur_grad_f.begin(), cur_y.begin(), std::minus<REAL>());
@@ -262,52 +264,16 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
         this->num_unsuccessful_lbfgs_updates_ = 0;
     }
 
-    template<typename REAL>
-    struct update_q
-    {
-        const REAL alpha;
-        const REAL* y;
-        REAL* q;
-#ifdef WITH_CUDA
-        __host__ __device__
-#endif
-            void
-            operator()(const int idx)
-        {
-            q[idx] -= alpha * y[idx];
-        }
-    };
-
-    template<typename REAL>
-    struct update_r
-    {
-        const REAL alpha;
-        const REAL beta;
-        const REAL* s;
-        REAL* r;
-#ifdef WITH_CUDA
-        __host__ __device__
-#endif
-            void
-            operator()(const int idx)
-        {
-            r[idx] += s[idx] * (alpha - beta);
-        }
-    };
-
     template<class SOLVER, typename VECTOR, typename REAL>
     VECTOR lbfgs<SOLVER, VECTOR, REAL>::compute_update_direction()
     {
         assert(this->lbfgs_update_possible());
-        //VECTOR direction(this->nr_layers());
         VECTOR direction = this->bdds_solution_vec();
 
-        //const int n = s_history[0].size();
         assert(history.size() > 0);
         const size_t n = history.back().s.size();
 
         std::vector<REAL> alpha_history;
-        //for (int count = 0; count < num_stored; count++)
         for (int i = history.size()-1; i >= 0; i--)
         {
 #ifdef WITH_CUDA
@@ -319,12 +285,10 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
             alpha_history.push_back(alpha);
 
 #ifdef WITH_CUDA
-            update_q<REAL> update_q_func({alpha, thrust::raw_pointer_cast(history[i].y.data()), thrust::raw_pointer_cast(direction.data())});
-            thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + n, update_q_func);
+            thrust::transform(history[i].y.begin(), history[i].y.end(), direction.begin(), direction.begin(), _2 - alpha * _1);
 #else
-            update_q<REAL> update_q_func({alpha, history[i].y.data(), direction.data()});
-            for(size_t j = 0; j < n; ++j)
-                update_q_func(j);
+            for (size_t j = 0; j < n; ++j)
+                direction[j] -= alpha * history[i].y[j];
 #endif
         }
 
@@ -347,13 +311,11 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
                 current_rho *= initial_H_diag_multiplier;
 #ifdef WITH_CUDA
             const REAL beta = current_rho * thrust::inner_product(history[i].y.begin(), history[i].y.end(), direction.begin(), (REAL)0.0);
-            update_r<REAL> update_r_func({alpha_history[i], beta, thrust::raw_pointer_cast(history[i].s.data()), thrust::raw_pointer_cast(direction.data())});
-            thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + n, update_r_func);
+            thrust::transform(history[i].s.begin(), history[i].s.end(), direction.begin(), direction.begin(), _2 + (alpha_history[i] - beta)*_1);
 #else
             const REAL beta = current_rho * std::inner_product(history[i].y.begin(), history[i].y.end(), direction.begin(), (REAL)0.0);
-            update_r<REAL> update_r_func({alpha_history[i], beta, history[i].s.data(), direction.data()});
             for (size_t j = 0; j < n; ++j)
-                update_r_func(j);
+                direction[j] += (alpha_history[i] - beta) * history[i].s[j];
 #endif
         }
         return direction;
@@ -475,6 +437,5 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
             return solver_type::lbfgs;
         }
     }
-
 
 }
