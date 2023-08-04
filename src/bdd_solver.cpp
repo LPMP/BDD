@@ -160,6 +160,7 @@ namespace LPMP {
             {"sequential_mma",bdd_solver_impl::sequential_mma},
             {"parallel_mma",bdd_solver_impl::parallel_mma},
             {"mma_cuda",bdd_solver_impl::mma_cuda},
+            {"cuda_mma",bdd_solver_impl::mma_cuda},
             {"hybrid_parallel_mma",bdd_solver_impl::hybrid_parallel_mma},
             {"lbfgs_cuda_mma", bdd_solver_impl::lbfgs_cuda_mma},
             {"lbfgs_parallel_mma", bdd_solver_impl::lbfgs_parallel_mma}
@@ -585,33 +586,41 @@ namespace LPMP {
         if(options.incremental_primal_rounding)
         {
             bdd_log << "[incremental primal rounding] start rounding\n";
-            const auto sol = std::visit([&](auto&& s) {
+            const auto sol = std::visit([&](auto &&s)
+                                        {
                     if constexpr( // CPU rounding
                             std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma<float>>
                             || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_mma<double>>
                             || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma<float>>
                             || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_parallel_mma<double>>
+                            || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_lbfgs_parallel_mma<float>>
+                            || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_lbfgs_parallel_mma<double>>
                             // TODO: remove for cuda rounding again //
                             //|| std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<float>>
                             //|| std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<double>>
                             //////////////////////////////////////////
                             )
+                            {
                     return incremental_mm_agreement_rounding_iter(s, options.incremental_initial_perturbation, options.incremental_growth_rate, options.incremental_primal_num_itr_lb, options.incremental_primal_rounding_num_itr);
+                            }
                     else if constexpr( // GPU rounding
                             std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<float>>
                             || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_cuda<double>>
+                            || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_lbfgs_cuda_mma<float>>
+                            || std::is_same_v<std::remove_reference_t<decltype(s)>, bdd_lbfgs_cuda_mma<double>>
                             )
                     {
                     return s.incremental_mm_agreement_rounding(options.incremental_initial_perturbation, options.incremental_growth_rate, options.incremental_primal_num_itr_lb, options.incremental_primal_rounding_num_itr);
                     }
-
+                    else
                     {
                     throw std::runtime_error("solver not supported for incremental rounding");
                     return std::vector<char>{};
-                    }
-                    }, *solver);
+                    } },
+                                        *solver);
 
-            const double obj = options.ilp.evaluate(sol.begin(), sol.end());
+            assert(sol.size() >= options.ilp.nr_variables());
+            const double obj = options.ilp.evaluate(sol.begin(), sol.begin() + options.ilp.nr_variables());
             bdd_log << "[incremental primal rounding] solution objective = " << obj << "\n";
             return {obj, sol};
         }

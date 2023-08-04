@@ -117,6 +117,15 @@ namespace LPMP {
     } 
 
     template<typename REAL>
+    size_t bdd_lbfgs_cuda_mma<REAL>::nr_variables()
+    {
+#ifdef WITH_CUDA
+        return pimpl->mma.nr_variables();
+#endif
+        return 0;
+    }
+
+    template<typename REAL>
     two_dim_variable_array<std::array<double,2>> bdd_lbfgs_cuda_mma<REAL>::min_marginals()
     {
 #ifdef WITH_CUDA

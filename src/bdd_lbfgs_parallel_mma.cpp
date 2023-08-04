@@ -96,6 +96,12 @@ namespace LPMP {
     } 
 
     template<typename REAL>
+    size_t bdd_lbfgs_parallel_mma<REAL>::nr_variables()
+    {
+        return pimpl->mma.nr_variables();
+    } 
+
+    template<typename REAL>
     two_dim_variable_array<std::array<double,2>> bdd_lbfgs_parallel_mma<REAL>::min_marginals()
     {
         return pimpl->mma.min_marginals();

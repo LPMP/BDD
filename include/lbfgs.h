@@ -11,13 +11,12 @@
 #include <thrust/inner_product.h>
 #include <thrust/host_vector.h>
 #include <thrust/device_vector.h>
-#include <thrust/placeholders.h>
 #endif
 
 namespace LPMP {
 
 #ifdef WITH_CUDA
-use thrust::placeholders;
+using namespace thrust::placeholders;
 #endif
 
 // LBFGS requires the following functions to be implemented in the SOLVER base class:

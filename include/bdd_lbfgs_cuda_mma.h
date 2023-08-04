@@ -22,6 +22,7 @@ namespace LPMP {
             template<typename ITERATOR>
                 void update_costs(ITERATOR cost_lo_begin, ITERATOR cost_lo_end, ITERATOR cost_hi_begin, ITERATOR cost_hi_end);
             double lower_bound();
+            size_t nr_variables();
             two_dim_variable_array<std::array<double,2>> min_marginals();
             void iteration();
             void backward_run(); 
