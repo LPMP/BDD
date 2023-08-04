@@ -11,9 +11,14 @@
 #include <thrust/inner_product.h>
 #include <thrust/host_vector.h>
 #include <thrust/device_vector.h>
+#include <thrust/placeholders.h>
 #endif
 
 namespace LPMP {
+
+#ifdef WITH_CUDA
+use thrust::placeholders;
+#endif
 
 // LBFGS requires the following functions to be implemented in the SOLVER base class:
 // VECTOR bdd_solutions_vec()
@@ -148,7 +153,8 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
                 initial_rho_inv = rho_inv;
                 initial_rho_inv_valid = true;
             }
-            if (rho_inv / initial_rho_inv > 1e-8) // otherwise, skip the iterate as curvature condition is not strongly satisfied.
+            //if (rho_inv / initial_rho_inv > 1e-8) // otherwise, skip the iterate as curvature condition is not strongly satisfied.
+            if (rho_inv > 1e-8) // otherwise, skip the iterate as curvature condition is not strongly satisfied.
             {
                 history.push_back({});
                 history.back().s = cur_s;
@@ -165,6 +171,7 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
             {
                 //num_stored = std::max(num_stored - 1, 0);
             }
+            // TODO: std::move?
             prev_x = cur_x;
             prev_grad_f = cur_grad_f;
         }
@@ -194,17 +201,19 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
     void lbfgs<SOLVER, VECTOR, REAL>::search_step_size_and_apply(const VECTOR& update)
     {
         const REAL lb_pre = this->lower_bound();
+    
         auto calculate_rel_change = [&]() {
             assert(lb_history.size() >= m);
-            const double cur_lb_increase = lb_history.back() - *(lb_history.rbegin()+1);
-            const double past_lb_increase = *(lb_history.rbegin()+m-1) - *(lb_history.rbegin()+m);
-            assert(cur_lb_increase >= 0.0);
+            const double cur_lb_increase = this->lower_bound() - lb_pre;
+            const double past_lb_increase = *(lb_history.rbegin()+m-2) - *(lb_history.rbegin()+m-1);
+            //assert(cur_lb_increase >= 0.0);
             assert(past_lb_increase >= 0.0);
             const double ratio = cur_lb_increase / (1e-9 + past_lb_increase);
             bdd_log << "[lbfgs] cur lb increase = " << cur_lb_increase << ", past lb increase = " << past_lb_increase << ", cur/past lb increase = " << ratio << "\n";
             return ratio;
             //return (this->lower_bound() - lb_pre) / (1e-9 + this->init_lb_increase);
         };
+
         double prev_step_size = 0.0;
         auto apply_update = [&](const REAL new_step_size) 
         {
@@ -319,6 +328,8 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
                 update_q_func(j);
 #endif
         }
+
+        std::reverse(alpha_history.begin(), alpha_history.end());
 
 #ifdef WITH_CUDA
         REAL last_y_norm = thrust::inner_product(history.back().y.begin(), history.back().y.end(), history.back().y.begin(), (REAL)0.0);
@@ -454,7 +465,7 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
             return solver_type::lbfgs;
         }
 
-        if(mma_lb_increase_per_time > lbfgs_lb_increase_per_time)
+        if(mma_lb_increase_per_time > 2.0 * lbfgs_lb_increase_per_time)
         {
             bdd_log << "[lbfgs] mma lb increase per time = " << mma_lb_increase_per_time << " > lbfgs lb increase per time = " << lbfgs_lb_increase_per_time << ", choose mma\n";
             return solver_type::mma;
