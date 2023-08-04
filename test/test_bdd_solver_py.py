@@ -53,7 +53,7 @@ opts.incremental_primal_num_rounds = 100 # overall max. number of rounding itera
 #    parallel_mma -> FastDOG CPU solver, 
 #    sequential_mma -> CPU sequential, 
 #    hybrid_parallel_mma -> CPU/GPU hybrid
-opts.bdd_solver_type = bdd_solver_options.bdd_solver_types.lbfgs_cuda_mma #mma_cuda 
+opts.bdd_solver_type = bdd_solver_options.bdd_solver_types.lbfgs_cuda_mma
 
 # LBFGS specific parameters (only used if solver type is lbfgs_cuda_mma or lbfgs_parallel_mma):
 opts.lbfgs_step_size = 1e-8
