@@ -23,7 +23,7 @@ namespace LPMP {
 #ifdef WITH_CUDA
         cudaDeviceProp deviceProp;
         cudaGetDeviceProperties(&deviceProp, 0);
-        return deviceProp.multiProcessorCount * deviceProp.maxThreadsPerMultiProcessor;
+        return (deviceProp.multiProcessorCount * deviceProp.maxThreadsPerMultiProcessor)/10;
 #else
         return 0;
 #endif
@@ -46,17 +46,61 @@ namespace LPMP {
         }
 
         bdd_log << "[bdd preprocessor] Longest BDD has " << layer_widths.size() << " layers\n";
+        bdd_log << "[bdd preprocessor] Device can handle " << getMaximumOccupancy() << " concurrent nodes\n";
 
         // to account for smaller intermediate layer widths take maximum of all subsequent layers into account
         for (ptrdiff_t i = layer_widths.size() - 2; i >= 0; --i)
             layer_widths[i] = std::max(layer_widths[i + 1], layer_widths[i]);
 
-#ifdef WITH_CUDA
-        const size_t maximum_occupancy = getMaximumOccupancy();
-#else
-        const size_t maximum_occupancy = 1024;
-#endif
+        { // print nr bdd nodes per layer
+            int prev = 0;
+            int last_num_nodes = layer_widths[0];
+            int last_hop = 0;
+            for (size_t i = 0; i < layer_widths.size(); i++)
+            {
+                int current_hop_num_nodes = layer_widths[i];
+                if (current_hop_num_nodes != last_num_nodes)
+                {
+                    bdd_log << "[bdd preprocessor] Layer width: [" << last_hop << " - " << i << "], # BDD nodes: " << last_num_nodes << "\n";
+                    last_hop = i;
+                    last_num_nodes = current_hop_num_nodes;
+                }
+                prev = layer_widths[i];
+            }
+            bdd_log << "[bdd preprocessor] Layer width: [" << last_hop << " - " << layer_widths.size() - 1 << "], # BDD nodes: " << last_num_nodes << "\n";
+        }
 
+        const size_t maximum_occupancy = getMaximumOccupancy();
+
+        auto split_layer_widths = [&](const size_t split_length)
+        {
+            std::vector<size_t> new_layer_widths(split_length, 0);
+
+            for (size_t i = 0; i < split_length; ++i)
+                for (size_t j = i; j < layer_widths.size(); j += split_length)
+                    new_layer_widths[i] += layer_widths[j];
+
+            return new_layer_widths;
+        };
+
+        auto avg_occupancy = [](const size_t parallelism, const std::vector<size_t>& layer_widths) {
+            double avg_occ = 0.0;
+            for(size_t i=0; i<layer_widths.size(); ++i)
+                avg_occ += double(std::min(layer_widths[i], parallelism)) / double(parallelism);
+            return avg_occ / layer_widths.size();
+        };
+
+        // find largest split length such that occupancy >= 0.5
+        double occupancy = avg_occupancy(getMaximumOccupancy(), layer_widths);
+        int split_length = layer_widths.size();
+        for(; split_length >= 200; --split_length)
+        {
+            const auto new_layer_widths = split_layer_widths(split_length);
+            if(avg_occupancy(getMaximumOccupancy(), new_layer_widths) >= 0.5)
+                break;
+        }
+
+        /*
         size_t max_length_bdd = [&]() -> size_t
         {
             if (*std::max_element(layer_widths.begin(), layer_widths.end()) < 2048 || bdd_collection.nr_bdds() < 128)
@@ -69,10 +113,11 @@ namespace LPMP {
                     return i;
             return std::numeric_limits<size_t>::max();
         }();
+        */
 
-        bdd_log << "[bdd preprocessor] Split BDDs longer than " << max_length_bdd << " layers\n";
+        bdd_log << "[bdd preprocessor] Split BDDs longer than " << split_length << " layers\n";
 
-        return max_length_bdd;
+        return split_length;
     }
 
     two_dim_variable_array<size_t> bdd_preprocessor::add_ilp(const ILP_input& input, const bool normalize, const bool split_long_bdds, const bool add_split_implication_bdd, const size_t split_length)

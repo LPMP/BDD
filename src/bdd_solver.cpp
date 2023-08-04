@@ -147,7 +147,7 @@ namespace LPMP {
             ->check(CLI::NonNegativeNumber);
 
         app.add_option("--tolerance", tolerance, "termination criterion: lower bound relative progress tolerance, default value = " + std::to_string(tolerance))
-            ->check(CLI::PositiveNumber);
+            ->check(CLI::Range(0.0, std::numeric_limits<double>::infinity()));
 
         app.add_option("--improvement_slope", improvement_slope, "termination criterion: improvement between iterations as compared to improvement after first iterations, default value = " + std::to_string(improvement_slope))
             ->check(CLI::Range(0.0, 1.0));

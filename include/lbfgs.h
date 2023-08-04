@@ -96,12 +96,12 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
       step_size_decrease_factor(_step_size_decrease_factor), step_size_increase_factor(_step_size_increase_factor)
 {
         bdd_log << "[lbfgs] Initialized LBFGS with"
-                << "\n[lbfgs]\thistory size: " << m
-                << "\n[lbfgs]\tinitial step size " << step_size
-                << "\n[lbfgs]\trequired relative lb increase " << required_relative_lb_increase
-                << "\n[lbfgs]\tstep size decrease factor " << step_size_decrease_factor
-                << "\n[lbfgs]\tstep size increase factor " << step_size_increase_factor
-                << "\n[lbfgs]\thistory size" << m << "\n";
+                << "\n[lbfgs]\t\thistory size: " << m
+                << "\n[lbfgs]\t\tinitial step size " << step_size
+                << "\n[lbfgs]\t\trequired relative lb increase " << required_relative_lb_increase
+                << "\n[lbfgs]\t\tstep size decrease factor " << step_size_decrease_factor
+                << "\n[lbfgs]\t\tstep size increase factor " << step_size_increase_factor
+                << "\n[lbfgs]\t\thistory size" << m << "\n";
 
         assert(step_size > 0.0);
         assert(step_size_decrease_factor > 0.0 && step_size_decrease_factor < 1.0);
