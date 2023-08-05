@@ -36,10 +36,10 @@ def create_toy_problem():
 opts = bdd_solver_options("/home/ahabbas/data/sm_avg_learned_features.lp")
 
 # set options:
-opts.dual_max_iter = 500 # maximum allowed number of iterations, solver can terminate early due to convergence criteria below:
+opts.dual_max_iter = 2000 # maximum allowed number of iterations, solver can terminate early due to convergence criteria below:
 opts.dual_tolerance = 1e-6
-opts.dual_improvement_slope = 1e-7
-opts.dual_time_limit = 3600 # seconds
+opts.dual_improvement_slope = 1e-6
+opts.dual_time_limit = 360 # seconds
 opts.incremental_primal_rounding = True # do rounding based on FastDOG paper.
 opts.incremental_initial_perturbation = 1.1
 opts.incremental_growth_rate = 1.1
@@ -53,6 +53,8 @@ opts.incremental_primal_num_rounds = 100 # overall max. number of rounding itera
 #    parallel_mma -> FastDOG CPU solver, 
 #    sequential_mma -> CPU sequential, 
 #    hybrid_parallel_mma -> CPU/GPU hybrid
+
+# opts.bdd_solver_type = bdd_solver_options.bdd_solver_types.mma_cuda
 opts.bdd_solver_type = bdd_solver_options.bdd_solver_types.lbfgs_cuda_mma
 
 # LBFGS specific parameters (only used if solver type is lbfgs_cuda_mma or lbfgs_parallel_mma):
@@ -62,7 +64,7 @@ opts.lbfgs_required_relative_lb_increase = 1e-6
 opts.lbfgs_step_size_decrease_factor = 0.8
 opts.lbfgs_step_size_increase_factor = 1.1
 opts.cuda_split_long_bdds = True
-opts.cuda_split_long_bdds_length = 1000
+# opts.cuda_split_long_bdds_length = 1000
 # Initialize solver:
 solver = bdd_solver(opts)
 

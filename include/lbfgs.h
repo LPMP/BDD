@@ -116,8 +116,8 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
     template <class SOLVER, typename VECTOR, typename REAL>
     void lbfgs<SOLVER, VECTOR, REAL>::store_iterate()
     {
-        // TODO: Provide following two functions in all solvers.
-        // should return thrust::device_vector for GPU and thrust::host_vector/std::vector for CPU solvers.
+        MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
+
         VECTOR cur_x = this->net_solver_costs();
         VECTOR cur_grad_f = this->bdds_solution_vec();
         
@@ -201,6 +201,7 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
     template<class SOLVER, typename VECTOR, typename REAL>
     void lbfgs<SOLVER, VECTOR, REAL>::search_step_size_and_apply(const VECTOR& update)
     {
+        MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         const REAL lb_pre = this->lower_bound();
     
         auto calculate_rel_change = [&]() {
@@ -210,7 +211,7 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
             //assert(cur_lb_increase >= 0.0);
             assert(past_lb_increase >= 0.0);
             const double ratio = cur_lb_increase / (1e-9 + past_lb_increase);
-            bdd_log << "[lbfgs] cur lb increase = " << cur_lb_increase << ", past lb increase = " << past_lb_increase << ", cur/past lb increase = " << ratio << "\n";
+            // bdd_log << "[lbfgs] cur lb increase = " << cur_lb_increase << ", past lb increase = " << past_lb_increase << ", cur/past lb increase = " << ratio << "\n";
             return ratio;
             //return (this->lower_bound() - lb_pre) / (1e-9 + this->init_lb_increase);
         };
@@ -232,7 +233,7 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
         {
             apply_update(this->step_size);
             curr_rel_change = calculate_rel_change();
-            bdd_log << "[lbfgs] perform update step with step size " << this->step_size << ", curr_rel_change: "<<curr_rel_change<<"\n";
+            // bdd_log << "[lbfgs] perform update step with step size " << this->step_size << ", curr_rel_change: "<<curr_rel_change<<"\n";
             if (best_rel_improvement < curr_rel_change)
             {
                 best_rel_improvement = curr_rel_change;
@@ -267,6 +268,8 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
     template<class SOLVER, typename VECTOR, typename REAL>
     VECTOR lbfgs<SOLVER, VECTOR, REAL>::compute_update_direction()
     {
+        MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
+
         assert(this->lbfgs_update_possible());
         VECTOR direction = this->bdds_solution_vec();
 
@@ -376,7 +379,7 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
         const auto post = std::chrono::steady_clock::now();
         const double lb_after = this->lower_bound();
         mma_lb_increase_per_time = (lb_after - lb_before) / std::chrono::duration<double>(post - pre).count();
-        bdd_log << "[lbfgs] mma lb increase over time = " << mma_lb_increase_per_time << "\n";
+        // bdd_log << "[lbfgs] mma lb increase over time = " << mma_lb_increase_per_time << "\n";
         mma_iterations++;
     }
 
@@ -400,8 +403,8 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
         const double lb_after = this->lower_bound();
         assert(lb_after >= lb_before - 1e-6);
         lbfgs_lb_increase_per_time = (lb_after - lb_before) / std::chrono::duration<double>(post - pre).count();
-        std::cout << "[lbfgs] lbfgs pre lb = " << lb_before << ", after lb = " << lb_after << "\n";
-        bdd_log << "[lbfgs] lbfgs lb increase over time = " << lbfgs_lb_increase_per_time << "\n";
+        // bdd_log << "[lbfgs] lbfgs pre lb = " << lb_before << ", after lb = " << lb_after << "\n";
+        // bdd_log << "[lbfgs] lbfgs lb increase over time = " << lbfgs_lb_increase_per_time << "\n";
         lbfgs_iterations++;
     }
 
@@ -410,30 +413,30 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
     {
         if (!lbfgs_update_possible())
         {
-            bdd_log << "[lbfgs] Do mma iterations for collecting states\n";
+            // bdd_log << "[lbfgs] Do mma iterations for collecting states\n";
             return solver_type::mma;
         }
 
         if (double(lbfgs_iterations) / double(mma_iterations + 1e-9) > 50.0)
         {
-            bdd_log << "[lbfgs] Do mma iterations to estimate mma improvement\n";
+            // bdd_log << "[lbfgs] Do mma iterations to estimate mma improvement\n";
             return solver_type::mma;
         }
 
         if(double(mma_iterations)/double(lbfgs_iterations+1e-9) > 50.0)
         {
-            bdd_log << "[lbfgs] Do lbfgs iterations to estimate lbfgs improvement\n";
+            // bdd_log << "[lbfgs] Do lbfgs iterations to estimate lbfgs improvement\n";
             return solver_type::lbfgs;
         }
 
-        if(mma_lb_increase_per_time > 2.0 * lbfgs_lb_increase_per_time)
+        if(mma_lb_increase_per_time > 3.0 * lbfgs_lb_increase_per_time)
         {
-            bdd_log << "[lbfgs] mma lb increase per time = " << mma_lb_increase_per_time << " > lbfgs lb increase per time = " << lbfgs_lb_increase_per_time << ", choose mma\n";
+            // bdd_log << "[lbfgs] mma lb increase per time = " << mma_lb_increase_per_time << " > lbfgs lb increase per time = " << lbfgs_lb_increase_per_time << ", choose mma\n";
             return solver_type::mma;
         }
         else
         {
-            bdd_log << "[lbfgs] mma lb increase per time = " << mma_lb_increase_per_time << " < lbfgs lb increase per time = " << lbfgs_lb_increase_per_time << ", choose lbfgs\n";
+            // bdd_log << "[lbfgs] mma lb increase per time = " << mma_lb_increase_per_time << " < lbfgs lb increase per time = " << lbfgs_lb_increase_per_time << ", choose lbfgs\n";
             return solver_type::lbfgs;
         }
     }
