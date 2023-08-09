@@ -15,7 +15,7 @@ namespace LPMP {
                 const double _init_step_size, const double _req_rel_lb_increase,
                 const double _step_size_decrease_factor, const double _step_size_increase_factor);
 #ifdef WITH_CUDA
-            lbfgs<bdd_cuda_parallel_mma<REAL>, thrust::device_vector<REAL>, REAL> mma;
+            lbfgs<bdd_cuda_parallel_mma<REAL>, thrust::device_vector<REAL>, REAL, thrust::device_vector<char>> mma;
 #endif
     };
 

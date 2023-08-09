@@ -26,7 +26,7 @@ using namespace thrust::placeholders;
 // size_t nr_layers()
 // void gradient_step(VECTOR)
 
-template<class SOLVER, typename VECTOR, typename REAL>
+template<class SOLVER, typename VECTOR, typename REAL, typename INT_VECTOR>
 class lbfgs : public SOLVER
 {
     public:
@@ -55,12 +55,14 @@ class lbfgs : public SOLVER
 
         struct history
         {
-            VECTOR s, y; // difference of x, grad_x f(x) resp.
+            VECTOR s; // difference of x
+            INT_VECTOR y; // different of grad_x f(x) in {-1, 0, 1}.
             REAL rho_inv;
         };
         std::deque<history> history;
 
-        VECTOR prev_x, prev_grad_f;
+        VECTOR prev_x;
+        INT_VECTOR prev_grad_f;
         const int m;
         double step_size;
         //double init_lb_increase;
@@ -86,8 +88,8 @@ class lbfgs : public SOLVER
         void lbfgs_iteration();
 };
 
-template <class SOLVER, typename VECTOR, typename REAL>
-lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int _history_size,
+template <class SOLVER, typename VECTOR, typename REAL, typename INT_VECTOR>
+lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs(const BDD::bdd_collection &bdd_col, const int _history_size,
                                    const double _init_step_size, const double _req_rel_lb_increase,
                                    const double _step_size_decrease_factor, const double _step_size_increase_factor)
     : SOLVER(bdd_col),
@@ -110,16 +112,17 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
         assert(m > 1);
 
         prev_x = VECTOR(this->nr_layers());
-        prev_grad_f = VECTOR(this->nr_layers());
+        prev_grad_f = INT_VECTOR(this->nr_layers());
     }
 
-    template <class SOLVER, typename VECTOR, typename REAL>
-    void lbfgs<SOLVER, VECTOR, REAL>::store_iterate()
+    template <class SOLVER, typename VECTOR, typename REAL, typename INT_VECTOR>
+    void lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::store_iterate()
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
 
-        VECTOR cur_x = this->net_solver_costs();
-        VECTOR cur_grad_f = this->bdds_solution_vec();
+        const VECTOR cur_x = this->net_solver_costs();
+        using INT_TYPE = typename INT_VECTOR::value_type;
+        INT_VECTOR cur_grad_f = this->template bdds_solution_vec<INT_TYPE>();
         
         assert(cur_x.size() == prev_x.size());
         assert(cur_grad_f.size() == prev_x.size());
@@ -139,7 +142,7 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
             std::transform(cur_x.begin(), cur_x.end(), prev_x.begin(), cur_s.begin(), std::minus<REAL>());
 #endif
             // compute grad_f_k - grad_f_{k-1}, but since we have maximization problem and lbfgs updates are derived for minimization so multiply gradients by -1.
-            VECTOR cur_y(cur_grad_f.size());
+            INT_VECTOR cur_y(cur_grad_f.size());
 #ifdef WITH_CUDA
             //thrust::transform(prev_grad_f.begin(), prev_grad_f.end(), cur_grad_f.begin(), cur_y.begin(), thrust::minus<REAL>());
             thrust::transform(prev_grad_f.begin(), prev_grad_f.end(), cur_grad_f.begin(), cur_y.begin(), _1 - _2);
@@ -172,14 +175,13 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
             {
                 //num_stored = std::max(num_stored - 1, 0);
             }
-            // TODO: std::move?
             prev_x = cur_x;
             prev_grad_f = cur_grad_f;
         }
     }
 
-    template<class SOLVER, typename VECTOR, typename REAL>
-    void lbfgs<SOLVER, VECTOR, REAL>::iteration()
+    template<class SOLVER, typename VECTOR, typename REAL, typename INT_VECTOR>
+    void lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::iteration()
     {
         if (lb_history.empty())
             lb_history.push_back(this->lower_bound());
@@ -198,8 +200,8 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
         lb_history.push_back(this->lower_bound());
     }
 
-    template<class SOLVER, typename VECTOR, typename REAL>
-    void lbfgs<SOLVER, VECTOR, REAL>::search_step_size_and_apply(const VECTOR& update)
+    template<class SOLVER, typename VECTOR, typename REAL, typename INT_VECTOR>
+    void lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::search_step_size_and_apply(const VECTOR& update)
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         const REAL lb_pre = this->lower_bound();
@@ -265,13 +267,15 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
         this->num_unsuccessful_lbfgs_updates_ = 0;
     }
 
-    template<class SOLVER, typename VECTOR, typename REAL>
-    VECTOR lbfgs<SOLVER, VECTOR, REAL>::compute_update_direction()
+    template<class SOLVER, typename VECTOR, typename REAL, typename INT_VECTOR>
+    VECTOR lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::compute_update_direction()
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
 
         assert(this->lbfgs_update_possible());
-        VECTOR direction = this->bdds_solution_vec();
+
+        using VEC_TYPE = typename VECTOR::value_type;
+        VECTOR direction = this->template bdds_solution_vec<VEC_TYPE>();
 
         assert(history.size() > 0);
         const size_t n = history.back().s.size();
@@ -324,8 +328,8 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
         return direction;
     }
 
-    template<class SOLVER, typename VECTOR, typename REAL>
-    void lbfgs<SOLVER, VECTOR, REAL>::flush_lbfgs_states()
+    template<class SOLVER, typename VECTOR, typename REAL, typename INT_VECTOR>
+    void lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::flush_lbfgs_states()
     {
         num_unsuccessful_lbfgs_updates_ = 0;
         history.clear();
@@ -335,23 +339,23 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
         //init_lb_valid = false;
     }
 
-    template<class SOLVER, typename VECTOR, typename REAL>
-    void lbfgs<SOLVER, VECTOR, REAL>::next_itr_without_storage()
+    template<class SOLVER, typename VECTOR, typename REAL, typename INT_VECTOR>
+    void lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::next_itr_without_storage()
     {
         history.pop_front();
     }
 
-    template<class SOLVER, typename VECTOR, typename REAL>
-    bool lbfgs<SOLVER, VECTOR, REAL>::lbfgs_update_possible() const
+    template<class SOLVER, typename VECTOR, typename REAL, typename INT_VECTOR>
+    bool lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs_update_possible() const
     {
         if (history.size() < m || num_unsuccessful_lbfgs_updates_ > 5) // || !init_lb_valid)
             return false;
         return true;
     }
 
-    template<class SOLVER, typename VECTOR, typename REAL>
+    template<class SOLVER, typename VECTOR, typename REAL, typename INT_VECTOR>
     template<typename ITERATOR>
-    void lbfgs<SOLVER, VECTOR, REAL>::update_costs(
+    void lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::update_costs(
         ITERATOR cost_delta_0_begin, ITERATOR cost_delta_0_end,
         ITERATOR cost_delta_1_begin, ITERATOR cost_delta_1_end)
     {
@@ -360,9 +364,9 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
     }
 
 #ifdef WITH_CUDA
-    template<class SOLVER, typename VECTOR, typename REAL>
+    template<class SOLVER, typename VECTOR, typename REAL, typename INT_VECTOR>
     template<typename REAL_arg>
-    void lbfgs<SOLVER, VECTOR, REAL>::update_costs(const thrust::device_vector<REAL_arg>& cost_0, const thrust::device_vector<REAL_arg>& cost_1)
+    void lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::update_costs(const thrust::device_vector<REAL_arg>& cost_0, const thrust::device_vector<REAL_arg>& cost_1)
     {
         flush_lbfgs_states();
         static_cast<SOLVER*>(this)->update_costs(cost_0, cost_1);
@@ -370,8 +374,8 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
     }
 #endif
 
-    template<class SOLVER, typename VECTOR, typename REAL>
-    void lbfgs<SOLVER, VECTOR, REAL>::mma_iteration()
+    template<class SOLVER, typename VECTOR, typename REAL, typename INT_VECTOR>
+    void lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::mma_iteration()
     {
         const double lb_before = this->lower_bound();
         const auto pre = std::chrono::steady_clock::now();
@@ -383,8 +387,8 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
         mma_iterations++;
     }
 
-    template<class SOLVER, typename VECTOR, typename REAL>
-    void lbfgs<SOLVER, VECTOR, REAL>::lbfgs_iteration()
+    template<class SOLVER, typename VECTOR, typename REAL, typename INT_VECTOR>
+    void lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs_iteration()
     {
         const double lb_before = this->lower_bound();
         const auto pre = std::chrono::steady_clock::now();
@@ -408,8 +412,8 @@ lbfgs<SOLVER, VECTOR, REAL>::lbfgs(const BDD::bdd_collection &bdd_col, const int
         lbfgs_iterations++;
     }
 
-    template<class SOLVER, typename VECTOR, typename REAL>
-    typename lbfgs<SOLVER, VECTOR, REAL>::solver_type lbfgs<SOLVER, VECTOR, REAL>::choose_solver() const
+    template<class SOLVER, typename VECTOR, typename REAL, typename INT_VECTOR>
+    typename lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::solver_type lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::choose_solver() const
     {
         if (!lbfgs_update_possible())
         {

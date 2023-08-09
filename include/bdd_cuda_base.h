@@ -82,8 +82,11 @@ namespace LPMP {
             two_dim_variable_array<std::array<double,2>> min_marginals();
             std::tuple<thrust::device_vector<int>, thrust::device_vector<REAL>, thrust::device_vector<REAL>> min_marginals_cuda(bool get_sorted = true);
 
-            void bdds_solution_cuda(thrust::device_ptr<REAL> sol); // Computes argmin for each BDD separately and sets in sol.
-            thrust::device_vector<REAL> bdds_solution_vec();
+            template<typename REAL_arg>
+            void bdds_solution_cuda(thrust::device_ptr<REAL_arg> sol); // Computes argmin for each BDD separately and sets in sol.
+
+            template<typename RETURN_TYPE>
+            thrust::device_vector<RETURN_TYPE> bdds_solution_vec();
 
             two_dim_variable_array<REAL> bdds_solution(); // Returns the solution on CPU and laid out in similar way as the output of min_marginals()
 

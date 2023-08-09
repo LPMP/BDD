@@ -13,7 +13,7 @@ namespace LPMP {
                 const double _init_step_size, const double _req_rel_lb_increase,
                 const double _step_size_decrease_factor, const double _step_size_increase_factor);
 
-            lbfgs<bdd_parallel_mma_base<bdd_branch_instruction<REAL, uint16_t>>, std::vector<REAL>, REAL> mma;
+            lbfgs<bdd_parallel_mma_base<bdd_branch_instruction<REAL, uint16_t>>, std::vector<REAL>, REAL, std::vector<char>> mma;
     };
 
     template<typename REAL>

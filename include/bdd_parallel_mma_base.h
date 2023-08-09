@@ -87,7 +87,8 @@ namespace LPMP {
                 void export_graphviz(STREAM& s, const size_t bdd_nr);
 
             // LBFGS operations
-            std::vector<value_type> bdds_solution_vec();
+            template<typename RETURN_TYPE>
+            std::vector<RETURN_TYPE> bdds_solution_vec();
             std::vector<value_type> net_solver_costs();
             template<typename ITERATOR>
             void make_dual_feasible(ITERATOR begin, ITERATOR end) const;
@@ -1250,11 +1251,12 @@ namespace LPMP {
         }
 
         template <typename BDD_BRANCH_NODE>
-        std::vector<typename BDD_BRANCH_NODE::value_type> bdd_parallel_mma_base<BDD_BRANCH_NODE>::bdds_solution_vec()
+        template<typename RETURN_TYPE>
+        std::vector<RETURN_TYPE> bdd_parallel_mma_base<BDD_BRANCH_NODE>::bdds_solution_vec()
         {
             backward_run();
 
-            std::vector<value_type> solutions;
+            std::vector<RETURN_TYPE> solutions;
             solutions.reserve(nr_bdd_variables());
 
             // TODO: parallelize

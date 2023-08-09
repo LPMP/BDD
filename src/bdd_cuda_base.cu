@@ -773,7 +773,7 @@ namespace LPMP {
         return min_margs;
     }
 
-    template<typename REAL>
+    template<typename REAL, typename REAL_arg>
     struct compute_bdd_sol_func {
         const int* bdd_node_to_layer_map;
         const int* lo_bdd_node_index;
@@ -781,7 +781,7 @@ namespace LPMP {
         const REAL* lo_path_cost;
         const REAL* hi_path_cost;
         int* next_path_nodes;
-        REAL* sol;
+        REAL_arg* sol;
         __host__ __device__ void operator()(const int layer_index)
         {
             const int node_index = next_path_nodes[layer_index]; // which node to select in current bdd layer.
@@ -808,15 +808,27 @@ namespace LPMP {
     };
 
     template<typename REAL>
-    thrust::device_vector<REAL> bdd_cuda_base<REAL>::bdds_solution_vec()
+    template<typename RETURN_TYPE>
+    thrust::device_vector<RETURN_TYPE> bdd_cuda_base<REAL>::bdds_solution_vec()
     {
-        thrust::device_vector<REAL> sol(nr_layers());
+        thrust::device_vector<RETURN_TYPE> sol(nr_layers());
         bdds_solution_cuda(sol.data());
         return sol;
     }
 
+    template thrust::device_vector<float> bdd_cuda_base<float>::bdds_solution_vec();
+    template thrust::device_vector<double> bdd_cuda_base<float>::bdds_solution_vec();
+    template thrust::device_vector<char> bdd_cuda_base<float>::bdds_solution_vec();
+    template thrust::device_vector<int> bdd_cuda_base<float>::bdds_solution_vec();
+
+    template thrust::device_vector<float> bdd_cuda_base<double>::bdds_solution_vec();
+    template thrust::device_vector<double> bdd_cuda_base<double>::bdds_solution_vec();
+    template thrust::device_vector<char> bdd_cuda_base<double>::bdds_solution_vec();
+    template thrust::device_vector<int> bdd_cuda_base<double>::bdds_solution_vec();
+
     template<typename REAL>
-    void bdd_cuda_base<REAL>::bdds_solution_cuda(thrust::device_ptr<REAL> sol)
+    template<typename REAL_arg>
+    void bdd_cuda_base<REAL>::bdds_solution_cuda(thrust::device_ptr<REAL_arg> sol)
     {
         forward_run();
         thrust::device_vector<REAL> lo_path_cost, hi_path_cost; 
@@ -828,7 +840,7 @@ namespace LPMP {
         // Start from root nodes of all BDDs in parallel.
         thrust::sequence(next_path_nodes.begin(), next_path_nodes.begin() + cum_nr_layers_per_hop_dist_[0]);
 
-        compute_bdd_sol_func<REAL> func({thrust::raw_pointer_cast(bdd_node_to_layer_map_.data()),
+        compute_bdd_sol_func<REAL, REAL_arg> func({thrust::raw_pointer_cast(bdd_node_to_layer_map_.data()),
                                         thrust::raw_pointer_cast(lo_bdd_node_index_.data()),
                                         thrust::raw_pointer_cast(hi_bdd_node_index_.data()),
                                         thrust::raw_pointer_cast(lo_path_cost.data()),
