@@ -127,7 +127,11 @@ lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs(const BDD::bdd_collection &bdd_co
         if (!prev_states_stored)
         {
             prev_x = cur_x;
+#ifdef WITH_CUDA
             thrust::copy(cur_grad_f.begin(), cur_grad_f.end(), prev_grad_f.begin());
+#else
+            std::copy(cur_grad_f.begin(), cur_grad_f.end(), prev_grad_f.begin());
+#endif
             prev_states_stored = true;
         }
         else
@@ -174,7 +178,11 @@ lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs(const BDD::bdd_collection &bdd_co
                 prev_states_stored = false;
             }
             prev_x = cur_x;
+#ifdef WITH_CUDA
             thrust::copy(cur_grad_f.begin(), cur_grad_f.end(), prev_grad_f.begin());
+#else
+            std::copy(cur_grad_f.begin(), cur_grad_f.end(), prev_grad_f.begin());
+#endif
         }
     }
 
@@ -276,7 +284,11 @@ lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs(const BDD::bdd_collection &bdd_co
         assert(this->lbfgs_update_possible());
 
         VECTOR direction(cur_grad_f.size());
+#ifdef WITH_CUDA
         thrust::copy(cur_grad_f.begin(), cur_grad_f.end(), direction.begin());
+#else
+        std::copy(cur_grad_f.begin(), cur_grad_f.end(), direction.begin());
+#endif
 
         assert(history.size() > 0);
         const size_t n = history.back().s.size();

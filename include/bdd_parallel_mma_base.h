@@ -1342,8 +1342,6 @@ namespace LPMP {
         std::vector<typename BDD_BRANCH_NODE::value_type> bdd_parallel_mma_base<BDD_BRANCH_NODE>::net_solver_costs()
         {
             std::vector<value_type> costs(nr_bdd_variables(), 0.0);
-            assert(delta_out_.size() == nr_variables());
-            assert(delta_in_.size() == nr_variables());
 
             size_t c = 0;
 
@@ -1366,10 +1364,19 @@ namespace LPMP {
                     assert(high_cost !=  -std::numeric_limits<value_type>::infinity());
                     const size_t var = variable(bdd_nr, idx);
                     const value_type nr_bdds_per_var = nr_bdds(var);
-                    costs[c++] = high_cost - low_cost 
-                                 + delta_in_[var][1]/nr_bdds_per_var - delta_in_[var][0]/nr_bdds_per_var
-                                 + delta_out_[var][1]/nr_bdds_per_var - delta_out_[var][0]/nr_bdds_per_var;
+                    costs[c] = high_cost - low_cost;
+                    if(delta_in_.size() > 0)
+                    {
+                        assert(delta_in_.size() == nr_variables());
+                        costs[c] += delta_in_[var][1]/nr_bdds_per_var - delta_in_[var][0]/nr_bdds_per_var;
+                    }
+                    if(delta_out_.size() > 0)
+                    {
+                        assert(delta_out_.size() == nr_variables());
+                        costs[c] += delta_out_[var][1]/nr_bdds_per_var - delta_out_[var][0]/nr_bdds_per_var;
+                    }
                     assert(std::isfinite(costs[c - 1]));
+                    c++;
                 }
             }
             assert(c == nr_bdd_variables());
