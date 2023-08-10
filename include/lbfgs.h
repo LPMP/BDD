@@ -46,8 +46,8 @@ class lbfgs : public SOLVER
 #endif
 
     private:
-        void store_iterate();
-        VECTOR compute_update_direction();
+        void store_iterate(const INT_VECTOR& grad_f);
+        VECTOR compute_update_direction(const INT_VECTOR& grad_f);
         void search_step_size_and_apply(const VECTOR &update);
         void flush_lbfgs_states();
         bool lbfgs_update_possible() const;
@@ -85,7 +85,7 @@ class lbfgs : public SOLVER
         solver_type choose_solver() const;
 
         void mma_iteration();
-        void lbfgs_iteration();
+        void lbfgs_iteration(const INT_VECTOR& grad_f);
 };
 
 template <class SOLVER, typename VECTOR, typename REAL, typename INT_VECTOR>
@@ -116,20 +116,18 @@ lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs(const BDD::bdd_collection &bdd_co
     }
 
     template <class SOLVER, typename VECTOR, typename REAL, typename INT_VECTOR>
-    void lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::store_iterate()
+    void lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::store_iterate(const INT_VECTOR& cur_grad_f)
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
 
         const VECTOR cur_x = this->net_solver_costs();
-        using INT_TYPE = typename INT_VECTOR::value_type;
-        INT_VECTOR cur_grad_f = this->template bdds_solution_vec<INT_TYPE>();
         
         assert(cur_x.size() == prev_x.size());
         assert(cur_grad_f.size() == prev_x.size());
         if (!prev_states_stored)
         {
             prev_x = cur_x;
-            prev_grad_f = cur_grad_f;
+            thrust::copy(cur_grad_f.begin(), cur_grad_f.end(), prev_grad_f.begin());
             prev_states_stored = true;
         }
         else
@@ -170,13 +168,13 @@ lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs(const BDD::bdd_collection &bdd_co
                     history.pop_front();
                     assert(history.size() == m);
                 }
-            } // when skipping estimate of hessian will become out-of-date. However removing these updates as below gives worse results than not removing.
+            }
             else
             {
-                //num_stored = std::max(num_stored - 1, 0);
+                prev_states_stored = false;
             }
             prev_x = cur_x;
-            prev_grad_f = cur_grad_f;
+            thrust::copy(cur_grad_f.begin(), cur_grad_f.end(), prev_grad_f.begin());
         }
     }
 
@@ -186,17 +184,20 @@ lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs(const BDD::bdd_collection &bdd_co
         if (lb_history.empty())
             lb_history.push_back(this->lower_bound());
 
+        using INT_TYPE = typename INT_VECTOR::value_type;
+        // Update LBFGS states:
+        const INT_VECTOR cur_grad_f = this->template bdds_solution_vec<INT_TYPE>();
+        this->store_iterate(cur_grad_f);
+
         // Check if enough history accumulated
         if (this->choose_solver() == solver_type::lbfgs)
         {
-           lbfgs_iteration(); 
-           //mma_iteration();
+            lbfgs_iteration(cur_grad_f); 
+            //mma_iteration();
         }
         else
-           mma_iteration();
+            mma_iteration();
 
-        // Update LBFGS states:
-        this->store_iterate();
         lb_history.push_back(this->lower_bound());
     }
 
@@ -268,14 +269,14 @@ lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs(const BDD::bdd_collection &bdd_co
     }
 
     template<class SOLVER, typename VECTOR, typename REAL, typename INT_VECTOR>
-    VECTOR lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::compute_update_direction()
+    VECTOR lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::compute_update_direction(const INT_VECTOR& cur_grad_f)
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
 
         assert(this->lbfgs_update_possible());
 
-        using VEC_TYPE = typename VECTOR::value_type;
-        VECTOR direction = this->template bdds_solution_vec<VEC_TYPE>();
+        VECTOR direction(cur_grad_f.size());
+        thrust::copy(cur_grad_f.begin(), cur_grad_f.end(), direction.begin());
 
         assert(history.size() > 0);
         const size_t n = history.back().s.size();
@@ -388,13 +389,13 @@ lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs(const BDD::bdd_collection &bdd_co
     }
 
     template<class SOLVER, typename VECTOR, typename REAL, typename INT_VECTOR>
-    void lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs_iteration()
+    void lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs_iteration(const INT_VECTOR& cur_grad_f)
     {
         const double lb_before = this->lower_bound();
         const auto pre = std::chrono::steady_clock::now();
 
         // Compute LBFGS update direction. This can be infeasible.
-        VECTOR grad_lbfgs = this->compute_update_direction();
+        VECTOR grad_lbfgs = this->compute_update_direction(cur_grad_f);
 
         // Make the update direction dual feasible by making it sum to zero for all primal variables.
         this->make_dual_feasible(grad_lbfgs.begin(), grad_lbfgs.end()); // TODO: Implement for all solvers

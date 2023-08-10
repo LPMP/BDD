@@ -830,6 +830,7 @@ namespace LPMP {
     template<typename REAL_arg>
     void bdd_cuda_base<REAL>::bdds_solution_cuda(thrust::device_ptr<REAL_arg> sol)
     {
+        MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
         forward_run();
         thrust::device_vector<REAL> lo_path_cost, hi_path_cost; 
         std::tie(lo_path_cost, hi_path_cost) = backward_run(true);
