@@ -619,8 +619,9 @@ namespace LPMP {
                     } },
                                         *solver);
 
-            assert(sol.size() >= options.ilp.nr_variables());
-            const double obj = options.ilp.evaluate(sol.begin(), sol.begin() + options.ilp.nr_variables());
+            double obj = std::numeric_limits<double>::infinity();
+            if (sol.size() >= options.ilp.nr_variables())
+                obj = options.ilp.evaluate(sol.begin(), sol.begin() + options.ilp.nr_variables());
             bdd_log << "[incremental primal rounding] solution objective = " << obj << "\n";
             return {obj, sol};
         }
