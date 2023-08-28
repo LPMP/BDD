@@ -165,6 +165,16 @@ namespace LPMP {
             std::unordered_set<size_t> one_fixations;
         };
 
+        template<> struct action< objective > {
+            template<typename INPUT>
+                static void apply(const INPUT & in, ILP_input& i, tmp_storage& tmp)
+                {
+                    std::string obj = in.string();
+                    trim(obj);
+                    if (obj == "Subject To")
+                        bdd_log << "[ILP parser] problem has empty objective\n";
+                }
+        };
         template<> struct action< first_objective_coefficient > {
             template<typename INPUT>
                 static void apply(const INPUT & in, ILP_input& i, tmp_storage& tmp)
@@ -427,6 +437,18 @@ namespace LPMP {
                 }
         };
 
+        void print_ILP_diagnostics(const ILP_input& ilp)
+        {
+#ifndef NDEBUG
+            if(!ilp.every_variable_in_some_ineq())
+                bdd_log << "[ILP parser] ILP has variables that are not present in any constraint\n";
+
+            const size_t nr_subproblems = ilp.nr_disconnected_subproblems();
+            if(nr_subproblems != 1)
+                bdd_log << "[ILP parser] ILP can bedivided into " << nr_subproblems << " subproblems\n";
+#endif
+        }
+
         ILP_input parse_file(const std::string& filename)
         {
             MEASURE_FUNCTION_EXECUTION_TIME;
@@ -437,15 +459,8 @@ namespace LPMP {
                 throw std::runtime_error("could not read input file " + filename);
             if(tmp.one_fixations.size() > 0 || tmp.zero_fixations.size() > 0)
                 ilp = ilp.reduce(tmp.zero_fixations, tmp.one_fixations);
+            print_ILP_diagnostics(ilp);
 
-#ifndef NDEBUG
-            if(!ilp.every_variable_in_some_ineq())
-                std::cout << "[ILP parser] ILP has variables that are not present in any constraint\n";
-
-            const size_t nr_subproblems = ilp.nr_disconnected_subproblems();
-            if(nr_subproblems != 1)
-                std::cout << "[ILP parser] ILP can bedivided into " << nr_subproblems << " subproblems\n";
-#endif
             return ilp;
         }
 
@@ -460,18 +475,11 @@ namespace LPMP {
                 throw std::runtime_error("could not read input:\n" + input_string);
             if(tmp.one_fixations.size() > 0 || tmp.zero_fixations.size() > 0)
                 ilp = ilp.reduce(tmp.zero_fixations, tmp.one_fixations);
+            print_ILP_diagnostics(ilp);
 
-#ifndef NDEBUG
-            if(!ilp.every_variable_in_some_ineq())
-                std::cout << "[ILP parser] ILP has variables that are not present in any constraint\n";
-
-            const size_t nr_subproblems = ilp.nr_disconnected_subproblems();
-            if(nr_subproblems != 1)
-                std::cout << "[ILP parser] ILP can bedivided into " << nr_subproblems << " subproblems\n";
-#endif
             return ilp;
         }
 
-    } 
+    }
 
 }
