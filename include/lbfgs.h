@@ -46,7 +46,7 @@ class lbfgs : public SOLVER
 #endif
 
     private:
-        void store_iterate(const INT_VECTOR& grad_f);
+        void store_iterate(const INT_VECTOR &grad_f);
         VECTOR compute_update_direction(const INT_VECTOR& grad_f);
         void search_step_size_and_apply(const VECTOR &update);
         void flush_lbfgs_states();
@@ -128,10 +128,11 @@ lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs(const BDD::bdd_collection &bdd_co
         {
             prev_x = cur_x;
 #ifdef WITH_CUDA
-            thrust::copy(cur_grad_f.begin(), cur_grad_f.end(), prev_grad_f.begin());
-#else
-            std::copy(cur_grad_f.begin(), cur_grad_f.end(), prev_grad_f.begin());
+            if constexpr (cuda)
+                thrust::copy(cur_grad_f.begin(), cur_grad_f.end(), prev_grad_f.begin());
+            else
 #endif
+                std::copy(cur_grad_f.begin(), cur_grad_f.end(), prev_grad_f.begin());
             prev_states_stored = true;
         }
         else

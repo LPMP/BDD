@@ -64,12 +64,15 @@ namespace LPMP {
         struct subject_to : tao::pegtl::istring<'S','u','b','j','e','c','t',' ','T','o'> {};
 
         // TODO: use not_at instead of until
-        struct objective : tao::pegtl::until< subject_to, 
-                                              tao::pegtl::seq< opt_invisible, first_objective_term, 
-                                                               tao::pegtl::star< opt_invisible, subsequent_objective_term >
-                                                             >,
-                                              opt_invisible, tao::pegtl::opt< objective_constant, opt_invisible > 
-                                            >
+        struct objective : tao::pegtl::until<subject_to,
+                                             tao::pegtl::seq<
+                                                 opt_invisible,
+                                                 tao::pegtl::opt<
+                                                     first_objective_term,
+                                                     tao::pegtl::star<opt_invisible, subsequent_objective_term>,
+                                                     opt_invisible, tao::pegtl::opt<objective_constant>>,
+                                                 opt_invisible>
+                                                 >
         {};
 
         struct subject_to_line : tao::pegtl::seq<opt_whitespace, subject_to, opt_whitespace, tao::pegtl::eol> {};
@@ -111,11 +114,6 @@ namespace LPMP {
                                  tao::pegtl::eol
                                  > {};
 
-        struct coalesce_begin : tao::pegtl::seq<opt_whitespace, tao::pegtl::string<'C','o','a','l','e','s','c','e'>, opt_whitespace, tao::pegtl::eol> {};
-
-        struct coalesce_identifier : term_identifier {};
-        struct coalesce_line : tao::pegtl::seq<opt_whitespace, coalesce_identifier, tao::pegtl::plus<opt_whitespace, coalesce_identifier>, opt_whitespace, tao::pegtl::eol> {};
-
         struct bounds_begin : tao::pegtl::opt<tao::pegtl::seq<opt_whitespace, tao::pegtl::string<'B','o','u','n','d','s'>, opt_whitespace, tao::pegtl::eol>> {};
         struct generals_begin : tao::pegtl::opt<tao::pegtl::seq<opt_whitespace, tao::pegtl::string<'G','e','n','e','r','a','l','s'>, opt_whitespace, tao::pegtl::eol>> {};
 
@@ -137,12 +135,12 @@ namespace LPMP {
         struct grammar : tao::pegtl::seq<
                          tao::pegtl::star<comment_line>,
                          min_line,
-                         objective,
                          opt_invisible,
+                         objective,
+                         //opt_invisible,
                          //subject_to_line,
                          opt_invisible,
                          tao::pegtl::star<inequality_line, opt_whitespace>,
-                         //tao::pegtl::opt<coalesce_begin, tao::pegtl::star<coalesce_line>>,
                          bounds_begin, // ignore everything after bounds (variables are assumed to be binary)
                          tao::pegtl::star<tao::pegtl::sor<
                             bounds_var_fixation_line,
@@ -163,7 +161,6 @@ namespace LPMP {
             int constraint_coeff = 1;
             std::vector<size_t> constraint_monomial;
             std::string inequality_identifier = "";
-            std::vector<std::string> coalesce_identifiers;
             std::unordered_set<size_t> zero_fixations;
             std::unordered_set<size_t> one_fixations;
         };
@@ -330,24 +327,6 @@ namespace LPMP {
                     std::string stripped = in.string();
                     stripped.erase(std::remove_if(stripped.begin(), stripped.end(), ::isspace), stripped.end());
                     i.set_right_hand_side(std::stoi(stripped));
-                }
-        };
-
-        template<> struct action< coalesce_identifier > {
-            template<typename INPUT>
-                static void apply(const INPUT & in, ILP_input& i, tmp_storage& tmp)
-                {
-                    tmp.coalesce_identifiers.push_back(in.string());
-                }
-        };
-
-        template<> struct action< coalesce_line > {
-            template<typename INPUT>
-                static void apply(const INPUT & in, ILP_input& i, tmp_storage& tmp)
-                {
-                    assert(tmp.coalesce_identifiers.size() > 1);
-                    i.add_constraint_group(tmp.coalesce_identifiers.begin(), tmp.coalesce_identifiers.end());
-                    tmp.coalesce_identifiers.clear();
                 }
         };
 
