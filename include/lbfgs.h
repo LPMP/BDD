@@ -434,29 +434,30 @@ lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs(const BDD::bdd_collection &bdd_co
             // bdd_log << "[lbfgs] Do mma iterations for collecting states\n";
             return solver_type::mma;
         }
+        return solver_type::lbfgs;
 
-        if (double(lbfgs_iterations) / double(mma_iterations + 1e-9) > 50.0)
-        {
-            // bdd_log << "[lbfgs] Do mma iterations to estimate mma improvement\n";
-            return solver_type::mma;
-        }
+        // if (double(lbfgs_iterations) / double(mma_iterations + 1e-9) > 50.0)
+        // {
+        //     // bdd_log << "[lbfgs] Do mma iterations to estimate mma improvement\n";
+        //     return solver_type::mma;
+        // }
 
-        if(double(mma_iterations)/double(lbfgs_iterations+1e-9) > 50.0)
-        {
-            // bdd_log << "[lbfgs] Do lbfgs iterations to estimate lbfgs improvement\n";
-            return solver_type::lbfgs;
-        }
+        // if(double(mma_iterations)/double(lbfgs_iterations+1e-9) > 50.0)
+        // {
+        //     // bdd_log << "[lbfgs] Do lbfgs iterations to estimate lbfgs improvement\n";
+        //     return solver_type::lbfgs;
+        // }
 
-        if(mma_lb_increase_per_time > 3.0 * lbfgs_lb_increase_per_time)
-        {
-            // bdd_log << "[lbfgs] mma lb increase per time = " << mma_lb_increase_per_time << " > lbfgs lb increase per time = " << lbfgs_lb_increase_per_time << ", choose mma\n";
-            return solver_type::mma;
-        }
-        else
-        {
-            // bdd_log << "[lbfgs] mma lb increase per time = " << mma_lb_increase_per_time << " < lbfgs lb increase per time = " << lbfgs_lb_increase_per_time << ", choose lbfgs\n";
-            return solver_type::lbfgs;
-        }
+        // if(mma_lb_increase_per_time > 3.0 * lbfgs_lb_increase_per_time)
+        // {
+        //     // bdd_log << "[lbfgs] mma lb increase per time = " << mma_lb_increase_per_time << " > lbfgs lb increase per time = " << lbfgs_lb_increase_per_time << ", choose mma\n";
+        //     return solver_type::mma;
+        // }
+        // else
+        // {
+        //     // bdd_log << "[lbfgs] mma lb increase per time = " << mma_lb_increase_per_time << " < lbfgs lb increase per time = " << lbfgs_lb_increase_per_time << ", choose lbfgs\n";
+        //     return solver_type::lbfgs;
+        // }
     }
 
 }
