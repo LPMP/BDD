@@ -163,7 +163,8 @@ namespace LPMP {
             {"cuda_mma",bdd_solver_impl::mma_cuda},
             {"hybrid_parallel_mma",bdd_solver_impl::hybrid_parallel_mma},
             {"lbfgs_cuda_mma", bdd_solver_impl::lbfgs_cuda_mma},
-            {"lbfgs_parallel_mma", bdd_solver_impl::lbfgs_parallel_mma}
+            {"lbfgs_parallel_mma", bdd_solver_impl::lbfgs_parallel_mma},
+            {"subgradient", bdd_solver_impl::subgradient}
         };
 
         auto solver_group = app.add_option_group("solver", "solver either a BDD solver, output of statistics or export of LP solved by BDD relaxation");
@@ -178,7 +179,7 @@ namespace LPMP {
             {"double",bdd_solver_precision::double_prec}
         };
 
-        auto bdd_solver_precision_arg = app.add_option("--precision", bdd_solver_precision_, "floating point precision used in solver")
+        auto bdd_solver_precision_arg = app.add_option("--precision", bdd_solver_precision_, "floating point precision used in solver (default double)")
             ->transform(CLI::CheckedTransformer(bdd_solver_precision_map, CLI::ignore_case));
 
         app.add_option("--smoothing", smoothing, "smoothing, default value = 0 (no smoothing)")
@@ -486,6 +487,18 @@ namespace LPMP {
             else
                 throw std::runtime_error("only float and double precision allowed");
             bdd_log << "[bdd solver] constructed LBFGS parallel mma solver\n"; 
+        }
+        else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::subgradient)
+        {
+            if(options.smoothing != 0)
+                throw std::runtime_error("no smoothing implemented for subgradient");
+            if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::single_prec)
+                solver = std::move(bdd_subgradient<float>(bdd_pre.get_bdd_collection(), costs.begin(), costs.end()));
+            else if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::double_prec)
+                solver = std::move(bdd_subgradient<double>(bdd_pre.get_bdd_collection(), costs.begin(), costs.end()));
+            else
+                throw std::runtime_error("only float and double precision allowed");
+            bdd_log << "[bdd solver] constructed subgradient solver\n"; 
         }
         else
         {

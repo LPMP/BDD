@@ -6,11 +6,11 @@
 #include "bdd_logging.h"
 #include <deque>
 #ifdef WITH_CUDA
-// #include "cuda_utils.h"
 #include <thrust/for_each.h>
 #include <thrust/inner_product.h>
 #include <thrust/host_vector.h>
 #include <thrust/device_vector.h>
+#include <thrust/execution_policy.h>
 #endif
 
 namespace LPMP {
@@ -86,6 +86,9 @@ class lbfgs : public SOLVER
 
         void mma_iteration();
         void lbfgs_iteration(const INT_VECTOR& grad_f);
+
+        // for executing on host vs. device
+        //constexpr static bool gpu = SOLVER::
 };
 
 template <class SOLVER, typename VECTOR, typename REAL, typename INT_VECTOR>
@@ -384,7 +387,6 @@ lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs(const BDD::bdd_collection &bdd_co
     {
         flush_lbfgs_states();
         static_cast<SOLVER*>(this)->update_costs(cost_0, cost_1);
-
     }
 #endif
 

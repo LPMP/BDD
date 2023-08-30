@@ -44,6 +44,7 @@ namespace LPMP {
             two_dim_variable_array<std::array<double,2>> min_marginals();
             using min_marginal_type = Eigen::Matrix<typename BDD_BRANCH_NODE::value_type, Eigen::Dynamic, 2>;
             std::tuple<min_marginal_type, std::vector<char>> min_marginals_stacked();
+            std::tuple<std::vector<value_type>, std::vector<value_type>> min_marginals_vec(); // returns primal variables, lo mms, hi mms
 
             template<typename COST_ITERATOR>
                 void update_costs(COST_ITERATOR cost_lo_begin, COST_ITERATOR cost_lo_end, COST_ITERATOR cost_hi_begin, COST_ITERATOR cost_hi_end);
@@ -610,6 +611,91 @@ namespace LPMP {
             bdd_log << "solutions size " << solutions.size() << "\n";
 
             return {min_margs, solutions};
+        }
+
+    template<typename BDD_BRANCH_NODE>
+        std::tuple<std::vector<typename BDD_BRANCH_NODE::value_type>, std::vector<typename BDD_BRANCH_NODE::value_type>> bdd_parallel_mma_base<BDD_BRANCH_NODE>::min_marginals_vec()
+        {
+            backward_run();
+            std::vector<value_type> mm_lo, mm_hi;
+            mm_lo.reserve(nr_bdd_variables());
+            mm_hi.reserve(nr_bdd_variables());
+
+//#pragma omp parallel for schedule(guided,128)
+            size_t c = 0;
+            for(size_t bdd_nr=0; bdd_nr<nr_bdds(); ++bdd_nr)
+            {
+                // intialize
+                const auto [first,last] = bdd_index_range(bdd_nr, 0);
+                assert(first + 1 == last);
+                const value_type bdd_lb = bdd_branch_nodes_[first].m; 
+                bdd_branch_nodes_[first].m = 0.0;
+
+                size_t next_node = first;
+                for(size_t idx=0; idx<nr_variables(bdd_nr); ++idx, ++c)
+                {
+                    std::array<value_type,2> mm = {std::numeric_limits<value_type>::infinity(), std::numeric_limits<value_type>::infinity()};
+
+                    const auto [first,last] = bdd_index_range(bdd_nr, idx);
+                    for(size_t i=first; i<last; ++i)
+                    {
+                        const std::array<value_type,2> cur_mm = bdd_branch_nodes_[i].min_marginals();
+                        mm[0] = std::min(mm[0], cur_mm[0]);
+                        mm[1] = std::min(mm[1], cur_mm[1]); 
+
+                        // see if active path points to current node;
+                        if(next_node == i)
+                        {
+                            if(cur_mm[0] < cur_mm[1])
+                            {
+                                assert(std::abs(bdd_lb - mm[0]) <= 1e-6);
+                                if(bdd_branch_nodes_[i].offset_low == BDD_BRANCH_NODE::terminal_0_offset)
+                                {
+                                    assert(false); // this cannot happen
+                                }
+                                else if(bdd_branch_nodes_[i].offset_low == BDD_BRANCH_NODE::terminal_1_offset)
+                                {
+                                    // we have arrived at the last variable of the bdd
+                                    assert(idx+1 == nr_variables(bdd_nr));
+                                }
+                                else
+                                {
+                                    next_node = std::distance(&bdd_branch_nodes_[0], bdd_branch_nodes_[i].address(bdd_branch_nodes_[i].offset_low));
+                                }
+                            }
+                            else
+                            {
+                                assert(std::abs(bdd_lb - mm[1]) <= 1e-6);
+                                if(bdd_branch_nodes_[i].offset_high == BDD_BRANCH_NODE::terminal_0_offset)
+                                {
+                                    assert(false); // this cannot happen
+                                }
+                                else if(bdd_branch_nodes_[i].offset_high == BDD_BRANCH_NODE::terminal_1_offset)
+                                {
+                                    // we have arrived at the last variable of the bdd
+                                    assert(idx+1 == nr_variables(bdd_nr));
+                                }
+                                else
+                                {
+                                    next_node = std::distance(&bdd_branch_nodes_[0], bdd_branch_nodes_[i].address(bdd_branch_nodes_[i].offset_high));
+                                }
+                            }
+                        }
+                    }
+
+                    mm_lo.push_back(mm[0]);
+                    mm_hi.push_back(mm[1]);
+
+                    for(size_t i=first; i<last; ++i)
+                        bdd_branch_nodes_[i].prepare_forward_step(); 
+                    for(size_t i=first; i<last; ++i)
+                        bdd_branch_nodes_[i].forward_step();
+                }
+            }
+
+            message_passing_state_ = message_passing_state::after_forward_pass;
+
+            return {mm_lo, mm_hi};
         }
 
     template<typename BDD_BRANCH_NODE>

@@ -11,6 +11,7 @@
 #include "bdd_multi_parallel_mma.h"
 #include "bdd_lbfgs_parallel_mma.h"
 #include "bdd_lbfgs_cuda_mma.h"
+#include "bdd_subgradient.h"
 #include "incremental_mm_agreement_rounding.hxx"
 #include <variant> 
 #include <optional>
@@ -48,8 +49,8 @@ namespace LPMP {
         double time_limit = 3600;
         //////////////////////////
 
-        enum class bdd_solver_impl { sequential_mma, mma_cuda, parallel_mma, hybrid_parallel_mma, lbfgs_cuda_mma, lbfgs_parallel_mma } bdd_solver_impl_;
-        enum class bdd_solver_precision { single_prec, double_prec } bdd_solver_precision_ = bdd_solver_precision::single_prec;
+        enum class bdd_solver_impl { sequential_mma, mma_cuda, parallel_mma, hybrid_parallel_mma, lbfgs_cuda_mma, lbfgs_parallel_mma, subgradient } bdd_solver_impl_;
+        enum class bdd_solver_precision { single_prec, double_prec } bdd_solver_precision_ = bdd_solver_precision::double_prec;
         bool solution_statistics = false;
 
         double smoothing = 0;
@@ -128,7 +129,9 @@ namespace LPMP {
                 bdd_lbfgs_parallel_mma<double>,
                 bdd_lbfgs_parallel_mma<float>,
                 bdd_lbfgs_cuda_mma<double>,
-                bdd_lbfgs_cuda_mma<float>
+                bdd_lbfgs_cuda_mma<float>,
+                bdd_subgradient<float>,
+                bdd_subgradient<double>
                     >;
             std::optional<solver_type> solver;
             std::vector<double> costs;
