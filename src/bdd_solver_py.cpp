@@ -26,6 +26,7 @@ PYBIND11_MODULE(bdd_solver_py, m) {
         .def_readwrite("dual_improvement_slope", &LPMP::bdd_solver_options::improvement_slope)
         .def_readwrite("dual_time_limit", &LPMP::bdd_solver_options::time_limit)
         .def_readwrite("bdd_solver_type", &LPMP::bdd_solver_options::bdd_solver_impl_)
+        .def_readwrite("precision", &LPMP::bdd_solver_options::bdd_solver_precision_)
         .def_readwrite("incremental_primal_rounding", &LPMP::bdd_solver_options::incremental_primal_rounding)
         .def_readwrite("incremental_initial_perturbation", &LPMP::bdd_solver_options::incremental_initial_perturbation)
         .def_readwrite("incremental_growth_rate", &LPMP::bdd_solver_options::incremental_growth_rate)
@@ -54,6 +55,10 @@ PYBIND11_MODULE(bdd_solver_py, m) {
         .value("hybrid_parallel_mma", LPMP::bdd_solver_options::bdd_solver_impl::hybrid_parallel_mma)
         .value("lbfgs_parallel_mma", LPMP::bdd_solver_options::bdd_solver_impl::lbfgs_parallel_mma)
         .value("lbfgs_cuda_mma", LPMP::bdd_solver_options::bdd_solver_impl::lbfgs_cuda_mma);
+
+    py::enum_<LPMP::bdd_solver_options::bdd_solver_precision>(bdd_opts, "bdd_solver_precision")
+        .value("float", LPMP::bdd_solver_options::bdd_solver_precision::single_prec)
+        .value("double", LPMP::bdd_solver_options::bdd_solver_precision::double_prec);
 
      py::class_<LPMP::bdd_solver>(m, "bdd_solver")
         .def(py::init<LPMP::bdd_solver_options>())
