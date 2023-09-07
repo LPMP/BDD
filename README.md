@@ -24,6 +24,9 @@ where ${solver} is one of
 * `parallel_mma` for parallel CPU deferred min-marginal averaging.
 * `mma_cuda` for parallel deferred min-marginal averaging on GPU (available if built with `WITH_CUDA=ON`).
 * `hybrid_parallel_mma` for parallel deferred min-marginal averaging on CPU and GPU simultaneously (available if built with `WITH_CUDA=ON`). This solver might be faster when a few long constraints are present that would constitute a sequential bottleneck for the pure GPU solver.
+* `subgradient` for subgradient ascent with adaptive step sizes.
+* `lbfgs_parallel_mma` for L-BFGS using the parallel_mma CPU solver as backbone.
+* `lbfgs_cuda_mma` for L-BFGS using the mma_cuda GPU solver as backbone (available if built with `WITH_CUDA=ON`).
 
 ### Primal Rounding
 

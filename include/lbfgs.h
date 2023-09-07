@@ -6,11 +6,11 @@
 #include "bdd_logging.h"
 #include <deque>
 #ifdef WITH_CUDA
-// #include "cuda_utils.h"
 #include <thrust/for_each.h>
 #include <thrust/inner_product.h>
 #include <thrust/host_vector.h>
 #include <thrust/device_vector.h>
+#include <thrust/execution_policy.h>
 #endif
 
 namespace LPMP {
@@ -46,7 +46,7 @@ class lbfgs : public SOLVER
 #endif
 
     private:
-        void store_iterate(const INT_VECTOR& grad_f);
+        void store_iterate(const INT_VECTOR &grad_f);
         VECTOR compute_update_direction(const INT_VECTOR& grad_f);
         void search_step_size_and_apply(const VECTOR &update);
         void flush_lbfgs_states();
@@ -86,6 +86,9 @@ class lbfgs : public SOLVER
 
         void mma_iteration();
         void lbfgs_iteration(const INT_VECTOR& grad_f);
+
+        // for executing on host vs. device
+        //constexpr static bool gpu = SOLVER::
 };
 
 template <class SOLVER, typename VECTOR, typename REAL, typename INT_VECTOR>
@@ -128,10 +131,11 @@ lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs(const BDD::bdd_collection &bdd_co
         {
             prev_x = cur_x;
 #ifdef WITH_CUDA
-            thrust::copy(cur_grad_f.begin(), cur_grad_f.end(), prev_grad_f.begin());
-#else
-            std::copy(cur_grad_f.begin(), cur_grad_f.end(), prev_grad_f.begin());
+            if constexpr (cuda)
+                thrust::copy(cur_grad_f.begin(), cur_grad_f.end(), prev_grad_f.begin());
+            else
 #endif
+                std::copy(cur_grad_f.begin(), cur_grad_f.end(), prev_grad_f.begin());
             prev_states_stored = true;
         }
         else
@@ -383,7 +387,6 @@ lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs(const BDD::bdd_collection &bdd_co
     {
         flush_lbfgs_states();
         static_cast<SOLVER*>(this)->update_costs(cost_0, cost_1);
-
     }
 #endif
 
@@ -433,29 +436,7 @@ lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs(const BDD::bdd_collection &bdd_co
             // bdd_log << "[lbfgs] Do mma iterations for collecting states\n";
             return solver_type::mma;
         }
-
-        if (double(lbfgs_iterations) / double(mma_iterations + 1e-9) > 50.0)
-        {
-            // bdd_log << "[lbfgs] Do mma iterations to estimate mma improvement\n";
-            return solver_type::mma;
-        }
-
-        if(double(mma_iterations)/double(lbfgs_iterations+1e-9) > 50.0)
-        {
-            // bdd_log << "[lbfgs] Do lbfgs iterations to estimate lbfgs improvement\n";
-            return solver_type::lbfgs;
-        }
-
-        if(mma_lb_increase_per_time > 3.0 * lbfgs_lb_increase_per_time)
-        {
-            // bdd_log << "[lbfgs] mma lb increase per time = " << mma_lb_increase_per_time << " > lbfgs lb increase per time = " << lbfgs_lb_increase_per_time << ", choose mma\n";
-            return solver_type::mma;
-        }
-        else
-        {
-            // bdd_log << "[lbfgs] mma lb increase per time = " << mma_lb_increase_per_time << " < lbfgs lb increase per time = " << lbfgs_lb_increase_per_time << ", choose lbfgs\n";
-            return solver_type::lbfgs;
-        }
+        return solver_type::lbfgs;
     }
 
 }

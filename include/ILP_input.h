@@ -77,6 +77,9 @@ namespace LPMP {
         template<typename STREAM>
             void write_opb(STREAM& s) const;
 
+        template<typename STREAM>
+            void write_mps(STREAM& s) const;
+
         bool preprocess();
         void normalize();
         bool is_normalized() const;
@@ -352,4 +355,49 @@ namespace LPMP {
             }
             s << coeff_multiplier * constr.right_hand_side << ";\n";   
         }
+
+    template<typename STREAM>
+        void ILP_input::write_mps(STREAM& s) const
+        {
+            s << "NAME ILP\n";
+            s << "ROWS\n";
+            s << " N COST\n";
+            for (size_t i = 0; i < constraints().size(); ++i)
+            {
+                if(constraints()[i].ineq == inequality_type::smaller_equal)
+                    s << " L ";
+                else if(constraints()[i].ineq == inequality_type::greater_equal)
+                    s << " G ";
+                else if (constraints()[i].ineq == inequality_type::equal)
+                    s << " E ";
+                else
+                    throw std::runtime_error("inequality type not supported");
+
+                // if (constraints[i].identifier != "")
+                //     s << constraints[i].identifier << "\n";
+                // else
+                s << "CONSTR_" << std::to_string(i) << "\n";
+            }
+
+            s << "COLUMNS\n";
+            for(size_t i=0; i<nr_variables(); ++i)
+                s << "    X" << std::to_string(i) << " COST " << std::to_string(objective(i)) << "\n";
+            for (size_t i = 0; i < constraints().size(); ++i)
+                for (size_t j = 0; j < constraints()[i].coefficients.size(); ++j)
+                    s << "    X" << std::to_string(j) << " CONSTR_" << std::to_string(i) << " " << std::to_string(constraints()[i].coefficients[j]) << "\n";
+        
+            s << "RHS\n";
+            for (size_t i = 0; i < constraints().size(); ++i)
+                s << "    RHS1 CONSTR_" << std::to_string(i) << " " << std::to_string(constraints()[i].right_hand_side) << "\n";
+
+            s << "BOUNDS\n";
+            for(size_t i=0; i<nr_variables(); ++i)
+            {
+                s << " LO BOUND X" << std::to_string(i) << " 0\n";
+                s << " UP BOUND X" << std::to_string(i) << " 1\n";
+            }
+
+            s << "ENDDATA\n";
+        }
 }
+

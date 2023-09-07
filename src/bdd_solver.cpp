@@ -163,7 +163,8 @@ namespace LPMP {
             {"cuda_mma",bdd_solver_impl::mma_cuda},
             {"hybrid_parallel_mma",bdd_solver_impl::hybrid_parallel_mma},
             {"lbfgs_cuda_mma", bdd_solver_impl::lbfgs_cuda_mma},
-            {"lbfgs_parallel_mma", bdd_solver_impl::lbfgs_parallel_mma}
+            {"lbfgs_parallel_mma", bdd_solver_impl::lbfgs_parallel_mma},
+            {"subgradient", bdd_solver_impl::subgradient}
         };
 
         auto solver_group = app.add_option_group("solver", "solver either a BDD solver, output of statistics or export of LP solved by BDD relaxation");
@@ -178,7 +179,7 @@ namespace LPMP {
             {"double",bdd_solver_precision::double_prec}
         };
 
-        auto bdd_solver_precision_arg = app.add_option("--precision", bdd_solver_precision_, "floating point precision used in solver")
+        auto bdd_solver_precision_arg = app.add_option("--precision", bdd_solver_precision_, "floating point precision used in solver (default double)")
             ->transform(CLI::CheckedTransformer(bdd_solver_precision_map, CLI::ignore_case));
 
         app.add_option("--smoothing", smoothing, "smoothing, default value = 0 (no smoothing)")
@@ -237,6 +238,8 @@ namespace LPMP {
         solver_group->add_flag("--statistics", statistics, "statistics of the problem");
 
         solver_group->add_option("--export_bdd_lp", export_bdd_lp_file, "filename for export of LP of the BDD relaxation");
+
+        solver_group->add_option("--export_lp", export_lp_file, "filename for export of LP");
 
         solver_group->add_option("--export_bdd_graph", export_bdd_graph_file, "filename for export of BDD representation in .dot format");
 
@@ -343,6 +346,22 @@ namespace LPMP {
             std::ofstream f;
             f.open(options.export_bdd_lp_file);
             bdd_pre.get_bdd_collection().write_bdd_lp(f, costs.begin(), costs.end());
+            f.close(); 
+            exit(0);
+        }
+        else if(!options.export_lp_file.empty())
+        {
+            std::ofstream f;
+            f.open(options.export_lp_file);
+            const std::string extension = std::filesystem::path(options.export_lp_file).extension();
+            if (extension == ".lp")
+                options.ilp.write_lp(f);
+            else if (extension == ".opb")
+                options.ilp.write_opb(f);
+            else if (extension == ".mps")
+                options.ilp.write_mps(f);
+            else
+                throw std::runtime_error("Cannot recognize file extension " + extension + " for exporting problem file");
             f.close(); 
             exit(0);
         }
@@ -486,6 +505,18 @@ namespace LPMP {
             else
                 throw std::runtime_error("only float and double precision allowed");
             bdd_log << "[bdd solver] constructed LBFGS parallel mma solver\n"; 
+        }
+        else if(options.bdd_solver_impl_ == bdd_solver_options::bdd_solver_impl::subgradient)
+        {
+            if(options.smoothing != 0)
+                throw std::runtime_error("no smoothing implemented for subgradient");
+            if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::single_prec)
+                solver = std::move(bdd_subgradient<float>(bdd_pre.get_bdd_collection(), costs.begin(), costs.end()));
+            else if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::double_prec)
+                solver = std::move(bdd_subgradient<double>(bdd_pre.get_bdd_collection(), costs.begin(), costs.end()));
+            else
+                throw std::runtime_error("only float and double precision allowed");
+            bdd_log << "[bdd solver] constructed subgradient solver\n"; 
         }
         else
         {
@@ -739,6 +770,8 @@ namespace LPMP {
             reduced_ilp.write_lp(f);
         else if(extension == ".opb")
             reduced_ilp.write_opb(f);
+        else if(extension == ".mps")
+            reduced_ilp.write_mps(f);
         else
             throw std::runtime_error("Cannot recognize file extension " + extension + " for difficult core export file");
         f.close(); 
