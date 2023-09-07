@@ -239,6 +239,8 @@ namespace LPMP {
 
         solver_group->add_option("--export_bdd_lp", export_bdd_lp_file, "filename for export of LP of the BDD relaxation");
 
+        solver_group->add_option("--export_lp", export_lp_file, "filename for export of LP");
+
         solver_group->add_option("--export_bdd_graph", export_bdd_graph_file, "filename for export of BDD representation in .dot format");
 
         solver_group->require_option(1); // either a solver or statistics
@@ -344,6 +346,22 @@ namespace LPMP {
             std::ofstream f;
             f.open(options.export_bdd_lp_file);
             bdd_pre.get_bdd_collection().write_bdd_lp(f, costs.begin(), costs.end());
+            f.close(); 
+            exit(0);
+        }
+        else if(!options.export_lp_file.empty())
+        {
+            std::ofstream f;
+            f.open(options.export_lp_file);
+            const std::string extension = std::filesystem::path(options.export_lp_file).extension();
+            if (extension == ".lp")
+                options.ilp.write_lp(f);
+            else if (extension == ".opb")
+                options.ilp.write_opb(f);
+            else if (extension == ".mps")
+                options.ilp.write_mps(f);
+            else
+                throw std::runtime_error("Cannot recognize file extension " + extension + " for exporting problem file");
             f.close(); 
             exit(0);
         }
@@ -752,6 +770,8 @@ namespace LPMP {
             reduced_ilp.write_lp(f);
         else if(extension == ".opb")
             reduced_ilp.write_opb(f);
+        else if(extension == ".mps")
+            reduced_ilp.write_mps(f);
         else
             throw std::runtime_error("Cannot recognize file extension " + extension + " for difficult core export file");
         f.close(); 

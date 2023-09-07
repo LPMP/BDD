@@ -23,9 +23,9 @@ namespace LPMP
         void adaptive_subgradient_step(); // as in Section 7.5 of "MRF Energy Minimization and Beyond via Dual Decomposition" by Komodakis et al.
         
         REAL best_lb = -std::numeric_limits<REAL>::infinity();
-        REAL delta = 1.0;
-        bool dual_improvement = false;
         size_t iteration_ = 0;
+        REAL ema_lb = -std::numeric_limits<REAL>::infinity();
+        REAL step_size = 1.0;
     };
 
     template <class SOLVER, typename REAL>
@@ -39,29 +39,27 @@ namespace LPMP
     template <class SOLVER, typename REAL>
     void subgradient<SOLVER, REAL>::adaptive_subgradient_step()
     {
-        // parameters
-        constexpr REAL rho_0 = 1.5;
-        constexpr REAL rho_1 = 0.7;
-        constexpr REAL delta_min = 0.001;
-
         if (best_lb == -std::numeric_limits<REAL>::infinity())
             best_lb = this->lower_bound();
+        if (ema_lb == -std::numeric_limits<REAL>::infinity())
+            ema_lb = this->lower_bound();
 
         auto g = this->template bdds_solution_vec<REAL>();
         this->make_dual_feasible(g.begin(), g.end());
-        const REAL g_norm_squared = std::inner_product(g.begin(), g.end(), g.begin(), 0.0);
-        delta = dual_improvement ? rho_0 * delta : std::max(rho_1 * delta, delta_min);
-        const REAL step_size = (best_lb - this->lower_bound() + delta) / (g_norm_squared + 0.0001);
-        //bdd_log << "[subgradient] step size: " << step_size << ", gradient norm squared: " << g_norm_squared << ", best lb: " << best_lb << ", delta: " << delta << "\n";
         this->gradient_step(g.begin(), g.end(), step_size);
 
-        if(this->lower_bound() > best_lb)
-        {
-            best_lb = this->lower_bound();
-            dual_improvement = true;
-        }
-        else
-            dual_improvement = false;
+        best_lb = std::max(REAL(this->lower_bound()), best_lb);
+
+        constexpr static REAL ema_weight = 0.9;
+        constexpr static REAL step_size_increase_factor = 1.1;
+        constexpr static REAL step_size_decrease_factor = 0.9;
+
+        ema_lb = ema_weight * ema_lb + (1.0 - ema_weight) * this->lower_bound();
+        bdd_log << "[subgradient] step size: " << step_size << ", exp. moving average lb: " << ema_lb << "\n";
+        if (ema_lb < this->lower_bound())
+            step_size *= step_size_increase_factor;
+        if(this->lower_bound() < best_lb)
+            step_size *= step_size_decrease_factor;
     }
 
     template <class SOLVER, typename REAL>
@@ -69,7 +67,8 @@ namespace LPMP
     {
         auto g = this->template bdds_solution_vec<REAL>();
         this->make_dual_feasible(g.begin(), g.end());
-        const REAL step_size = 0.1 / REAL(iteration_);
+        //const REAL step_size = 1.0 / REAL(1 + 0.01*iteration_);
+        const REAL step_size = 0.00072;
         bdd_log << "[subgradient] step size: " << step_size << "\n";
         this->gradient_step(g.begin(), g.end(), step_size);
     }

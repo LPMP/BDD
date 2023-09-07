@@ -91,6 +91,7 @@ namespace LPMP {
 
         bool statistics = false;
         std::string export_bdd_lp_file = "";
+        std::string export_lp_file = "";
         std::string export_bdd_graph_file = "";
 
         // export difficult part of the problems including zero and undecided min-marginals 
