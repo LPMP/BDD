@@ -131,9 +131,7 @@ lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs(const BDD::bdd_collection &bdd_co
         {
             prev_x = cur_x;
 #ifdef WITH_CUDA
-            if constexpr (cuda)
                 thrust::copy(cur_grad_f.begin(), cur_grad_f.end(), prev_grad_f.begin());
-            else
 #endif
                 std::copy(cur_grad_f.begin(), cur_grad_f.end(), prev_grad_f.begin());
             prev_states_stored = true;

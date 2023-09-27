@@ -54,7 +54,8 @@ PYBIND11_MODULE(bdd_solver_py, m) {
         .value("parallel_mma", LPMP::bdd_solver_options::bdd_solver_impl::parallel_mma)
         .value("hybrid_parallel_mma", LPMP::bdd_solver_options::bdd_solver_impl::hybrid_parallel_mma)
         .value("lbfgs_parallel_mma", LPMP::bdd_solver_options::bdd_solver_impl::lbfgs_parallel_mma)
-        .value("lbfgs_cuda_mma", LPMP::bdd_solver_options::bdd_solver_impl::lbfgs_cuda_mma);
+        .value("lbfgs_cuda_mma", LPMP::bdd_solver_options::bdd_solver_impl::lbfgs_cuda_mma)
+        .value("subgradient", LPMP::bdd_solver_options::bdd_solver_impl::subgradient);
 
     py::enum_<LPMP::bdd_solver_options::bdd_solver_precision>(bdd_opts, "bdd_solver_precision")
         .value("float", LPMP::bdd_solver_options::bdd_solver_precision::single_prec)
