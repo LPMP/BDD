@@ -336,9 +336,9 @@ void grad_cost_perturbation(LPMP::bdd_cuda_learned_mma<REAL>& solver,
 }
 
 template<typename REAL>
-std::vector<float> primal_rounding_incremental_iteration(LPMP::bdd_cuda_learned_mma<REAL>& solver, double cur_delta, const bool verbose = false)
+std::vector<float> primal_rounding_incremental_iteration(LPMP::bdd_cuda_learned_mma<REAL>& solver, double cur_delta, const int round_index = 0, const bool verbose = false)
 {
-    std::vector<char> sol = perturb_primal_costs(solver, cur_delta, verbose);
+    std::vector<char> sol = perturb_primal_costs(solver, cur_delta, round_index, verbose);
     std::vector<float> solution_f(sol.size());
     for (int i = 0; i < sol.size(); i++)
         solution_f[i] = (float) sol[i];

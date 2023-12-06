@@ -87,6 +87,26 @@ namespace LPMP {
     }
 
     template<typename REAL>
+    std::tuple<std::vector<std::string>, std::vector<REAL>, std::vector<REAL>> export_min_marginals_with_names(
+        const two_dim_variable_array<std::array<REAL,2>>& min_marginals, const std::vector<std::string>& var_index_to_name)
+    {
+        std::vector<std::string> var_names;
+        std::vector<REAL> mm_lo, mm_hi;
+        for(size_t var=0; var<min_marginals.size(); ++var)
+        {
+            const std::string var_name = var_index_to_name[var];
+            const size_t nr_bdds = min_marginals.size(var);
+            for(size_t i=0; i<nr_bdds; ++i)
+            {
+                var_names.push_back(var_name);
+                mm_lo.push_back(min_marginals(var,i)[0]);
+                mm_hi.push_back(min_marginals(var,i)[1]);
+            }
+        }
+        return std::make_tuple(var_names, mm_lo, mm_hi);
+    }
+
+    template<typename REAL>
     void print_mm(const two_dim_variable_array<std::array<REAL,2>>& min_marginals)
     {
         std::cout<<"Min-marginals: "<<"\n";

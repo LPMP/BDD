@@ -67,5 +67,7 @@ PYBIND11_MODULE(bdd_solver_py, m) {
         .def("lower_bound", &LPMP::bdd_solver::lower_bound)
         .def("round", [](LPMP::bdd_solver& solver) { 
             return round(solver);
-        });
+        })
+        .def("min_marginals_with_var_names", &LPMP::bdd_solver::min_marginals_with_variable_names)
+        ;
 }

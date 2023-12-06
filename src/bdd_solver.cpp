@@ -612,6 +612,11 @@ namespace LPMP {
         return permute_min_marginals(mms, options.ilp.get_variable_permutation());
     }
 
+    std::tuple<std::vector<std::string>, std::vector<double>, std::vector<double>> bdd_solver::min_marginals_with_variable_names()
+    {
+        return export_min_marginals_with_names(min_marginals(), options.ilp.var_index_to_name());
+    }
+
     std::tuple<double, std::vector<char>> bdd_solver::round()
     {
         if(options.incremental_primal_rounding)

@@ -1,6 +1,7 @@
 #include "incremental_mm_agreement_rounding_cuda.h"
 #include <iostream>
 #include <chrono>
+#include <iomanip>
 #include <thrust/device_vector.h>
 #include <thrust/iterator/zip_iterator.h>
 #include <thrust/copy.h>
@@ -147,6 +148,7 @@ namespace LPMP {
         const REAL max_incon_mm_diff;
         const REAL decay_factor_inconsistent;
         const bool only_perturb_inconsistent;
+        const int round_index;
 
         __host__ __device__
         thrust::tuple<REAL, REAL> operator()(const thrust::tuple<mm_type,REAL,REAL,int> t) const
@@ -173,7 +175,7 @@ namespace LPMP {
             {
                 thrust::default_random_engine rng;
                 thrust::uniform_real_distribution<float> dist(-delta, delta);
-                const int id = blockIdx.x * blockDim.x + threadIdx.x;
+                const int id = blockIdx.x * blockDim.x + threadIdx.x + round_index;
                 rng.discard(id); // TODO: have other source for randomness here!
                 const float r = dist(rng);
                 if(mmt == mm_type::equal)
@@ -257,7 +259,7 @@ struct mm_type_to_sol {
 };
 
     template<typename SOLVER>
-        std::vector<char> perturb_primal_costs(SOLVER& s, const double cur_delta, const bool verbose)
+        std::vector<char> perturb_primal_costs(SOLVER& s, const double cur_delta, const int round_index, const bool verbose)
         {
             s.distribute_delta();
             const auto mms = s.min_marginals_cuda();
@@ -277,11 +279,15 @@ struct mm_type_to_sol {
 
             if (verbose)
             {
-                std::cout << "[incremental primal rounding cuda] " <<
-                "#one min-marg diffs = " << nr_one_mms << " " << u8"\u2258" << " " << double(100*nr_one_mms)/double(s.nr_variables()) << "%, " <<
-                "#zero min-marg diffs = " << nr_zero_mms << " " << u8"\u2258" << " " << double(100*nr_zero_mms)/double(s.nr_variables()) << "%, " <<
-                "#equal min-marg diffs = " << nr_equal_mms << " " << u8"\u2258" << " " << double(100*nr_equal_mms)/double(s.nr_variables()) << "%, " <<
-                "#inconsistent min-marg diffs = " << nr_inconsistent_mms << " " << u8"\u2258" << " " << double(100*nr_inconsistent_mms)/double(s.nr_variables()) << "%\n";
+                std::cout << std::right << "[incremental primal rounding cuda] min-marg diffs: " << 
+                    "#ones = " << std::setw(10) << nr_one_mms << " " << u8"\u2258" << " " << 
+                std::setw(10) << double(100*nr_one_mms)/double(s.nr_variables()) << "%, " <<
+                    "#zeros = " << std::setw(10) << nr_zero_mms << " " << u8"\u2258" << " " << 
+                std::setw(10) << double(100*nr_zero_mms)/double(s.nr_variables()) << "%,  " <<
+                    "#equal = " << std::setw(5) << nr_equal_mms << " " << u8"\u2258" << " " << 
+                std::setw(10) << double(100*nr_equal_mms)/double(s.nr_variables()) << "%,  " <<
+                    "#inconsistent = " << std::setw(5) << nr_inconsistent_mms << " " << u8"\u2258" << " " << 
+                    std::setw(10) << double(100*nr_inconsistent_mms)/double(s.nr_variables()) << "%.\n";
             }
             // reconstruct solution from min-marginals
             if(nr_one_mms + nr_zero_mms == s.nr_variables())
@@ -307,7 +313,7 @@ struct mm_type_to_sol {
             auto first = thrust::zip_iterator(thrust::make_tuple(mm_types.begin(), mm_sums_0.begin(), mm_sums_1.begin(), thrust::make_counting_iterator<int>(0)));
             auto last = thrust::zip_iterator(thrust::make_tuple(mm_types.end(), mm_sums_0.end(), mm_sums_1.end(), thrust::make_counting_iterator<int>(0) + mm_types.size()));
 
-            thrust::transform(first, last, delta_it_begin, mm_types_transform<typename SOLVER::value_type>{cur_delta, max_incon_mm_diff, 2.0, false});
+            thrust::transform(first, last, delta_it_begin, mm_types_transform<typename SOLVER::value_type>{cur_delta, max_incon_mm_diff, 2.0, false, round_index});
             // thrust::transform(first, last, delta_it_begin, mm_types_transform<typename SOLVER::value_type>{(float)cur_delta, (float)max_incon_mm_diff, 2.0, false});
 
             s.update_costs(cost_delta_0, cost_delta_1);
@@ -339,7 +345,7 @@ struct mm_type_to_sol {
                 const double time_elapsed = (double) std::chrono::duration_cast<std::chrono::milliseconds>(time - start_time).count() / 1000;
                 if (verbose) std::cout << "[incremental primal rounding cuda] round " << round << ", cost delta " << cur_delta << ", time elapsed = " << time_elapsed << "\n";
                 
-                const std::vector<char> sol = perturb_primal_costs(s, cur_delta, verbose);
+                const std::vector<char> sol = perturb_primal_costs(s, cur_delta, round, verbose);
                 if (sol.size() > 0)
                 {
                     if (verbose) std::cout << "[incremental primal rounding cuda] reconstructed solution\n"<<"[incremental primal rounding cuda] Lower bound with 0 delta: "<<lb<<"\n";
@@ -361,12 +367,12 @@ struct mm_type_to_sol {
     template std::vector<char> incremental_mm_agreement_rounding_cuda(lbfgs<bdd_cuda_parallel_mma<double>, thrust::device_vector<double>, double, thrust::device_vector<char>>& , double , const double, const int, const bool, const int);
 
 
-    template std::vector<char> perturb_primal_costs(bdd_cuda_parallel_mma<float>& , const double, const bool );
-    template std::vector<char> perturb_primal_costs(bdd_cuda_parallel_mma<double>& , const double, const bool );
-    template std::vector<char> perturb_primal_costs(bdd_cuda_learned_mma<float>& , const double, const bool );
-    template std::vector<char> perturb_primal_costs(bdd_cuda_learned_mma<double>& , const double, const bool );
-    template std::vector<char> perturb_primal_costs(lbfgs<bdd_cuda_parallel_mma<float>, thrust::device_vector<float>, float, thrust::device_vector<char>>& , const double, const bool );
-    template std::vector<char> perturb_primal_costs(lbfgs<bdd_cuda_parallel_mma<double>, thrust::device_vector<double>, double, thrust::device_vector<char>>& , const double, const bool );
+    template std::vector<char> perturb_primal_costs(bdd_cuda_parallel_mma<float>& , const double, const int, const bool );
+    template std::vector<char> perturb_primal_costs(bdd_cuda_parallel_mma<double>& , const double, const int, const bool );
+    template std::vector<char> perturb_primal_costs(bdd_cuda_learned_mma<float>& , const double, const int, const bool );
+    template std::vector<char> perturb_primal_costs(bdd_cuda_learned_mma<double>& , const double, const int, const bool );
+    template std::vector<char> perturb_primal_costs(lbfgs<bdd_cuda_parallel_mma<float>, thrust::device_vector<float>, float, thrust::device_vector<char>>& , const double, const int, const bool );
+    template std::vector<char> perturb_primal_costs(lbfgs<bdd_cuda_parallel_mma<double>, thrust::device_vector<double>, double, thrust::device_vector<char>>& , const double, const int, const bool );
 
 
 
