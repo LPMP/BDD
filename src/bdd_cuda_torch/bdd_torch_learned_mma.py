@@ -3,8 +3,8 @@ from torch_scatter import scatter_sum, scatter_min, scatter_logsumexp, scatter_m
 import bdd_cuda_torch.bdd_torch_base as bdd_torch_base
 
 class bdd_torch_learned_mma(bdd_torch_base):
-    def __init__(self, cuda_solver):
-        super().__init__(cuda_solver)
+    def __init__(self, cuda_solver, device = 'cuda'):
+        super().__init__(cuda_solver, device)
 
     def get_isotropic_alpha(self):
         primal_variable_index = self.get_variable_index()

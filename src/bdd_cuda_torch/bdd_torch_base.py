@@ -4,7 +4,8 @@ import BDD.ILP_instance_py as ilp_instance_bbd
 import BDD.bdd_cuda_learned_mma_py as bdd_cuda_solver
 
 class bdd_torch_base:
-    def __init__(self, cuda_solver):
+    def __init__(self, cuda_solver, device = 'cuda'):
+        self.device = device
         self.cuda_solver = cuda_solver
         self.cum_nr_bdd_nodes_per_hop_dist_ = cuda_solver.get_cum_nr_bdd_nodes_per_hop_dist()
         self.cum_nr_layers_per_hop_dist_ = cuda_solver.get_cum_nr_layers_per_hop_dist()
@@ -13,12 +14,12 @@ class bdd_torch_base:
         self.lo_bdd_node_ = torch.empty((cuda_solver.nr_bdd_nodes()), dtype = torch.int32, device = 'cuda')
         self.hi_bdd_node_ = torch.empty((cuda_solver.nr_bdd_nodes()), dtype = torch.int32, device = 'cuda')
         cuda_solver.lo_hi_bdd_node_index(self.lo_bdd_node_.data_ptr(), self.hi_bdd_node_.data_ptr())
-        self.lo_bdd_node_ = self.lo_bdd_node_.to(torch.long)
-        self.hi_bdd_node_ = self.hi_bdd_node_.to(torch.long)
+        self.lo_bdd_node_ = self.lo_bdd_node_.to(torch.long).to(device)
+        self.hi_bdd_node_ = self.hi_bdd_node_.to(torch.long).to(device)
 
         self.bdd_node_to_layer_map_ = torch.empty((cuda_solver.nr_bdd_nodes()), dtype = torch.int32, device = 'cuda')
         cuda_solver.bdd_node_to_layer_map(self.bdd_node_to_layer_map_.data_ptr())
-        self.bdd_node_to_layer_map_ = self.bdd_node_to_layer_map_.to(torch.long)
+        self.bdd_node_to_layer_map_ = self.bdd_node_to_layer_map_.to(torch.long).to(device)
 
         self.root_indices_ = torch.empty((cuda_solver.nr_bdds()), dtype = torch.int32, device = 'cuda')
         self.top_sink_indices_ = torch.empty((cuda_solver.nr_bdds()), dtype = torch.int32, device = 'cuda')
@@ -26,9 +27,10 @@ class bdd_torch_base:
         cuda_solver.root_indices(self.root_indices_.data_ptr())
         cuda_solver.top_sink_indices(self.top_sink_indices_.data_ptr())
         cuda_solver.bot_sink_indices(self.bot_sink_indices_.data_ptr())
-        self.root_indices_ = self.root_indices_.to(torch.long)
-        self.top_sink_indices_ = self.top_sink_indices_.to(torch.long)
-        self.bot_sink_indices_ = self.bot_sink_indices_.to(torch.long)
+        self.root_indices_ = self.root_indices_.to(torch.long).to(device)
+        self.top_sink_indices_ = self.top_sink_indices_.to(torch.long).to(device)
+        self.bot_sink_indices_ = self.bot_sink_indices_.to(torch.long).to(device)
+
         self.primal_variable_index = None
         self.bdd_index = None
 
@@ -61,24 +63,24 @@ class bdd_torch_base:
             start_layer, end_layer = 0, self.cum_nr_layers_per_hop_dist_[0]
         else:
             start_layer, end_layer = self.cum_nr_layers_per_hop_dist_[hop_index - 1], self.cum_nr_layers_per_hop_dist_[hop_index]
-        return torch.arange(start_layer, end_layer, dtype = torch.long, device = 'cuda')[self.get_valid_layer_mask(start_layer, end_layer)]
+        return torch.arange(start_layer, end_layer, dtype = torch.long, device = self.device)[self.get_valid_layer_mask(start_layer, end_layer)]
         
     def get_variable_index(self):
         if self.primal_variable_index is None:
             self.primal_variable_index = torch.empty((self.cuda_solver.nr_layers()), dtype = torch.int32, device = 'cuda')
             self.cuda_solver.primal_variable_index(self.primal_variable_index.data_ptr())
-            self.primal_variable_index = self.primal_variable_index.to(torch.long)
+            self.primal_variable_index = self.primal_variable_index.to(torch.long).to(self.device)
         return self.primal_variable_index
 
     def get_bdd_index(self):
         if self.bdd_index is None:
             self.bdd_index = torch.empty((self.cuda_solver.nr_layers()), dtype = torch.int32, device = 'cuda')
             self.cuda_solver.bdd_index(self.bdd_index.data_ptr())
-            self.bdd_index = self.bdd_index.to(torch.long)
+            self.bdd_index = self.bdd_index.to(torch.long).to(self.device)
         return self.bdd_index.to(torch.long)
 
     def init_costs_from_root(self, is_log_sum_exp = False):
-        cost_from_root = torch.empty((self.cuda_solver.nr_bdd_nodes()), dtype = torch.get_default_dtype(), device = 'cuda')
+        cost_from_root = torch.empty((self.cuda_solver.nr_bdd_nodes()), dtype = torch.get_default_dtype(), device = self.device)
         if not is_log_sum_exp:
             cost_from_root[:] = float("Inf")
             cost_from_root[self.root_indices_] = 0.0
@@ -88,7 +90,7 @@ class bdd_torch_base:
         return cost_from_root
 
     def init_costs_from_terminal(self, is_log_sum_exp = False):
-        cost_from_terminal = torch.empty((self.cuda_solver.nr_bdd_nodes()), dtype = torch.get_default_dtype(), device = 'cuda')
+        cost_from_terminal = torch.empty((self.cuda_solver.nr_bdd_nodes()), dtype = torch.get_default_dtype(), device = self.device)
         cost_from_terminal[:] = 0.0
         cost_from_terminal[self.bot_sink_indices_] = float("Inf")
         return cost_from_terminal
@@ -101,7 +103,7 @@ class bdd_torch_base:
     def get_hop_data(self, hop_index, lo_costs, hi_costs, smoothing = None, return_node_to_layer_map = False):
         start_node, end_node = self.start_end_bdd_node_indices(hop_index)
         valid_node_mask = self.lo_bdd_node_[start_node:end_node] >= 0 # No outgoing arcs from terminal nodes.
-        valid_node_indices = torch.arange(start_node, end_node, dtype = torch.long, device = 'cuda')[valid_node_mask]
+        valid_node_indices = torch.arange(start_node, end_node, dtype = torch.long, device = self.device)[valid_node_mask]
         lo_bdd_node_hop = self.lo_bdd_node_[valid_node_indices]
         hi_bdd_node_hop = self.hi_bdd_node_[valid_node_indices]
         node_to_layer_map_hop = self.bdd_node_to_layer_map_[valid_node_indices]
@@ -181,14 +183,17 @@ class bdd_torch_base:
             # return torch.sum(cost_from_root[self.top_sink_indices_])
         else:
             assert smoothing is None
+            assert lo_costs.is_cuda
+            assert hi_costs.is_cuda
             if def_mm is None:
                 def_mm = torch.zeros_like(lo_costs)
+            assert def_mm.is_cuda
             lo_costs, hi_costs, def_mm = lo_costs.contiguous(), hi_costs.contiguous(), def_mm.contiguous()
             self.cuda_solver.set_solver_costs(lo_costs.data_ptr(), hi_costs.data_ptr(), def_mm.data_ptr())
             return self.cuda_solver.lower_bound()
 
     def per_bdd_lower_bound(self, cost_from_terminal):
-        rearranged = torch.empty(self.cuda_solver.nr_bdds(), device = 'cuda')
+        rearranged = torch.empty(self.cuda_solver.nr_bdds(), device = self.device)
         rearranged[self.get_bdd_index()[:self.cuda_solver.nr_bdds()]] = cost_from_terminal[:self.cuda_solver.nr_bdds()]
         return rearranged
 
@@ -235,11 +240,11 @@ class bdd_torch_base:
         return torch.nn.LogSoftmax(dim = 1)(torch.stack((-marginal_lo, -marginal_hi), 1))[:, 1]        
 
     def valid_layer_mask(self):
-        mask = torch.ones(self.cuda_solver.nr_layers(), dtype=torch.bool, device = 'cuda')
+        mask = torch.ones(self.cuda_solver.nr_layers(), dtype=torch.bool, device = self.device)
         mask[self.bdd_node_to_layer_map_[self.bot_sink_indices_]] = False
         return mask
         
     def valid_bdd_node_mask(self):
-        mask = torch.ones(self.cuda_solver.nr_bdd_nodes(), dtype=torch.bool, device = 'cuda')
+        mask = torch.ones(self.cuda_solver.nr_bdd_nodes(), dtype=torch.bool, device = self.device)
         mask[self.bot_sink_indices_] = False
         return mask
