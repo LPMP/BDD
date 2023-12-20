@@ -171,10 +171,81 @@ void solution_per_bdd(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long sol_o
 }
 
 template<typename REAL>
+void smooth_solution_per_bdd(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long sol_out_ptr)
+{
+    thrust::device_ptr<REAL> sol_out_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<REAL*>(sol_out_ptr));
+    solver.smooth_solution_cuda(sol_out_ptr_thrust);
+}
+
+template<typename REAL>
 void terminal_layer_indices(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long indices_out_ptr)
 {
     thrust::device_ptr<int> indices_out_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<int*>(indices_out_ptr));
     solver.terminal_layer_indices(indices_out_ptr_thrust);
+}
+
+template<typename REAL>
+void cost_from_root(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long out_ptr)
+{
+    REAL* ptr = reinterpret_cast<REAL*>(out_ptr); 
+    const thrust::device_vector<REAL> managed = solver.compute_get_cost_from_root();
+    thrust::copy(managed.begin(), managed.end(), ptr);
+}
+
+template<typename REAL>
+void cost_from_terminal(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long out_ptr)
+{
+    REAL* ptr = reinterpret_cast<REAL*>(out_ptr); 
+    const thrust::device_vector<REAL> managed = solver.compute_get_cost_from_terminal();
+    thrust::copy(managed.begin(), managed.end(), ptr);
+}
+
+template<typename REAL>
+void lo_bdd_node_index(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long out_ptr)
+{
+    int* ptr = reinterpret_cast<int*>(out_ptr); 
+    const thrust::device_vector<int> managed = solver.get_lo_bdd_node_index();
+    thrust::copy(managed.begin(), managed.end(), ptr);
+}
+
+template<typename REAL>
+void hi_bdd_node_index(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long out_ptr)
+{
+    int* ptr = reinterpret_cast<int*>(out_ptr); 
+    const thrust::device_vector<int> managed = solver.get_hi_bdd_node_index();
+    thrust::copy(managed.begin(), managed.end(), ptr);
+}
+
+template<typename REAL>
+void bdd_node_to_layer_map(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long out_ptr)
+{
+    int* ptr = reinterpret_cast<int*>(out_ptr); 
+    const thrust::device_vector<int> managed = solver.get_bdd_node_to_layer_map();
+    thrust::copy(managed.begin(), managed.end(), ptr);
+}
+
+template<typename REAL>
+void root_indices(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long out_ptr)
+{
+    int* ptr = reinterpret_cast<int*>(out_ptr); 
+    const thrust::device_vector<int> managed = solver.get_root_indices();
+    thrust::copy(managed.begin(), managed.end(), ptr);
+}
+
+template<typename REAL>
+void bot_sink_indices(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long out_ptr)
+{
+    int* ptr = reinterpret_cast<int*>(out_ptr); 
+    const thrust::device_vector<int> managed = solver.get_bot_sink_indices();
+    thrust::copy(managed.begin(), managed.end(), ptr);
+}
+
+template<typename REAL>
+void top_sink_indices(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long out_ptr)
+{
+    int* ptr = reinterpret_cast<int*>(out_ptr); 
+    const thrust::device_vector<int> managed = solver.get_top_sink_indices();
+    thrust::copy(managed.begin(), managed.end(), ptr);
 }
 
 template<typename REAL>
@@ -221,6 +292,7 @@ void set_solver_costs(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long lo_co
 template<typename REAL>
 void non_learned_iterations(LPMP::bdd_cuda_learned_mma<REAL>& solver, const float omega, const int max_num_itr, const float improvement_slope, const float time_limit) 
 {
+    solver.distribute_delta(); // cuda parallel mma takes delta as input not, def mm. So transfer def mm to costs.
     run_solver(solver, max_num_itr, 0.0, improvement_slope, time_limit);
 }
 
@@ -295,12 +367,12 @@ void grad_distribute_delta(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long 
 }
 
 template<typename REAL>
-void grad_lower_bound_per_bdd(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long grad_lb_per_bdd, const long grad_lo_cost_ptr, const long grad_hi_cost_ptr)
+void grad_lower_bound_per_bdd(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long grad_lb_per_bdd, const long grad_lo_cost_ptr, const long grad_hi_cost_ptr, const bool smooth_lb)
 {
     thrust::device_ptr<REAL> grad_lb_per_bdd_thrust = thrust::device_pointer_cast(reinterpret_cast<REAL*>(grad_lb_per_bdd));
     thrust::device_ptr<REAL> grad_lo_cost_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<REAL*>(grad_lo_cost_ptr));
     thrust::device_ptr<REAL> grad_hi_cost_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<REAL*>(grad_hi_cost_ptr));
-    solver.grad_lower_bound_per_bdd(grad_lb_per_bdd_thrust, grad_lo_cost_ptr_thrust, grad_hi_cost_ptr_thrust);
+    solver.grad_lower_bound_per_bdd(grad_lb_per_bdd_thrust, grad_lo_cost_ptr_thrust, grad_hi_cost_ptr_thrust, smooth_lb);
 }
 
 template<typename REAL>
@@ -311,6 +383,18 @@ void all_min_marginal_differences(LPMP::bdd_cuda_learned_mma<REAL>& solver,const
     const auto& mms_0 = std::get<1>(mms);
     const auto& mms_1 = std::get<2>(mms);
     thrust::transform(mms_1.begin(), mms_1.end(), mms_0.begin(), mm_diff_ptr_thrust, thrust::minus<double>());
+}
+
+template<typename REAL>
+void sum_marginals(LPMP::bdd_cuda_learned_mma<REAL>& solver, const long sum_lo_out_ptr, const long sum_hi_out_ptr, const bool get_logits)
+{
+    thrust::device_ptr<REAL> sum_lo_out_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<REAL*>(sum_lo_out_ptr));
+    thrust::device_ptr<REAL> sum_hi_out_ptr_thrust = thrust::device_pointer_cast(reinterpret_cast<REAL*>(sum_hi_out_ptr));
+    const auto sum_ms = solver.sum_marginals_cuda(false, get_logits);
+    const auto& sum_m_0 = std::get<1>(sum_ms);
+    const auto& sum_m_1 = std::get<2>(sum_ms);
+    thrust::copy(sum_m_0.begin(), sum_m_0.end(), sum_lo_out_ptr_thrust);
+    thrust::copy(sum_m_1.begin(), sum_m_1.end(), sum_hi_out_ptr_thrust);
 }
 
 template<typename REAL>
@@ -391,6 +475,10 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
         .def("nr_layers", [](const bdd_type_default& solver) { return solver.nr_layers(); })
         .def("nr_layers", [](const bdd_type_default& solver, const int hop_index) { return solver.nr_layers(hop_index); })
         .def("nr_bdds", [](const bdd_type_default& solver) { return solver.nr_bdds(); })
+        .def("nr_bdd_nodes", [](const bdd_type_default& solver) { return solver.nr_bdd_nodes(); })
+        .def("get_cum_nr_bdd_nodes_per_hop_dist", &bdd_type_default::get_cum_nr_bdd_nodes_per_hop_dist)
+        .def("get_cum_nr_layers_per_hop_dist", &bdd_type_default::get_cum_nr_layers_per_hop_dist)
+        .def("get_nr_variables_per_hop_dist", &bdd_type_default::get_nr_variables_per_hop_dist)
         .def("constraint_matrix_coeffs", [](const bdd_type_default& solver, const LPMP::ILP_input& ilp)
         {
             return get_constraint_matrix_coeffs(ilp, solver);
@@ -406,6 +494,10 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
         {
             solution_per_bdd(solver, sol_out_ptr);
         }, "Computes argmin for each constraint and copies in the provided pointer to FP32 memory (size = nr_layers()).")
+        .def("smooth_solution_per_bdd", [](bdd_type_default& solver, const long sol_out_ptr)
+        {
+            smooth_solution_per_bdd(solver, sol_out_ptr);
+        }, "Computes smooth argmin for each constraint and copies in the provided pointer to FP32 memory (size = nr_layers()).")
         .def("terminal_layer_indices", [](bdd_type_default& solver, const long indices_out_ptr)
         {
             terminal_layer_indices(solver, indices_out_ptr);
@@ -420,6 +512,42 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
         {
             bdd_index(solver, bdd_index_out_ptr);
         }, "Sets BDD indices for all dual variables in the pre-allocated memory of size = nr_layers() pointed to by the input pointer in INT32 format.")
+
+        .def("cost_from_root", [](bdd_type_default& solver, const long out_ptr)
+        {
+            cost_from_root(solver, out_ptr);
+        }, "Sets cost_from_root for all bdd nodes in the pre-allocated memory of size = nr_bdd_nodes() pointed to by the input pointer in FP32 format.")
+
+        .def("cost_from_terminal", [](bdd_type_default& solver, const long out_ptr)
+        {
+            cost_from_terminal(solver, out_ptr);
+        }, "Sets cost_from_terminal for all bdd nodes in the pre-allocated memory of size = nr_bdd_nodes() pointed to by the input pointer in FP32 format.")
+
+        .def("lo_hi_bdd_node_index", [](bdd_type_default& solver, const long out_ptr_lo, const long out_ptr_hi)
+        {
+            lo_bdd_node_index(solver, out_ptr_lo);
+            hi_bdd_node_index(solver, out_ptr_hi);
+        }, "Sets lo_bdd_node_index, hi_bdd_node_index indices for all bdd nodes in the pre-allocated memory of size = nr_bdd_nodes() pointed to by the input pointer in INT32 format.")
+
+        .def("bdd_node_to_layer_map", [](bdd_type_default& solver, const long out_ptr)
+        {
+            bdd_node_to_layer_map(solver, out_ptr);
+        }, "Sets bdd_node_to_layer_map for all bdd nodes in the pre-allocated memory of size = nr_bdd_nodes() pointed to by the input pointer in INT32 format.")
+
+        .def("root_indices", [](bdd_type_default& solver, const long out_ptr)
+        {
+            root_indices(solver, out_ptr);
+        }, "Sets indices of root bdd nodes in the pre-allocated memory of size = nr_bdds() pointed to by the input pointer in INT32 format.")
+
+        .def("bot_sink_indices", [](bdd_type_default& solver, const long out_ptr)
+        {
+            bot_sink_indices(solver, out_ptr);
+        }, "Sets indices of bot sink bdd nodes in the pre-allocated memory of size = nr_bdds() pointed to by the input pointer in INT32 format.")
+
+        .def("top_sink_indices", [](bdd_type_default& solver, const long out_ptr)
+        {
+            top_sink_indices(solver, out_ptr);
+        }, "Sets indices of top sink bdd nodes in the pre-allocated memory of size = nr_bdds() pointed to by the input pointer in INT32 format.")
 
         .def("get_primal_objective_vector", [](bdd_type_default& solver, const long primal_obj_out_ptr)
         {
@@ -516,13 +644,23 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
         
         .def("grad_lower_bound_per_bdd", [](bdd_type_default& solver, const long grad_lb_per_bdd, const long grad_lo_cost_ptr, const long grad_hi_cost_ptr)
         {
-            grad_lower_bound_per_bdd(solver, grad_lb_per_bdd, grad_lo_cost_ptr, grad_hi_cost_ptr);
+            grad_lower_bound_per_bdd(solver, grad_lb_per_bdd, grad_lo_cost_ptr, grad_hi_cost_ptr, false);
         }, "Backprop. through lower bound per BDD.")
+    
+        .def("grad_smooth_lower_bound_per_bdd", [](bdd_type_default& solver, const long grad_lb_per_bdd, const long grad_lo_cost_ptr, const long grad_hi_cost_ptr)
+        {
+            grad_lower_bound_per_bdd(solver, grad_lb_per_bdd, grad_lo_cost_ptr, grad_hi_cost_ptr, true);
+        }, "Backprop. through smoothed lower bound per BDD.")
         
         .def("all_min_marginal_differences", [](bdd_type_default& solver, const long mm_diff_out_ptr)
         {
             all_min_marginal_differences(solver, mm_diff_out_ptr);
         }, "Computes min-marginal differences = (m^1 - m^0) for ALL dual variables and sets in memory pointed to by *mm_diff_out_ptr.")
+
+        .def("sum_marginals", [](bdd_type_default& solver, const long sum_marg_lo_out_ptr, const long sum_marg_hi_out_ptr, const bool get_logits)
+        {
+            sum_marginals(solver, sum_marg_lo_out_ptr, sum_marg_hi_out_ptr, get_logits);
+        }, "Computes sum-marginals (logits) lo and hi. Non-differentiable for now.")
 
         .def("grad_all_min_marginal_differences", [](bdd_type_default& solver, 
             const long grad_mm_diff, const long grad_lo_out, const long grad_hi_out)
@@ -593,6 +731,10 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
         .def("nr_layers", [](const bdd_type_double& solver) { return solver.nr_layers(); })
         .def("nr_layers", [](const bdd_type_double& solver, const int hop_index) { return solver.nr_layers(hop_index); })
         .def("nr_bdds", [](const bdd_type_double& solver) { return solver.nr_bdds(); })
+        .def("nr_bdd_nodes", [](const bdd_type_double& solver) { return solver.nr_bdd_nodes(); })
+        .def("get_cum_nr_bdd_nodes_per_hop_dist", &bdd_type_double::get_cum_nr_bdd_nodes_per_hop_dist)
+        .def("get_cum_nr_layers_per_hop_dist", &bdd_type_double::get_cum_nr_layers_per_hop_dist)
+        .def("get_nr_variables_per_hop_dist", &bdd_type_double::get_nr_variables_per_hop_dist)
         .def("constraint_matrix_coeffs", [](const bdd_type_double& solver, const LPMP::ILP_input& ilp)
         {
             return get_constraint_matrix_coeffs(ilp, solver);
@@ -608,6 +750,10 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
         {
             solution_per_bdd(solver, sol_out_ptr);
         }, "Computes argmin for each constraint and copies in the provided pointer to FP32 memory (size = nr_layers()).")
+        .def("smooth_solution_per_bdd", [](bdd_type_double& solver, const long sol_out_ptr)
+        {
+            smooth_solution_per_bdd(solver, sol_out_ptr);
+        }, "Computes smooth argmin for each constraint and copies in the provided pointer to FP32 memory (size = nr_layers()).")
         .def("terminal_layer_indices", [](bdd_type_double& solver, const long indices_out_ptr)
         {
             terminal_layer_indices(solver, indices_out_ptr);
@@ -622,6 +768,32 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
         {
             bdd_index(solver, bdd_index_out_ptr);
         }, "Sets BDD indices for all dual variables in the pre-allocated memory of size = nr_layers() pointed to by the input pointer in INT32 format.")
+
+        .def("lo_hi_bdd_node_index", [](bdd_type_double& solver, const long out_ptr_lo, const long out_ptr_hi)
+        {
+            lo_bdd_node_index(solver, out_ptr_lo);
+            hi_bdd_node_index(solver, out_ptr_hi);
+        }, "Sets lo_bdd_node_index, hi_bdd_node_index indices for all bdd nodes in the pre-allocated memory of size = nr_bdd_nodes() pointed to by the input pointer in INT32 format.")
+
+        .def("bdd_node_to_layer_map", [](bdd_type_double& solver, const long out_ptr)
+        {
+            bdd_node_to_layer_map(solver, out_ptr);
+        }, "Sets bdd_node_to_layer_map for all bdd nodes in the pre-allocated memory of size = nr_bdd_nodes() pointed to by the input pointer in INT32 format.")
+
+        .def("root_indices", [](bdd_type_double& solver, const long out_ptr)
+        {
+            root_indices(solver, out_ptr);
+        }, "Sets indices of root bdd nodes in the pre-allocated memory of size = nr_bdds() pointed to by the input pointer in INT32 format.")
+
+        .def("bot_sink_indices", [](bdd_type_double& solver, const long out_ptr)
+        {
+            bot_sink_indices(solver, out_ptr);
+        }, "Sets indices of bot sink bdd nodes in the pre-allocated memory of size = nr_bdds() pointed to by the input pointer in INT32 format.")
+
+        .def("top_sink_indices", [](bdd_type_double& solver, const long out_ptr)
+        {
+            top_sink_indices(solver, out_ptr);
+        }, "Sets indices of top sink bdd nodes in the pre-allocated memory of size = nr_bdds() pointed to by the input pointer in INT32 format.")
 
         .def("get_primal_objective_vector", [](bdd_type_double& solver, const long primal_obj_out_ptr)
         {
@@ -718,13 +890,23 @@ PYBIND11_MODULE(bdd_cuda_learned_mma_py, m) {
         
         .def("grad_lower_bound_per_bdd", [](bdd_type_double& solver, const long grad_lb_per_bdd, const long grad_lo_cost_ptr, const long grad_hi_cost_ptr)
         {
-            grad_lower_bound_per_bdd(solver, grad_lb_per_bdd, grad_lo_cost_ptr, grad_hi_cost_ptr);
+            grad_lower_bound_per_bdd(solver, grad_lb_per_bdd, grad_lo_cost_ptr, grad_hi_cost_ptr, false);
         }, "Backprop. through lower bound per BDD.")
+        
+        .def("grad_smooth_lower_bound_per_bdd", [](bdd_type_double& solver, const long grad_lb_per_bdd, const long grad_lo_cost_ptr, const long grad_hi_cost_ptr)
+        {
+            grad_lower_bound_per_bdd(solver, grad_lb_per_bdd, grad_lo_cost_ptr, grad_hi_cost_ptr, true);
+        }, "Backprop. through smoothed lower bound per BDD.")
         
         .def("all_min_marginal_differences", [](bdd_type_double& solver, const long mm_diff_out_ptr)
         {
             all_min_marginal_differences(solver, mm_diff_out_ptr);
         }, "Computes min-marginal differences = (m^1 - m^0) for ALL dual variables and sets in memory pointed to by *mm_diff_out_ptr.")
+
+        .def("sum_marginals", [](bdd_type_double& solver, const long sum_marg_lo_out_ptr, const long sum_marg_hi_out_ptr, const bool get_logits)
+        {
+            sum_marginals(solver, sum_marg_lo_out_ptr, sum_marg_hi_out_ptr, get_logits);
+        }, "Computes sum-marginals (logits) lo and hi. Non-differentiable for now.")
 
         .def("grad_all_min_marginal_differences", [](bdd_type_double& solver, 
             const long grad_mm_diff, const long grad_lo_out, const long grad_hi_out)

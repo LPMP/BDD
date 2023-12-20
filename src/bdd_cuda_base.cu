@@ -568,8 +568,8 @@ namespace LPMP {
             const int layer_idx = bdd_node_to_layer_map[bdd_idx];
 
             // Uncoalesced writes:
-            atomicMin(&cost_from_root[next_lo_node], cur_c_from_root + lo_cost[layer_idx]);
-            atomicMin(&cost_from_root[next_hi_node], cur_c_from_root + hi_cost[layer_idx]);
+                atomicMin(&cost_from_root[next_lo_node], cur_c_from_root + lo_cost[layer_idx]);
+                atomicMin(&cost_from_root[next_hi_node], cur_c_from_root + hi_cost[layer_idx]);
         }
     }
 
@@ -771,6 +771,321 @@ namespace LPMP {
         }
 
         return min_margs;
+    }
+
+    template<typename REAL, bool compute_max>
+    __global__ void forward_step_sum_marginals(const int cur_num_bdd_nodes, const int start_offset,
+                                                const int* const __restrict__ lo_bdd_node_index, 
+                                                const int* const __restrict__ hi_bdd_node_index, 
+                                                const int* const __restrict__ bdd_node_to_layer_map, 
+                                                const REAL* const __restrict__ lo_cost,
+                                                const REAL* const __restrict__ hi_cost,
+                                                REAL* __restrict__ max_from_root,
+                                                REAL* __restrict__ cost_from_root)
+    {
+        const int start_index = blockIdx.x * blockDim.x + threadIdx.x;
+        const int num_threads = blockDim.x * gridDim.x;
+        for (int bdd_idx = start_index + start_offset; bdd_idx < cur_num_bdd_nodes + start_offset; bdd_idx += num_threads) 
+        {
+            const int next_lo_node = lo_bdd_node_index[bdd_idx];
+            REAL& current_cost = cost_from_root[bdd_idx];
+            if (compute_max) // also convert to log scale.
+                current_cost = log(current_cost) + max_from_root[bdd_idx];
+
+            if (next_lo_node < 0) // will matter when one row contains multiple BDDs, otherwise the terminal nodes are at the end anyway.
+                continue; // nothing needs to be done for terminal node.
+
+            const int next_hi_node = hi_bdd_node_index[bdd_idx];
+            const int layer_idx = bdd_node_to_layer_map[bdd_idx];
+
+            const REAL next_lo_cost = current_cost - lo_cost[layer_idx];
+            const REAL next_hi_cost = current_cost - hi_cost[layer_idx];
+            if (compute_max)
+            {
+                atomicMax(&max_from_root[next_lo_node], next_lo_cost);
+                atomicMax(&max_from_root[next_hi_node], next_hi_cost);
+            }
+            else
+            {
+                atomicAdd(&cost_from_root[next_lo_node], exp(next_lo_cost - max_from_root[next_lo_node]));
+                atomicAdd(&cost_from_root[next_hi_node], exp(next_hi_cost - max_from_root[next_hi_node]));
+            }
+        }
+    }
+
+    template<typename REAL>
+    __global__ void backward_step_sum_marginals(const int cur_num_bdd_nodes, const int start_offset,
+                                                const int* const __restrict__ lo_bdd_node_index, 
+                                                const int* const __restrict__ hi_bdd_node_index, 
+                                                const int* const __restrict__ bdd_node_to_layer_map, 
+                                                const REAL* const __restrict__ lo_cost,
+                                                const REAL* const __restrict__ hi_cost,
+                                                const REAL* const __restrict__ cost_from_root,
+                                                REAL* __restrict__ cost_from_terminal,
+                                                REAL* __restrict__ lo_path_marginal_max, 
+                                                REAL* __restrict__ hi_path_marginal_max, 
+                                                REAL* __restrict__ lo_path_marginal, 
+                                                REAL* __restrict__ hi_path_marginal)
+    {
+        const int start_index = blockIdx.x * blockDim.x + threadIdx.x;
+        const int num_threads = blockDim.x * gridDim.x;
+        for (int bdd_idx = start_index + start_offset; bdd_idx < cur_num_bdd_nodes + start_offset; bdd_idx += num_threads) 
+        {
+            const int lo_node = lo_bdd_node_index[bdd_idx];
+            if (lo_node < 0)
+                continue; // terminal node.
+            const int hi_node = hi_bdd_node_index[bdd_idx];
+            const int layer_idx = bdd_node_to_layer_map[bdd_idx];
+
+            const REAL cost_from_lo = cost_from_terminal[lo_node] - lo_cost[layer_idx];
+            const REAL cost_from_hi = cost_from_terminal[hi_node] - hi_cost[layer_idx];
+
+            const REAL cur_max_cost = max(cost_from_lo, cost_from_hi);
+            cost_from_terminal[bdd_idx] = log(exp(cost_from_lo - cur_max_cost) + exp(cost_from_hi - cur_max_cost)) + cur_max_cost;
+
+            const REAL cur_cost_from_root = cost_from_root[bdd_idx];
+            const REAL lo_path_cost = cur_cost_from_root + cost_from_lo;
+            const REAL hi_path_cost = cur_cost_from_root + cost_from_hi;
+
+            atomicMax(&lo_path_marginal_max[layer_idx], lo_path_cost);
+            atomicMax(&hi_path_marginal_max[layer_idx], hi_path_cost);
+            lo_path_marginal[bdd_idx] = lo_path_cost;
+            hi_path_marginal[bdd_idx] = hi_path_cost;
+        }
+    }
+
+    template<typename REAL>
+    __global__ void compute_sum_marginals_normalized(const int cur_num_bdd_nodes, const int start_offset,
+                                                    const int* const __restrict__ lo_bdd_node_index, 
+                                                    const int* const __restrict__ hi_bdd_node_index, 
+                                                    const int* const __restrict__ bdd_node_to_layer_map, 
+                                                    const REAL* __restrict__ lo_path_marginal_max, 
+                                                    const REAL* __restrict__ hi_path_marginal_max, 
+                                                    const REAL* __restrict__ lo_path_marginal, 
+                                                    const REAL* __restrict__ hi_path_marginal,
+                                                    REAL* __restrict__ lo_sum_marginal, 
+                                                    REAL* __restrict__ hi_sum_marginal)
+    {
+        const int start_index = blockIdx.x * blockDim.x + threadIdx.x;
+        const int num_threads = blockDim.x * gridDim.x;
+        for (int bdd_idx = start_index + start_offset; bdd_idx < cur_num_bdd_nodes + start_offset; bdd_idx += num_threads) 
+        {
+            const int lo_node = lo_bdd_node_index[bdd_idx];
+            if (lo_node < 0)
+                continue; // terminal node.
+            const int layer_idx = bdd_node_to_layer_map[bdd_idx];
+
+            const REAL lo_max = lo_path_marginal_max[layer_idx];
+            const REAL hi_max = hi_path_marginal_max[layer_idx];
+
+            atomicAdd(&lo_sum_marginal[layer_idx], exp(lo_path_marginal[bdd_idx] - lo_max));
+            atomicAdd(&hi_sum_marginal[layer_idx], exp(hi_path_marginal[bdd_idx] - hi_max));
+        }
+    }
+
+    template<typename REAL>
+    struct ProcessSumMarginals {
+        const bool get_log_probs;
+        const REAL* lo_sum_marginal_max;
+        const REAL* hi_sum_marginal_max;
+        REAL* lo_sum_marginal;
+        REAL* hi_sum_marginal;
+        __host__ __device__ void operator() (const int layer_idx) const
+        {
+            REAL& lo_val = lo_sum_marginal[layer_idx];
+            REAL& hi_val = hi_sum_marginal[layer_idx];
+            lo_val = log(lo_sum_marginal[layer_idx]) + lo_sum_marginal_max[layer_idx];
+            hi_val = log(hi_sum_marginal[layer_idx]) + hi_sum_marginal_max[layer_idx];
+            if (!get_log_probs)
+            {
+                lo_val = exp(lo_val);
+                hi_val = exp(hi_val);
+            }
+        }
+    };
+
+    template<typename REAL>
+    std::tuple<thrust::device_vector<int>, thrust::device_vector<REAL>, thrust::device_vector<REAL>> bdd_cuda_base<REAL>::sum_marginals_cuda(bool get_sorted, bool get_log_probs)
+    {
+        flush_forward_states();
+        thrust::fill(cost_from_root_.begin(), cost_from_root_.end(), 0.0);
+        thrust::scatter(thrust::make_constant_iterator<REAL>(1.0), thrust::make_constant_iterator<REAL>(1.0) + this->root_indices_.size(),
+                        this->root_indices_.begin(), cost_from_root_.begin());
+        thrust::device_vector<REAL> cost_from_root_max(nr_bdd_nodes_, -1e30);
+        thrust::scatter(thrust::make_constant_iterator<REAL>(0.0), thrust::make_constant_iterator<REAL>(0.0) + this->root_indices_.size(),
+                        this->root_indices_.begin(), cost_from_root_max.begin());
+        thrust::scatter(thrust::make_constant_iterator<REAL>(CUDART_INF_F_HOST), thrust::make_constant_iterator<REAL>(CUDART_INF_F_HOST) + this->bot_sink_indices_.size(),
+                        this->bot_sink_indices_.begin(), cost_from_root_max.begin());
+
+        for (int s = 0, num_nodes_processed = 0; s <= nr_hops(); s++)
+        {
+            int cur_num_bdd_nodes = cum_nr_bdd_nodes_per_hop_dist_[s] - num_nodes_processed;
+            int blockCount = ceil(cur_num_bdd_nodes / (REAL) NUM_THREADS_CUDA);
+            forward_step_sum_marginals<REAL, true><<<blockCount, NUM_THREADS_CUDA>>>(cur_num_bdd_nodes, num_nodes_processed,
+                                                    thrust::raw_pointer_cast(lo_bdd_node_index_.data()),
+                                                    thrust::raw_pointer_cast(hi_bdd_node_index_.data()),
+                                                    thrust::raw_pointer_cast(bdd_node_to_layer_map_.data()),
+                                                    thrust::raw_pointer_cast(lo_cost_.data()),
+                                                    thrust::raw_pointer_cast(hi_cost_.data()),
+                                                    thrust::raw_pointer_cast(cost_from_root_max.data()),
+                                                    thrust::raw_pointer_cast(cost_from_root_.data()));
+
+            forward_step_sum_marginals<REAL, false><<<blockCount, NUM_THREADS_CUDA>>>(cur_num_bdd_nodes, num_nodes_processed,
+                                                    thrust::raw_pointer_cast(lo_bdd_node_index_.data()),
+                                                    thrust::raw_pointer_cast(hi_bdd_node_index_.data()),
+                                                    thrust::raw_pointer_cast(bdd_node_to_layer_map_.data()),
+                                                    thrust::raw_pointer_cast(lo_cost_.data()),
+                                                    thrust::raw_pointer_cast(hi_cost_.data()),
+                                                    thrust::raw_pointer_cast(cost_from_root_max.data()),
+                                                    thrust::raw_pointer_cast(cost_from_root_.data()));
+            num_nodes_processed += cur_num_bdd_nodes;
+        }
+
+        flush_backward_states();
+        thrust::scatter(thrust::make_constant_iterator<REAL>(0.0), thrust::make_constant_iterator<REAL>(0.0) + top_sink_indices_.size(),
+                top_sink_indices_.begin(), cost_from_terminal_.begin());
+        thrust::scatter(thrust::make_constant_iterator<REAL>(-1e30), thrust::make_constant_iterator<REAL>(-1e30) + bot_sink_indices_.size(),
+            bot_sink_indices_.begin(), cost_from_terminal_.begin());
+
+        thrust::device_vector<REAL> lo_path_marginal(nr_bdd_nodes());
+        thrust::device_vector<REAL> hi_path_marginal(nr_bdd_nodes());
+
+        thrust::device_vector<REAL> lo_path_marginal_max(nr_layers(), -1e30);
+        thrust::device_vector<REAL> hi_path_marginal_max(nr_layers(), -1e30);
+
+        thrust::device_vector<REAL> sum_marginals_lo(nr_layers(), 0.0);
+        thrust::device_vector<REAL> sum_marginals_hi(nr_layers(), 0.0);
+
+        for (int s = nr_hops() - 1; s >= 0; s--)
+        {
+            const int start_offset = s > 0 ? this->cum_nr_bdd_nodes_per_hop_dist_[s - 1]: 0;
+            int cur_num_bdd_nodes = cum_nr_bdd_nodes_per_hop_dist_[s] - start_offset;
+            int blockCount = ceil(cur_num_bdd_nodes / (REAL) NUM_THREADS_CUDA);
+            backward_step_sum_marginals<<<blockCount, NUM_THREADS_CUDA>>>(cur_num_bdd_nodes, start_offset,
+                                                    thrust::raw_pointer_cast(lo_bdd_node_index_.data()),
+                                                    thrust::raw_pointer_cast(hi_bdd_node_index_.data()),
+                                                    thrust::raw_pointer_cast(bdd_node_to_layer_map_.data()),
+                                                    thrust::raw_pointer_cast(lo_cost_.data()),
+                                                    thrust::raw_pointer_cast(hi_cost_.data()),
+                                                    thrust::raw_pointer_cast(cost_from_root_.data()),
+                                                    thrust::raw_pointer_cast(cost_from_terminal_.data()),
+                                                    thrust::raw_pointer_cast(lo_path_marginal_max.data()),
+                                                    thrust::raw_pointer_cast(hi_path_marginal_max.data()),
+                                                    thrust::raw_pointer_cast(lo_path_marginal.data()),
+                                                    thrust::raw_pointer_cast(hi_path_marginal.data()));
+
+            compute_sum_marginals_normalized<<<blockCount, NUM_THREADS_CUDA>>>(cur_num_bdd_nodes, start_offset,
+                                                    thrust::raw_pointer_cast(lo_bdd_node_index_.data()),
+                                                    thrust::raw_pointer_cast(hi_bdd_node_index_.data()),
+                                                    thrust::raw_pointer_cast(bdd_node_to_layer_map_.data()),
+                                                    thrust::raw_pointer_cast(lo_path_marginal_max.data()),
+                                                    thrust::raw_pointer_cast(hi_path_marginal_max.data()),
+                                                    thrust::raw_pointer_cast(lo_path_marginal.data()),
+                                                    thrust::raw_pointer_cast(hi_path_marginal.data()),
+                                                    thrust::raw_pointer_cast(sum_marginals_lo.data()),
+                                                    thrust::raw_pointer_cast(sum_marginals_hi.data()));
+        }
+
+        ProcessSumMarginals<REAL> process_marginals({get_log_probs, 
+                                                    thrust::raw_pointer_cast(lo_path_marginal_max.data()), 
+                                                    thrust::raw_pointer_cast(hi_path_marginal_max.data()),
+                                                    thrust::raw_pointer_cast(sum_marginals_lo.data()), 
+                                                    thrust::raw_pointer_cast(sum_marginals_hi.data())});
+        thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + nr_layers(), process_marginals);
+
+        // undo changes in cost_from_root_ and cost_from_terminal:
+        set_special_nodes_costs();
+        flush_forward_states();
+        flush_backward_states();
+        if (get_sorted)
+        {
+            thrust::device_vector<REAL> sum_marginals_lo_sorted(nr_layers());
+            thrust::device_vector<REAL> sum_marginals_hi_sorted(nr_layers());
+
+            auto first_val = thrust::make_zip_iterator(thrust::make_tuple(sum_marginals_lo.begin(), sum_marginals_hi.begin()));
+            auto first_val_sorted = thrust::make_zip_iterator(thrust::make_tuple(sum_marginals_lo_sorted.begin(), sum_marginals_hi_sorted.begin()));
+            thrust::gather(primal_variable_sorting_order_.begin(), primal_variable_sorting_order_.end(), first_val, first_val_sorted);
+
+            return {primal_variable_index_sorted_, sum_marginals_lo_sorted, sum_marginals_hi_sorted};
+        }
+        else
+            return {primal_variable_index_, sum_marginals_lo, sum_marginals_hi};
+    }
+
+    template<typename REAL>
+    struct ComputeSmoothSolution {
+        const int* primal_index;
+        const REAL* log_marginals_lo;
+        const REAL* log_marginals_hi;
+        REAL* prob_hi;
+        const unsigned long num_vars;
+        __host__ __device__ void operator() (const int i) const
+        {
+            const int primal = primal_index[i];
+            if (primal >= num_vars) {
+                prob_hi[i] = 0.0; 
+                return;
+            }
+            const REAL m_lo = log_marginals_lo[i];
+            const REAL m_hi = log_marginals_hi[i];
+            const REAL c = max(m_lo, m_hi);
+            const REAL exp_lo = exp(m_lo - c);
+            const REAL exp_hi = exp(m_hi - c);
+            prob_hi[i] = exp_hi / (exp_lo + exp_hi);
+        }
+    };
+
+    template<typename REAL>
+    void bdd_cuda_base<REAL>::smooth_solution_cuda(thrust::device_ptr<REAL> smooth_sol)
+    {
+        thrust::device_vector<REAL> sum_marg_0, sum_marg_1;
+        thrust::device_vector<int> primal_variable_index;
+
+        std::tie(primal_variable_index, sum_marg_0, sum_marg_1) = sum_marginals_cuda(false, true);
+
+        ComputeSmoothSolution<REAL> compute_smooth_sol({thrust::raw_pointer_cast(primal_variable_index.data()),
+                                                        thrust::raw_pointer_cast(sum_marg_0.data()), 
+                                                        thrust::raw_pointer_cast(sum_marg_1.data()),
+                                                        thrust::raw_pointer_cast(smooth_sol),
+                                                        nr_variables()});
+        thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + nr_layers(), compute_smooth_sol);
+    }
+
+    template<typename REAL>
+    two_dim_variable_array<std::array<double,2>> bdd_cuda_base<REAL>::sum_marginals(bool get_log_probs)
+    {
+        MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
+        thrust::device_vector<REAL> sum_marg_0, sum_marg_1;
+        thrust::device_vector<int> primal_variable_index_sorted;
+
+        std::tie(primal_variable_index_sorted, sum_marg_0, sum_marg_1) = sum_marginals_cuda(true, get_log_probs);
+
+        std::vector<int> num_bdds_per_var(num_bdds_per_var_.size());
+        thrust::copy(num_bdds_per_var_.begin(), num_bdds_per_var_.end(), num_bdds_per_var.begin());
+
+        std::vector<REAL> h_sum_marg_0(sum_marg_0.size());
+        thrust::copy(sum_marg_0.begin(), sum_marg_0.end(), h_sum_marg_0.begin());
+
+        std::vector<REAL> h_sum_marg_1(sum_marg_1.size());
+        thrust::copy(sum_marg_1.begin(), sum_marg_1.end(), h_sum_marg_1.begin());
+
+        two_dim_variable_array<std::array<double,2>> sum_margs(num_bdds_per_var);
+
+        int idx_1d = 0;
+        for(int var = 0; var < nr_vars_; ++var)
+        {
+            assert(num_bdds_per_var[var] > 0);
+            for(int bdd_idx = 0; bdd_idx < num_bdds_per_var[var]; ++bdd_idx, ++idx_1d)
+            {
+                assert(idx_1d < h_sum_marg_0.size() - nr_bdds_ && idx_1d < h_sum_marg_1.size() - nr_bdds_);
+                assert(std::isfinite(h_sum_marg_0[idx_1d]));
+                assert(std::isfinite(h_sum_marg_1[idx_1d]));
+                std::array<double,2> sm = {h_sum_marg_0[idx_1d], h_sum_marg_1[idx_1d]};
+                sum_margs(var, bdd_idx) = sm;
+            }
+        }
+
+        return sum_margs;
     }
 
     template<typename REAL, typename REAL_arg>
@@ -1051,7 +1366,7 @@ namespace LPMP {
             thrust::raw_pointer_cast(indices)});
         thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + top_sink_indices_.size(), map_top_sink_func);
     }
-
+    
     template<typename REAL>
     struct distribute_deffered_mm_diff_func {
         const int* primal_index;
@@ -1115,6 +1430,20 @@ namespace LPMP {
             bdd_to_constraint_map_[constraint_to_bdd_map(c, 0)] = c;
         }
         assert(*std::max_element(bdd_to_constraint_map_.begin(), bdd_to_constraint_map_.end()) == nr_bdds_ - 1);
+    }
+
+    template<typename REAL>
+    const thrust::device_vector<REAL> bdd_cuda_base<REAL>::compute_get_cost_from_root()
+    {
+        forward_run();
+        return cost_from_root_;
+    }
+    
+    template<typename REAL>
+    const thrust::device_vector<REAL> bdd_cuda_base<REAL>::compute_get_cost_from_terminal()
+    {
+        backward_run(false);
+        return cost_from_terminal_;
     }
 
     template void bdd_cuda_base<float>::update_costs(const thrust::device_vector<double>&, const thrust::device_vector<double>&);

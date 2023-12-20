@@ -90,6 +90,10 @@ namespace LPMP {
 
             two_dim_variable_array<REAL> bdds_solution(); // Returns the solution on CPU and laid out in similar way as the output of min_marginals()
 
+            two_dim_variable_array<std::array<double,2>> sum_marginals(bool get_log_probs = true);
+            std::tuple<thrust::device_vector<int>, thrust::device_vector<REAL>, thrust::device_vector<REAL>> sum_marginals_cuda(bool get_sorted = true, bool get_log_probs = true);
+            void smooth_solution_cuda(thrust::device_ptr<REAL> smooth_sol); // Computes smooth argmin.
+
             void compute_primal_objective_vec(thrust::device_ptr<REAL> primal_obj);
             std::vector<REAL> get_primal_objective_vector_host();
 
@@ -129,12 +133,26 @@ namespace LPMP {
 
             void set_solver_costs(const SOLVER_COSTS_VECS& costs); // similar to above but takes device_vectors
 
+            const thrust::device_vector<REAL> compute_get_cost_from_root();
+            const thrust::device_vector<REAL> compute_get_cost_from_terminal();
+
+            const thrust::device_vector<int> get_lo_bdd_node_index() const { return lo_bdd_node_index_; }
+            const thrust::device_vector<int> get_hi_bdd_node_index() const { return hi_bdd_node_index_; }
+            const thrust::device_vector<int> get_bdd_node_to_layer_map() const { return bdd_node_to_layer_map_; }
+            const thrust::device_vector<int> get_root_indices() const { return root_indices_; }
+            const thrust::device_vector<int> get_bot_sink_indices() const { return bot_sink_indices_; }
+            const thrust::device_vector<int> get_top_sink_indices() const { return top_sink_indices_; }
+
             const thrust::device_vector<int> get_primal_variable_index() const { return primal_variable_index_; }
             const thrust::device_vector<int> get_bdd_index() const { return bdd_index_; }
             const thrust::device_vector<int>& get_num_bdds_per_var() const {return num_bdds_per_var_; }
 
             void distribute_delta(thrust::device_ptr<REAL> def_min_marg_diff_ptr);
             void distribute_delta();
+
+            const std::vector<int>& get_cum_nr_bdd_nodes_per_hop_dist() const { return cum_nr_bdd_nodes_per_hop_dist_; }
+            const std::vector<int>& get_cum_nr_layers_per_hop_dist() const { return cum_nr_layers_per_hop_dist_; }
+            const std::vector<int>& get_nr_variables_per_hop_dist() const { return nr_variables_per_hop_dist_; }
 
             template<typename ITERATOR>
             void make_dual_feasible(ITERATOR grad_begin, ITERATOR grad_end) const;

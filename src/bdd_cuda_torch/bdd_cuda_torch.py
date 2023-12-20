@@ -1,6 +1,8 @@
 import torch, random
 from BDD.bdd_cuda_learned_mma_py import bdd_cuda_learned_mma
 from torch.autograd.function import once_differentiable
+import bdd_cuda_torch.bdd_torch_base as bdd_torch_base
+from torch.utils.checkpoint import checkpoint as torch_checkpoint
 
 def validate_input_format(*args):
     for arg in args:
@@ -16,6 +18,27 @@ def ComputePrimalSolution(solvers, lo_costs_batch, hi_costs_batch, def_mm_batch,
         solutions_cpu.append(solver.primal_rounding_incremental(init_delta, delta_growth_rate, num_itr_lb, verbose))
         layer_start += solver.nr_layers()
     return solutions_cpu
+
+def GetMarginalProbability(solvers, lo_costs_batch, hi_costs_batch):
+    validate_input_format(lo_costs_batch, hi_costs_batch)
+    prob_hi = torch.zeros_like(lo_costs_batch)
+    layer_start = 0
+    for (b, solver) in enumerate(solvers):
+        solver.set_solver_costs(lo_costs_batch[layer_start].data_ptr(), hi_costs_batch[layer_start].data_ptr(), prob_hi[layer_start].data_ptr())
+        solver.smooth_solution_per_bdd(prob_hi[layer_start].data_ptr())
+        layer_start += solver.nr_layers()
+    return prob_hi
+
+def GetSumMarginals(solvers, lo_costs_batch, hi_costs_batch, get_logits):
+    validate_input_format(lo_costs_batch, hi_costs_batch)
+    sum_marginal_lo = torch.zeros_like(lo_costs_batch)
+    sum_marginal_hi = torch.empty_like(hi_costs_batch)
+    layer_start = 0
+    for (b, solver) in enumerate(solvers):
+        solver.set_solver_costs(lo_costs_batch[layer_start].data_ptr(), hi_costs_batch[layer_start].data_ptr(), sum_marginal_lo[layer_start].data_ptr())
+        solver.sum_marginals(sum_marginal_lo[layer_start].data_ptr(), sum_marginal_hi[layer_start].data_ptr(), get_logits)
+        layer_start += solver.nr_layers()
+    return sum_marginal_lo, sum_marginal_hi
 
 def ComputePerBDDSolutions(solvers, lo_costs_batch, hi_costs_batch):
     validate_input_format(lo_costs_batch, hi_costs_batch)
@@ -315,13 +338,14 @@ class PerturbPrimalCosts(torch.autograd.Function):
 
 class ComputeLowerBoundperBDD(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, solvers, lo_costs_batch, hi_costs_batch):
+    def forward(ctx, solvers, lo_costs_batch, hi_costs_batch, smooth_gradients_temp = 0.0):
         validate_input_format(lo_costs_batch, hi_costs_batch)
         assert(lo_costs_batch.dim() == 1)
         assert(lo_costs_batch.shape == hi_costs_batch.shape)
 
         ctx.set_materialize_grads(False)
         ctx.solvers = solvers
+        ctx.smooth_gradients_temp = smooth_gradients_temp
         ctx.save_for_backward(lo_costs_batch, hi_costs_batch)
         mm_diff_batch = torch.zeros_like(lo_costs_batch)
         num_bdds_batch = sum([s.nr_bdds() for s in solvers])
@@ -349,12 +373,23 @@ class ComputeLowerBoundperBDD(torch.autograd.Function):
         grad_hi_costs_in = torch.empty_like(hi_costs_batch)
         layer_start = 0
         bdd_start = 0
+        smooth_gradients = ctx.smooth_gradients_temp > 0 
+        if smooth_gradients:
+            lo_costs_batch = lo_costs_batch.clone() / ctx.smooth_gradients_temp
+            hi_costs_batch = hi_costs_batch.clone() / ctx.smooth_gradients_temp
+
         for (b, solver) in enumerate(solvers):
             solver.set_solver_costs(lo_costs_batch[layer_start].data_ptr(), hi_costs_batch[layer_start].data_ptr(), grad_lo_costs_in[layer_start].data_ptr())
             try:
-                solver.grad_lower_bound_per_bdd(grad_lb_per_bdd_batch[bdd_start].data_ptr(), 
-                                                grad_lo_costs_in[layer_start].data_ptr(), 
-                                                grad_hi_costs_in[layer_start].data_ptr())
+                if not smooth_gradients:
+                    solver.grad_lower_bound_per_bdd(grad_lb_per_bdd_batch[bdd_start].data_ptr(), 
+                                                    grad_lo_costs_in[layer_start].data_ptr(), 
+                                                    grad_hi_costs_in[layer_start].data_ptr())
+                else:
+                    solver.grad_smooth_lower_bound_per_bdd(grad_lb_per_bdd_batch[bdd_start].data_ptr(), 
+                                grad_lo_costs_in[layer_start].data_ptr(), 
+                                grad_hi_costs_in[layer_start].data_ptr())
+
             except Exception as e:
                 print(e)
                 print(f'Error in grad_lb')

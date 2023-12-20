@@ -136,7 +136,7 @@ setup(
                 CMakeExtension(name='ILP_instance_py'),
                 CMakeExtension(name='bdd_cuda_learned_mma_py'),
                 CMakeExtension(name='bdd_solver_py')],
-    py_modules=['bdd_cuda_torch'],
+    py_modules=['bdd_cuda_torch', 'bdd_torch_base', 'bdd_torch_learned_mma'],
     cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,
     setup_requires=['wheel']
