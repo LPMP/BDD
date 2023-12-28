@@ -1,4 +1,4 @@
-# DOGE-Train: Discrete optimization on GPU with end-to-end training [arXiv](https://arxiv.org/abs/2205.11638)
+# DOGE-Train: Discrete optimization on GPU with end-to-end training [(arXiv)](https://arxiv.org/abs/2205.11638)
 A fast, scalable, data-driven approach for solving relaxations of 0-1 integer linear programs on GPU.
 ![DOGE pipeline](./figures/doge_pipeline.PNG)
 

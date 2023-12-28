@@ -63,12 +63,13 @@ python setup.py install
 ```
 For information about Python interface see [test_bdd_solver_py.py](test/test_bdd_solver_py.py).
 
+## Learned solver (DOGE-Train)
+Please navigate to `DOGE` sub-folder.
 
 ## References
 If you use this work please cite
 * [`[1] - J. H. Lange and P. Swoboda. Efficient Message Passing for 0–1 ILPs with Binary Decision Diagrams. In ICML 2021.`](http://proceedings.mlr.press/v139/lange21a.html)
-
-and
 * [`[2] - A. Abbas and P. Swoboda. FastDOG: Fast Discrete Optimization on GPU. In CVPR 2022.`](https://arxiv.org/abs/2111.10270)
-
-for the parallel solvers.
+for the parallel solvers, and 
+* [`[3] - A. Abbas and P. Swoboda. DOGE-Train: Discrete Optimization on GPU with End-to-end Training. In AAAI 2024.`](https://arxiv.org/abs/2205.11638)
+for learned solvers.
