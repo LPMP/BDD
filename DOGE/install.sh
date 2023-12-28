@@ -20,6 +20,6 @@ python setup.py install
 cd ..
 
 # Parallel deferred min-marginal averaging algorithm:
-cd external/BDD
-python setup.py install
 cd ..
+python setup.py install
+cd DOGE
