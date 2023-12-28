@@ -39,5 +39,5 @@ Note that for testing we automatically run Gurobi for comparison. This can be di
 ## Updates
 1. Added gradient of smoothed dual objective with varying degrees of smoothing, as features to the GNN. This improves results significantly on difficult dataset of QAPLib (config file: `configs/config_qaplib.py`). Result comparison is
 ![DOGE pipeline](./figures/DOGEv2_qaplib.png)
-2. Added replay buffer to store past trajectories, instead of running the solver from scratch see [`doge.py:219`](https://github.com/aabbas90/DOGE-Train/blob/4160384377bd0a87313efb64a30119cc9e9aba58/doge.py#L219). This helps the non-LSTM version (DOGE) to have faster training by up to 4x. For LSTM version using replay buffer makes results worse possibly because we need to store cell states as well however these
+2. Added replay buffer to store past trajectories, instead of running the solver from scratch see [`doge.py:219`](https://github.com/LPMP/BDD/blob/f4901a92c1591df4372164e1c79880c2d57a23a2/DOGE/doge.py#L219)). This helps the non-LSTM version (DOGE) to have faster training by up to 4x. For LSTM version using replay buffer makes results worse possibly because we need to store cell states as well however these
 stored cell states become out-of-date when the network is updated. Therefore we recommend not using replay buffer with LSTM variant. 
