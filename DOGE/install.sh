@@ -8,7 +8,7 @@ pip install torch_geometric
 pip install torch-scatter -f https://data.pyg.org/whl/torch-2.0.1%2Bcu118.html
 
 conda install -c conda-forge ecole # required to generate random problem instances.
-pip install gurobipy # required for ground-truth generation.
+pip install gurobipy # required for ground-truth generation (for evaluation).
 
 pip install tqdm
 pip install torchmetrics
