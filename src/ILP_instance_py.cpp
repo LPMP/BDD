@@ -5,6 +5,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/eigen.h>
 #include <pybind11/stl.h>
+#include <fstream>
 namespace py = pybind11;
 
 
@@ -113,7 +114,13 @@ PYBIND11_MODULE(ILP_instance_py, m) {
 
                 ilp.set_inequality_type(ineq_type);
                 ilp.set_right_hand_side(rhs);
-                });
+                })
+        .def("write_lp", [](const LPMP::ILP_input& ilp, const std::string& file_path) 
+        { 
+            std::ofstream f;
+            f.open(file_path);
+            ilp.write_lp(f);
+        });
 
         m.def("read_ILP", [](const std::string& filename) -> LPMP::ILP_input { return LPMP::ILP_parser::parse_file(filename); }); 
         m.def("parse_ILP", [](const char* instance) -> LPMP::ILP_input { return LPMP::ILP_parser::parse_string(instance); }); 

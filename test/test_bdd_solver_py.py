@@ -31,6 +31,7 @@ def create_toy_problem():
     return ilp
 
 # ilp = create_toy_problem()
+# ilp.write_lp('toy.lp')
 # opts = bdd_solver_options(ilp)
 # Or read .lp file from disk as:
 # opts = bdd_solver_options("/home/ahabbas/data/sm_avg_learned_features.lp")
