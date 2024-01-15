@@ -69,8 +69,10 @@ from BDD.bdd_solver_py import bdd_solver_options as bdd_solver_options
 from BDD.bdd_solver_py import bdd_solver as bdd_solver
 
 opts = bdd_solver_options("PATH_TO_LP_FILE.lp")
-opts.bdd_solver_type = bdd_solver_options.bdd_solver_types.lbfgs_cuda_mma # do dual optimization on GPU via FastDOG + LBFGS [3].
-opts.incremental_primal_rounding = True # do primal rounding based on FastDOG paper [2].
+# Do dual optimization on GPU via FastDOG + LBFGS [4]:
+opts.bdd_solver_type = bdd_solver_options.bdd_solver_types.lbfgs_cuda_mma 
+# Do primal rounding based on FastDOG paper [2]:
+opts.incremental_primal_rounding = True 
 solver = bdd_solver(opts)
 
 solver.solve_dual() # Solve dual problem.
@@ -86,6 +88,7 @@ Please navigate to `DOGE` sub-folder.
 If you use this work please cite
 * [`[1] - J. H. Lange and P. Swoboda. Efficient Message Passing for 0–1 ILPs with Binary Decision Diagrams. In ICML 2021.`](http://proceedings.mlr.press/v139/lange21a.html)
 * [`[2] - A. Abbas and P. Swoboda. FastDOG: Fast Discrete Optimization on GPU. In CVPR 2022.`](https://arxiv.org/abs/2111.10270)
-for the parallel solvers, and 
+for the parallel solvers,
 * [`[3] - A. Abbas and P. Swoboda. DOGE-Train: Discrete Optimization on GPU with End-to-end Training. In AAAI 2024.`](https://arxiv.org/abs/2205.11638)
-for learned solvers.
+for learned solvers, 
+* [`[4] - Roetzer, Paul, et al. Fast Discrete Optimisation for Geometrically Consistent 3D Shape Matching. arXiv preprint arXiv:2310.08230 (2023).`](https://arxiv.org/abs/2310.08230)for LBFGS based parallel solvers.
