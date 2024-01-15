@@ -61,7 +61,23 @@ git clone git@github.com:LPMP/BDD.git
 cd BDD
 python setup.py install
 ```
-For information about Python interface see [test_bdd_solver_py.py](test/test_bdd_solver_py.py).
+
+For running the solver via Python interface do:
+
+```
+from BDD.bdd_solver_py import bdd_solver_options as bdd_solver_options
+from BDD.bdd_solver_py import bdd_solver as bdd_solver
+
+opts = bdd_solver_options("PATH_TO_LP_FILE.lp")
+opts.bdd_solver_type = bdd_solver_options.bdd_solver_types.lbfgs_cuda_mma # do dual optimization on GPU via FastDOG + LBFGS [3].
+opts.incremental_primal_rounding = True # do primal rounding based on FastDOG paper [2].
+solver = bdd_solver(opts)
+
+solver.solve_dual() # Solve dual problem.
+obj, sol = solver.round() # Run primal heuristic.
+```
+
+For more information about Python interface see [bdd_solver_py.py](src/bdd_solver_py.py) and [test_bdd_solver_py.py](test/test_bdd_solver_py.py).
 
 ## Learned solver (DOGE-Train)
 Please navigate to `DOGE` sub-folder.
