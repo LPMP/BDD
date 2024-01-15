@@ -43,14 +43,15 @@ namespace LPMP {
         ILP_input::variable_order var_order = ILP_input::variable_order::input;
 
         // termination criteria //
-        size_t max_iter = 1000;
+        size_t max_iter = 10000;
         double tolerance = 1e-9;
         double improvement_slope = 1e-6;
         double time_limit = 3600;
         //////////////////////////
 
-        enum class bdd_solver_impl { sequential_mma, mma_cuda, parallel_mma, hybrid_parallel_mma, lbfgs_cuda_mma, lbfgs_parallel_mma, subgradient } bdd_solver_impl_;
-        enum class bdd_solver_precision { single_prec, double_prec } bdd_solver_precision_ = bdd_solver_precision::double_prec;
+        enum class bdd_solver_impl { sequential_mma, mma_cuda, parallel_mma, hybrid_parallel_mma, lbfgs_cuda_mma, lbfgs_parallel_mma, subgradient } 
+            bdd_solver_impl_ = bdd_solver_impl::lbfgs_cuda_mma;
+        enum class bdd_solver_precision { single_prec, double_prec } bdd_solver_precision_ = bdd_solver_precision::single_prec;
         bool solution_statistics = false;
 
         double smoothing = 0;
@@ -72,10 +73,10 @@ namespace LPMP {
 
         // incremental perturbation rounding //
         bool incremental_primal_rounding = false;
-        double incremental_initial_perturbation = std::numeric_limits<double>::infinity();
-        double incremental_growth_rate = 1.2;
-        int incremental_primal_num_itr_lb = 500;
-        int incremental_primal_rounding_num_itr = 500;
+        double incremental_initial_perturbation = 1.1;
+        double incremental_growth_rate = 1.1;
+        int incremental_primal_num_itr_lb = 100;
+        int incremental_primal_rounding_num_itr = 100;
         //////////////////////////////////////
 
         // Wedelin rounding //
