@@ -91,4 +91,4 @@ If you use this work please cite
 for the parallel solvers,
 * [`[3] - A. Abbas and P. Swoboda. DOGE-Train: Discrete Optimization on GPU with End-to-end Training. In AAAI 2024.`](https://arxiv.org/abs/2205.11638)
 for learned solvers, 
-* [`[4] - Roetzer, Paul, et al. Fast Discrete Optimisation for Geometrically Consistent 3D Shape Matching. arXiv preprint arXiv:2310.08230 (2023).`](https://arxiv.org/abs/2310.08230)for LBFGS based parallel solvers.
+* [`[4] - Roetzer, Paul, et al. Fast Discrete Optimisation for Geometrically Consistent 3D Shape Matching. arXiv preprint arXiv:2310.08230 (2023).`](https://arxiv.org/abs/2310.08230) for LBFGS based parallel solvers.
