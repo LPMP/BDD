@@ -79,7 +79,8 @@ solver.solve_dual() # Solve dual problem.
 obj, sol = solver.round() # Run primal heuristic.
 ```
 
-For more information about Python interface see [bdd_solver_py.py](src/bdd_solver_py.py) and [test_bdd_solver_py.py](test/test_bdd_solver_py.py).
+For more information about setting-up the solver especially from Python see this [guide](https://paulroetzer.github.io/posts/how-to-use-fastdog/) by Paul Roetzer.
+The python interface is exposed via [bdd_solver_py.py](src/bdd_solver_py.py) and one example of use is in [test_bdd_solver_py.py](test/test_bdd_solver_py.py).
 
 ## Learned solver (DOGE-Train)
 Please navigate to `DOGE` sub-folder.
