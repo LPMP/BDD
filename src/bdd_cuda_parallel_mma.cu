@@ -137,13 +137,13 @@ namespace LPMP {
     void bdd_cuda_parallel_mma<REAL>::iteration(const REAL omega)
     {
         MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME;
-        if(delta_lo_hi_.size() == 0)
-            delta_lo_hi_ = thrust::device_vector<REAL>(this->nr_variables() * 2, 0.0);
+        if(this->delta_lo_hi_.size() == 0)
+            this->delta_lo_hi_ = thrust::device_vector<REAL>(this->nr_variables() * 2, 0.0);
 
-        forward_mm(omega, delta_lo_hi_);
-        normalize_delta(delta_lo_hi_);
-        backward_mm(omega, delta_lo_hi_);
-        normalize_delta(delta_lo_hi_);
+        forward_mm(omega, this->delta_lo_hi_);
+        normalize_delta(this->delta_lo_hi_);
+        backward_mm(omega, this->delta_lo_hi_);
+        normalize_delta(this->delta_lo_hi_);
     }
 
     // arguments:

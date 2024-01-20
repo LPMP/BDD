@@ -1398,6 +1398,7 @@ namespace LPMP {
 
         thrust::for_each(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(0) + this->nr_layers(), d_mm_func);
         thrust::fill(def_min_marg_diff_ptr, def_min_marg_diff_ptr + this->nr_layers(), 0.0f);
+        thrust::fill(delta_lo_hi_.begin(), delta_lo_hi_.end(), 0.0);
         this->flush_forward_states();
         this->flush_backward_states();
     }

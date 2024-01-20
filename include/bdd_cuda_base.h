@@ -192,6 +192,8 @@ namespace LPMP {
             thrust::device_vector<int> root_indices_, bot_sink_indices_, top_sink_indices_;
             thrust::device_vector<int> primal_variable_sorting_order_; // indices to sort primal_variables_indices_
             thrust::device_vector<int> primal_variable_index_sorted_;  // to reduce min-marginals by key.
+            // Deferred min-marginal sums.
+            thrust::device_vector<REAL> delta_lo_hi_; // Two entries per primal variable. Even indices contain delta_lo and odd indices contain delta_hi.
 
             thrust::device_vector<int> layer_offsets_; // Similar to CSR representation where row is layer index, and column is bdd node.
 

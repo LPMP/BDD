@@ -41,9 +41,6 @@ namespace LPMP {
 
             thrust::device_vector<REAL> hi_cost_out_, lo_cost_out_; // One entry per BDD layer.
 
-            // Deferred min-marginal sums.
-            thrust::device_vector<REAL> delta_lo_hi_; // Two entries per primal variable. Even indices contain delta_lo and odd indices contain delta_hi.
-
 
         private:
             //void forward_iteration(const REAL omega);
