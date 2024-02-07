@@ -61,6 +61,10 @@ git clone git@github.com:LPMP/BDD.git
 cd BDD
 python setup.py install
 ```
+To use Python solver only on CPU (e.g. GPU not available) replace last command by
+```bash
+WITH_CUDA=OFF python setup.py install
+```
 
 For running the solver via Python interface do:
 
@@ -79,7 +83,7 @@ solver.solve_dual() # Solve dual problem.
 obj, sol = solver.round() # Run primal heuristic.
 ```
 
-For more information about setting-up the solver especially from Python see this [guide](https://paulroetzer.github.io/posts/how-to-use-fastdog/) by Paul Roetzer.
+For more information about setting-up the solver especially from Python see this [guide](https://paulroetzer.github.io/posts/how-to-use-fastdog/).
 The python interface is exposed via [bdd_solver_py.py](src/bdd_solver_py.py) and one example of use is in [test_bdd_solver_py.py](test/test_bdd_solver_py.py).
 
 ## Learned solver (DOGE-Train)

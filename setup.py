@@ -9,7 +9,6 @@ from setuptools import setup, Extension, find_packages
 from setuptools.command.build_ext import build_ext
 from pkg_resources import parse_version
 
-
 class CMakeExtension(Extension):
     def __init__(self, name, sourcedir=''):
         Extension.__init__(self, name, sources=[])
@@ -91,10 +90,13 @@ class CMakeBuild(build_ext):
 
     def build_extension(self, ext):
         extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
+
         cmake_args = ['-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=' + extdir,
-                      '-DPYTHON_EXECUTABLE=' + sys.executable,
-                      '-DWITH_CUDA=ON'
+                      '-DPYTHON_EXECUTABLE=' + sys.executable
                     ]
+        if _cuda_flag == "ON":
+            cmake_args.append('-DWITH_CUDA=ON')
+
         # if 'CUDA_PATH' in os.environ:
         #     cuda_path = os.environ['CUDA_HOME']
         #     print(f'Using CUDA from {cuda_path}')
@@ -125,6 +127,16 @@ class CMakeBuild(build_ext):
         subprocess.check_call(['cmake', ext.sourcedir] + cmake_args, cwd=self.build_temp, env=env)
         subprocess.check_call(['cmake', '--build', '.', '--target', ext.name] + build_args, cwd=self.build_temp)
 
+
+_cmake_modules = [CMakeExtension(name='bdd_mp_py'), 
+                CMakeExtension(name='ILP_instance_py'),
+                CMakeExtension(name='bdd_solver_py')]
+_py_modules = []
+_cuda_flag = os.environ.get("WITH_CUDA", "ON")
+if _cuda_flag == "ON":
+    _cmake_modules.append(CMakeExtension(name='bdd_cuda_learned_mma_py'))
+    _py_modules.extend(['bdd_cuda_torch', 'bdd_torch_base', 'bdd_torch_learned_mma'])
+
 setup(
     name='BDD',
     version='0.0.3',
@@ -132,11 +144,8 @@ setup(
     packages=find_packages('src'),
     package_dir={'':'src'},
     ext_package='BDD',
-    ext_modules=[CMakeExtension(name='bdd_mp_py'), 
-                CMakeExtension(name='ILP_instance_py'),
-                CMakeExtension(name='bdd_cuda_learned_mma_py'),
-                CMakeExtension(name='bdd_solver_py')],
-    py_modules=['bdd_cuda_torch', 'bdd_torch_base', 'bdd_torch_learned_mma'],
+    ext_modules=_cmake_modules,
+    py_modules=_py_modules,
     cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,
     setup_requires=['wheel']
