@@ -905,9 +905,14 @@ namespace LPMP {
     };
 
     template<typename REAL>
-    std::tuple<thrust::device_vector<int>, thrust::device_vector<REAL>, thrust::device_vector<REAL>> bdd_cuda_base<REAL>::sum_marginals_cuda(bool get_sorted, bool get_log_probs)
+    std::tuple<thrust::device_vector<int>, thrust::device_vector<REAL>, thrust::device_vector<REAL>> bdd_cuda_base<REAL>::sum_marginals_cuda(bool get_sorted, bool get_log_probs, const REAL smoothing_factor)
     {
         flush_forward_states();
+        if (smoothing_factor != 1.0)
+        {
+            thrust::transform(lo_cost_.begin(), lo_cost_.end(), thrust::make_constant_iterator<REAL>(smoothing_factor), lo_cost_.begin(), thrust::multiplies<REAL>());
+            thrust::transform(hi_cost_.begin(), hi_cost_.end(), thrust::make_constant_iterator<REAL>(smoothing_factor), hi_cost_.begin(), thrust::multiplies<REAL>());
+        }
         thrust::fill(cost_from_root_.begin(), cost_from_root_.end(), 0.0);
         thrust::scatter(thrust::make_constant_iterator<REAL>(1.0), thrust::make_constant_iterator<REAL>(1.0) + this->root_indices_.size(),
                         this->root_indices_.begin(), cost_from_root_.begin());
@@ -997,6 +1002,12 @@ namespace LPMP {
         set_special_nodes_costs();
         flush_forward_states();
         flush_backward_states();
+        if (smoothing_factor != 1.0)
+        {
+            thrust::transform(lo_cost_.begin(), lo_cost_.end(), thrust::make_constant_iterator<REAL>(1.0 / smoothing_factor), lo_cost_.begin(), thrust::multiplies<REAL>());
+            thrust::transform(hi_cost_.begin(), hi_cost_.end(), thrust::make_constant_iterator<REAL>(1.0 / smoothing_factor), hi_cost_.begin(), thrust::multiplies<REAL>());
+        }
+
         if (get_sorted)
         {
             thrust::device_vector<REAL> sum_marginals_lo_sorted(nr_layers());
@@ -1012,12 +1023,12 @@ namespace LPMP {
             return {primal_variable_index_, sum_marginals_lo, sum_marginals_hi};
     }
 
-    template<typename REAL>
+    template<typename REAL, typename REAL_arg>
     struct ComputeSmoothSolution {
         const int* primal_index;
         const REAL* log_marginals_lo;
         const REAL* log_marginals_hi;
-        REAL* prob_hi;
+        REAL_arg* prob_hi;
         const unsigned long num_vars;
         __host__ __device__ void operator() (const int i) const
         {
@@ -1036,14 +1047,15 @@ namespace LPMP {
     };
 
     template<typename REAL>
-    void bdd_cuda_base<REAL>::smooth_solution_cuda(thrust::device_ptr<REAL> smooth_sol)
+    template<typename REAL_arg>
+    void bdd_cuda_base<REAL>::smooth_solution_cuda(thrust::device_ptr<REAL_arg> smooth_sol, const REAL smoothing_factor)
     {
         thrust::device_vector<REAL> sum_marg_0, sum_marg_1;
         thrust::device_vector<int> primal_variable_index;
 
-        std::tie(primal_variable_index, sum_marg_0, sum_marg_1) = sum_marginals_cuda(false, true);
+        std::tie(primal_variable_index, sum_marg_0, sum_marg_1) = sum_marginals_cuda(false, true, smoothing_factor);
 
-        ComputeSmoothSolution<REAL> compute_smooth_sol({thrust::raw_pointer_cast(primal_variable_index.data()),
+        ComputeSmoothSolution<REAL, REAL_arg> compute_smooth_sol({thrust::raw_pointer_cast(primal_variable_index.data()),
                                                         thrust::raw_pointer_cast(sum_marg_0.data()), 
                                                         thrust::raw_pointer_cast(sum_marg_1.data()),
                                                         thrust::raw_pointer_cast(smooth_sol),
@@ -1124,22 +1136,25 @@ namespace LPMP {
 
     template<typename REAL>
     template<typename RETURN_TYPE>
-    thrust::device_vector<RETURN_TYPE> bdd_cuda_base<REAL>::bdds_solution_vec()
+    thrust::device_vector<RETURN_TYPE> bdd_cuda_base<REAL>::bdds_solution_vec(const double smoothing_factor)
     {
         thrust::device_vector<RETURN_TYPE> sol(nr_layers());
-        bdds_solution_cuda(sol.data());
+        if (smoothing_factor == 0.0)
+            bdds_solution_cuda(sol.data());
+        else
+            smooth_solution_cuda(sol.data(), smoothing_factor);
         return sol;
     }
 
-    template thrust::device_vector<float> bdd_cuda_base<float>::bdds_solution_vec();
-    template thrust::device_vector<double> bdd_cuda_base<float>::bdds_solution_vec();
-    template thrust::device_vector<char> bdd_cuda_base<float>::bdds_solution_vec();
-    template thrust::device_vector<int> bdd_cuda_base<float>::bdds_solution_vec();
+    template thrust::device_vector<float> bdd_cuda_base<float>::bdds_solution_vec(const double);
+    template thrust::device_vector<double> bdd_cuda_base<float>::bdds_solution_vec(const double);
+    template thrust::device_vector<char> bdd_cuda_base<float>::bdds_solution_vec(const double);
+    template thrust::device_vector<int> bdd_cuda_base<float>::bdds_solution_vec(const double);
 
-    template thrust::device_vector<float> bdd_cuda_base<double>::bdds_solution_vec();
-    template thrust::device_vector<double> bdd_cuda_base<double>::bdds_solution_vec();
-    template thrust::device_vector<char> bdd_cuda_base<double>::bdds_solution_vec();
-    template thrust::device_vector<int> bdd_cuda_base<double>::bdds_solution_vec();
+    template thrust::device_vector<float> bdd_cuda_base<double>::bdds_solution_vec(const double);
+    template thrust::device_vector<double> bdd_cuda_base<double>::bdds_solution_vec(const double);
+    template thrust::device_vector<char> bdd_cuda_base<double>::bdds_solution_vec(const double);
+    template thrust::device_vector<int> bdd_cuda_base<double>::bdds_solution_vec(const double);
 
     template<typename REAL>
     template<typename REAL_arg>

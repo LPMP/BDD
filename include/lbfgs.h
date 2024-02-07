@@ -5,6 +5,7 @@
 #include "time_measure_util.h"
 #include "bdd_logging.h"
 #include <deque>
+#include <execution>
 #ifdef WITH_CUDA
 #include <thrust/for_each.h>
 #include <thrust/inner_product.h>
@@ -32,7 +33,8 @@ class lbfgs : public SOLVER
     public:
         lbfgs(const BDD::bdd_collection& bdd_col, const int _history_size, 
         const double _init_step_size = 1e-6, const double _req_rel_lb_increase = 1e-6, 
-        const double _step_size_decrease_factor = 0.8, const double _step_size_increase_factor = 1.1);
+        const double _step_size_decrease_factor = 0.8, const double _step_size_increase_factor = 1.1, 
+        const double _smoothing_factor_gradient = 0.0);
 
         void iteration();
 
@@ -67,7 +69,7 @@ class lbfgs : public SOLVER
         double step_size;
         //double init_lb_increase;
         //bool init_lb_valid = false;
-        const double required_relative_lb_increase, step_size_decrease_factor, step_size_increase_factor;
+        double required_relative_lb_increase, step_size_decrease_factor, step_size_increase_factor, smoothing_factor_gradient;
         int num_unsuccessful_lbfgs_updates_ = 0;
         double initial_rho_inv = 0.0;
 
@@ -94,11 +96,13 @@ class lbfgs : public SOLVER
 template <class SOLVER, typename VECTOR, typename REAL, typename INT_VECTOR>
 lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs(const BDD::bdd_collection &bdd_col, const int _history_size,
                                    const double _init_step_size, const double _req_rel_lb_increase,
-                                   const double _step_size_decrease_factor, const double _step_size_increase_factor)
+                                   const double _step_size_decrease_factor, const double _step_size_increase_factor,
+                                   const double _smoothing_factor_gradient)
     : SOLVER(bdd_col),
       m(_history_size),
       step_size(_init_step_size), required_relative_lb_increase(_req_rel_lb_increase),
-      step_size_decrease_factor(_step_size_decrease_factor), step_size_increase_factor(_step_size_increase_factor)
+      step_size_decrease_factor(_step_size_decrease_factor), step_size_increase_factor(_step_size_increase_factor),
+      smoothing_factor_gradient(_smoothing_factor_gradient)
 {
         bdd_log << "[lbfgs] Initialized LBFGS with"
                 << "\n[lbfgs]\t\thistory size: " << m
@@ -106,7 +110,9 @@ lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs(const BDD::bdd_collection &bdd_co
                 << "\n[lbfgs]\t\trequired relative lb increase " << required_relative_lb_increase
                 << "\n[lbfgs]\t\tstep size decrease factor " << step_size_decrease_factor
                 << "\n[lbfgs]\t\tstep size increase factor " << step_size_increase_factor
-                << "\n[lbfgs]\t\thistory size" << m << "\n";
+                << "\n[lbfgs]\t\thistory size " << m 
+                << "\n[lbfgs]\t\tsmoothing factor for computing gradient " << smoothing_factor_gradient
+                << "\n";
 
         assert(step_size > 0.0);
         assert(step_size_decrease_factor > 0.0 && step_size_decrease_factor < 1.0);
@@ -133,7 +139,7 @@ lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs(const BDD::bdd_collection &bdd_co
 #ifdef WITH_CUDA
                 thrust::copy(cur_grad_f.begin(), cur_grad_f.end(), prev_grad_f.begin());
 #else
-                std::copy(cur_grad_f.begin(), cur_grad_f.end(), prev_grad_f.begin());
+                std::copy(std::execution::par, cur_grad_f.begin(), cur_grad_f.end(), prev_grad_f.begin());
 #endif
             prev_states_stored = true;
         }
@@ -144,7 +150,7 @@ lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs(const BDD::bdd_collection &bdd_co
             //thrust::transform(cur_x.begin(), cur_x.end(), prev_x.begin(), cur_s.begin(), thrust::minus<REAL>());
             thrust::transform(cur_x.begin(), cur_x.end(), prev_x.begin(), cur_s.begin(), _1 - _2);
 #else
-            std::transform(cur_x.begin(), cur_x.end(), prev_x.begin(), cur_s.begin(), std::minus<REAL>());
+            std::transform(std::execution::par, cur_x.begin(), cur_x.end(), prev_x.begin(), cur_s.begin(), std::minus<REAL>());
 #endif
             // compute grad_f_k - grad_f_{k-1}, but since we have maximization problem and lbfgs updates are derived for minimization so multiply gradients by -1.
             INT_VECTOR cur_y(cur_grad_f.size());
@@ -153,8 +159,9 @@ lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs(const BDD::bdd_collection &bdd_co
             thrust::transform(prev_grad_f.begin(), prev_grad_f.end(), cur_grad_f.begin(), cur_y.begin(), _1 - _2);
             REAL rho_inv = thrust::inner_product(cur_s.begin(), cur_s.end(), cur_y.begin(), (REAL) 0.0);
 #else
-            std::transform(prev_grad_f.begin(), prev_grad_f.end(), cur_grad_f.begin(), cur_y.begin(), std::minus<REAL>());
-            REAL rho_inv = std::inner_product(cur_s.begin(), cur_s.end(), cur_y.begin(), (REAL) 0.0);
+            std::transform(std::execution::par, prev_grad_f.begin(), prev_grad_f.end(), cur_grad_f.begin(), cur_y.begin(), std::minus<REAL>());
+            REAL rho_inv = std::transform_reduce(std::execution::par, cur_s.begin(), cur_s.end(), cur_y.begin(), (REAL) 0.0,
+                0.0, std::plus<REAL>(), std::multiplies<REAL>());
 #endif
 
             if (!initial_rho_inv_valid)
@@ -184,7 +191,7 @@ lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs(const BDD::bdd_collection &bdd_co
 #ifdef WITH_CUDA
             thrust::copy(cur_grad_f.begin(), cur_grad_f.end(), prev_grad_f.begin());
 #else
-            std::copy(cur_grad_f.begin(), cur_grad_f.end(), prev_grad_f.begin());
+            std::copy(std::execution::par, cur_grad_f.begin(), cur_grad_f.end(), prev_grad_f.begin());
 #endif
         }
     }
@@ -197,7 +204,7 @@ lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs(const BDD::bdd_collection &bdd_co
 
         using INT_TYPE = typename INT_VECTOR::value_type;
         // Update LBFGS states:
-        const INT_VECTOR cur_grad_f = this->template bdds_solution_vec<INT_TYPE>();
+        const INT_VECTOR cur_grad_f = this->template bdds_solution_vec<INT_TYPE>(smoothing_factor_gradient);
         this->store_iterate(cur_grad_f);
 
         // Check if enough history accumulated
@@ -290,7 +297,7 @@ lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs(const BDD::bdd_collection &bdd_co
 #ifdef WITH_CUDA
         thrust::copy(cur_grad_f.begin(), cur_grad_f.end(), direction.begin());
 #else
-        std::copy(cur_grad_f.begin(), cur_grad_f.end(), direction.begin());
+        std::copy(std::execution::par, cur_grad_f.begin(), cur_grad_f.end(), direction.begin());
 #endif
 
         assert(history.size() > 0);
@@ -302,7 +309,9 @@ lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs(const BDD::bdd_collection &bdd_co
 #ifdef WITH_CUDA
             const REAL alpha = thrust::inner_product(history[i].s.begin(), history[i].s.end(), direction.begin(), (REAL)0.0) / (history[i].rho_inv);
 #else
-            const REAL alpha = std::inner_product(history[i].s.begin(), history[i].s.end(), direction.begin(), (REAL)0.0) / (history[i].rho_inv);
+            const REAL alpha = std::transform_reduce(std::execution::par, history[i].s.begin(), history[i].s.end(), direction.begin(), (REAL)0.0,
+                std::plus<REAL>(), std::multiplies<REAL>()) / (history[i].rho_inv),
+                
 #endif
 
             alpha_history.push_back(alpha);
@@ -320,7 +329,8 @@ lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs(const BDD::bdd_collection &bdd_co
 #ifdef WITH_CUDA
         REAL last_y_norm = thrust::inner_product(history.back().y.begin(), history.back().y.end(), history.back().y.begin(), (REAL)0.0);
 #else
-        REAL last_y_norm = std::inner_product(history.back().y.begin(), history.back().y.end(), history.back().y.begin(), (REAL)0.0);
+        REAL last_y_norm = std::transform_reduce(std::execution::par, history.back().y.begin(), history.back().y.end(), history.back().y.begin(), (REAL)0.0,
+            std::plus<REAL>(), std::multiplies<REAL>());
 #endif
         REAL initial_H_diag_multiplier = history.back().rho_inv / (1e-8 + last_y_norm);
         // Skip line 5 in Alg.1 and fuse with line 7 for first loop itr.
@@ -336,7 +346,8 @@ lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs(const BDD::bdd_collection &bdd_co
             const REAL beta = current_rho * thrust::inner_product(history[i].y.begin(), history[i].y.end(), direction.begin(), (REAL)0.0);
             thrust::transform(history[i].s.begin(), history[i].s.end(), direction.begin(), direction.begin(), _2 + (alpha_history[i] - beta)*_1);
 #else
-            const REAL beta = current_rho * std::inner_product(history[i].y.begin(), history[i].y.end(), direction.begin(), (REAL)0.0);
+            const REAL beta = current_rho * std::transform_reduce(std::execution::par, history[i].y.begin(), history[i].y.end(), direction.begin(), (REAL)0.0,
+                std::plus<REAL>(), std::multiplies<REAL>());
             for (size_t j = 0; j < n; ++j)
                 direction[j] += (alpha_history[i] - beta) * history[i].s[j];
 #endif
@@ -437,5 +448,4 @@ lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs(const BDD::bdd_collection &bdd_co
         }
         return solver_type::lbfgs;
     }
-
 }

@@ -86,13 +86,15 @@ namespace LPMP {
             void bdds_solution_cuda(thrust::device_ptr<REAL_arg> sol); // Computes argmin for each BDD separately and sets in sol.
 
             template<typename RETURN_TYPE>
-            thrust::device_vector<RETURN_TYPE> bdds_solution_vec();
+            thrust::device_vector<RETURN_TYPE> bdds_solution_vec(const double smoothing_factor = 0.0);
 
             two_dim_variable_array<REAL> bdds_solution(); // Returns the solution on CPU and laid out in similar way as the output of min_marginals()
 
             two_dim_variable_array<std::array<double,2>> sum_marginals(bool get_log_probs = true);
-            std::tuple<thrust::device_vector<int>, thrust::device_vector<REAL>, thrust::device_vector<REAL>> sum_marginals_cuda(bool get_sorted = true, bool get_log_probs = true);
-            void smooth_solution_cuda(thrust::device_ptr<REAL> smooth_sol); // Computes smooth argmin.
+            std::tuple<thrust::device_vector<int>, thrust::device_vector<REAL>, thrust::device_vector<REAL>> sum_marginals_cuda(bool get_sorted = true, bool get_log_probs = true, REAL smoothing_factor = 1.0);
+
+            template<typename REAL_arg>
+            void smooth_solution_cuda(thrust::device_ptr<REAL_arg> smooth_sol, const REAL smoothing_factor = 1.0); // Computes smooth argmin.
 
             void compute_primal_objective_vec(thrust::device_ptr<REAL> primal_obj);
             std::vector<REAL> get_primal_objective_vector_host();

@@ -89,7 +89,7 @@ namespace LPMP {
 
             // LBFGS operations
             template<typename RETURN_TYPE>
-            std::vector<RETURN_TYPE> bdds_solution_vec();
+            std::vector<RETURN_TYPE> bdds_solution_vec(const double smoothing_factor = 0.0);
             std::vector<value_type> net_solver_costs();
             template<typename ITERATOR>
             void make_dual_feasible(ITERATOR begin, ITERATOR end) const;
@@ -1338,8 +1338,9 @@ namespace LPMP {
 
         template <typename BDD_BRANCH_NODE>
         template<typename RETURN_TYPE>
-        std::vector<RETURN_TYPE> bdd_parallel_mma_base<BDD_BRANCH_NODE>::bdds_solution_vec()
+        std::vector<RETURN_TYPE> bdd_parallel_mma_base<BDD_BRANCH_NODE>::bdds_solution_vec(const double smoothing_factor)
         {
+            MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
             backward_run();
 
             std::vector<RETURN_TYPE> solutions;

@@ -13,7 +13,8 @@ namespace LPMP {
         public:
             impl(BDD::bdd_collection& bdd_col, const int _history_size,
                 const double _init_step_size, const double _req_rel_lb_increase,
-                const double _step_size_decrease_factor, const double _step_size_increase_factor);
+                const double _step_size_decrease_factor, const double _step_size_increase_factor,
+                const double _gradient_smoothing_factor);
 #ifdef WITH_CUDA
             lbfgs<bdd_cuda_parallel_mma<REAL>, thrust::device_vector<REAL>, REAL, thrust::device_vector<char>> mma;
 #endif
@@ -22,11 +23,13 @@ namespace LPMP {
     template<typename REAL>
     bdd_lbfgs_cuda_mma<REAL>::impl::impl(BDD::bdd_collection& bdd_col, const int _history_size,
                     const double _init_step_size, const double _req_rel_lb_increase,
-                    const double _step_size_decrease_factor, const double _step_size_increase_factor)
+                    const double _step_size_decrease_factor, const double _step_size_increase_factor,
+                    const double _gradient_smoothing_factor)
 #ifdef WITH_CUDA
     : mma(bdd_col, _history_size,
         _init_step_size, _req_rel_lb_increase,
-        _step_size_decrease_factor, _step_size_increase_factor)
+        _step_size_decrease_factor, _step_size_increase_factor,
+        _gradient_smoothing_factor)
 #endif
     {
 #ifndef WITH_CUDA
@@ -37,13 +40,15 @@ namespace LPMP {
     template<typename REAL>
     bdd_lbfgs_cuda_mma<REAL>::bdd_lbfgs_cuda_mma(BDD::bdd_collection& bdd_col, const int _history_size,
                     const double _init_step_size, const double _req_rel_lb_increase,
-                    const double _step_size_decrease_factor, const double _step_size_increase_factor)
+                    const double _step_size_decrease_factor, const double _step_size_increase_factor,
+                    const double _gradient_smoothing_factor)
     {
 #ifdef WITH_CUDA
         MEASURE_FUNCTION_EXECUTION_TIME; 
         pimpl = std::make_unique<impl>(bdd_col, _history_size,
                 _init_step_size, _req_rel_lb_increase,
-                _step_size_decrease_factor, _step_size_increase_factor);
+                _step_size_decrease_factor, _step_size_increase_factor,
+                _gradient_smoothing_factor);
 #else
         throw std::runtime_error("bdd_solver not compiled with CUDA support");
 #endif

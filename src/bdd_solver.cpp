@@ -195,6 +195,7 @@ namespace LPMP {
         app.add_option("--lbfgs_required_relative_lb_increase", lbfgs_required_relative_lb_increase, "required relative increase in dual lower bound for LBFGS to apply an update, default = " + std::to_string(lbfgs_required_relative_lb_increase));
         app.add_option("--lbfgs_step_size_decrease_factor", lbfgs_step_size_decrease_factor, "decrease factor in line search for LBFGS, default = " + std::to_string(lbfgs_step_size_decrease_factor));
         app.add_option("--lbfgs_step_size_increase_factor", lbfgs_step_size_increase_factor, "increase factor in line search for LBFGS, default = " + std::to_string(lbfgs_step_size_increase_factor));
+        app.add_option("--lbfgs_gradient_smoothing_factor", lbfgs_gradient_smoothing_factor, "compute gradients of smoothed dual obj. 0.0 corresponds to no smoothing, higher pos. values will do LESS smoothing. Default = " + std::to_string(lbfgs_gradient_smoothing_factor));
 
         auto primal_group = app.add_option_group("primal rounding", "method for obtaining a primal solution from the dual optimization");
         auto incremental_primal_arg = primal_group->add_flag("--incremental_primal", incremental_primal_rounding, "incremental primal rounding flag");
@@ -475,13 +476,15 @@ namespace LPMP {
                     bdd_pre.get_bdd_collection(), costs.begin(), costs.end(),
                     options.lbfgs_history_size,
                     options.lbfgs_step_size, options.lbfgs_required_relative_lb_increase, 
-                    options.lbfgs_step_size_decrease_factor, options.lbfgs_step_size_increase_factor));
+                    options.lbfgs_step_size_decrease_factor, options.lbfgs_step_size_increase_factor,
+                    options.lbfgs_gradient_smoothing_factor));
             else if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::double_prec)
                 solver = std::move(bdd_lbfgs_cuda_mma<double>(
                     bdd_pre.get_bdd_collection(), costs.begin(), costs.end(),
                     options.lbfgs_history_size,
                     options.lbfgs_step_size, options.lbfgs_required_relative_lb_increase, 
-                    options.lbfgs_step_size_decrease_factor, options.lbfgs_step_size_increase_factor));
+                    options.lbfgs_step_size_decrease_factor, options.lbfgs_step_size_increase_factor,
+                    options.lbfgs_gradient_smoothing_factor));
             else
                 throw std::runtime_error("only float and double precision allowed");
             bdd_log << "[bdd solver] constructed LBFGS CUDA based mma solver\n"; 
@@ -495,13 +498,15 @@ namespace LPMP {
                     bdd_pre.get_bdd_collection(), costs.begin(), costs.end(),
                     options.lbfgs_history_size,
                     options.lbfgs_step_size, options.lbfgs_required_relative_lb_increase, 
-                    options.lbfgs_step_size_decrease_factor, options.lbfgs_step_size_increase_factor));
+                    options.lbfgs_step_size_decrease_factor, options.lbfgs_step_size_increase_factor,
+                    options.lbfgs_gradient_smoothing_factor));
             else if(options.bdd_solver_precision_ == bdd_solver_options::bdd_solver_precision::double_prec)
                 solver = std::move(bdd_lbfgs_parallel_mma<double>(
                     bdd_pre.get_bdd_collection(), costs.begin(), costs.end(),
                     options.lbfgs_history_size,
                     options.lbfgs_step_size, options.lbfgs_required_relative_lb_increase, 
-                    options.lbfgs_step_size_decrease_factor, options.lbfgs_step_size_increase_factor));
+                    options.lbfgs_step_size_decrease_factor, options.lbfgs_step_size_increase_factor,
+                    options.lbfgs_gradient_smoothing_factor));
             else
                 throw std::runtime_error("only float and double precision allowed");
             bdd_log << "[bdd solver] constructed LBFGS parallel mma solver\n"; 

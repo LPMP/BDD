@@ -11,7 +11,8 @@ namespace LPMP {
         public:
             impl(BDD::bdd_collection& bdd_col, const int _history_size,
                 const double _init_step_size, const double _req_rel_lb_increase,
-                const double _step_size_decrease_factor, const double _step_size_increase_factor);
+                const double _step_size_decrease_factor, const double _step_size_increase_factor,
+                const double _gradient_smoothing_factor);
 
             lbfgs<bdd_parallel_mma_base<bdd_branch_instruction<REAL, uint16_t>>, std::vector<REAL>, REAL, std::vector<char>> mma;
     };
@@ -19,22 +20,26 @@ namespace LPMP {
     template<typename REAL>
     bdd_lbfgs_parallel_mma<REAL>::impl::impl(BDD::bdd_collection& bdd_col, const int _history_size,
                 const double _init_step_size, const double _req_rel_lb_increase,
-                const double _step_size_decrease_factor, const double _step_size_increase_factor)
+                const double _step_size_decrease_factor, const double _step_size_increase_factor,
+                const double _gradient_smoothing_factor)
     : mma(bdd_col, _history_size,
         _init_step_size, _req_rel_lb_increase,
-        _step_size_decrease_factor, _step_size_increase_factor)
+        _step_size_decrease_factor, _step_size_increase_factor,
+        _gradient_smoothing_factor)
     {
     }
 
     template<typename REAL>
     bdd_lbfgs_parallel_mma<REAL>::bdd_lbfgs_parallel_mma(BDD::bdd_collection& bdd_col, const int _history_size,
                 const double _init_step_size, const double _req_rel_lb_increase,
-                const double _step_size_decrease_factor, const double _step_size_increase_factor)
+                const double _step_size_decrease_factor, const double _step_size_increase_factor, 
+                const double _gradient_smoothing_factor)
     {
         MEASURE_FUNCTION_EXECUTION_TIME; 
         pimpl = std::make_unique<impl>(bdd_col, _history_size,
             _init_step_size, _req_rel_lb_increase,
-            _step_size_decrease_factor, _step_size_increase_factor);
+            _step_size_decrease_factor, _step_size_increase_factor,
+            _gradient_smoothing_factor);
     }
 
     template<typename REAL>

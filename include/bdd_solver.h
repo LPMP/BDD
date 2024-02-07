@@ -70,6 +70,7 @@ namespace LPMP {
         double lbfgs_required_relative_lb_increase = 1e-6;
         double lbfgs_step_size_decrease_factor = 0.8;
         double lbfgs_step_size_increase_factor = 1.1;
+        double lbfgs_gradient_smoothing_factor = 0.0;
 
         // incremental perturbation rounding //
         bool incremental_primal_rounding = false;
