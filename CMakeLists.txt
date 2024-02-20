@@ -85,6 +85,7 @@ CPMAddPackage(
     OPTIONS
     "BUILD_DOC OFF"
     "BUILD_SANDBOX OFF"
+    "SKIP_PERFORMANCE_COMPARISON" ON
 )
 target_include_directories(LPMP-BDD INTERFACE "${cereal_SOURCE_DIR}/include")
 

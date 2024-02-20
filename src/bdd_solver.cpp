@@ -1,6 +1,4 @@
 #include "bdd_solver.h"
-#include "ILP_parser.h"
-#include "OPB_parser.h"
 #include "min_marginal_utils.h"
 #include "incremental_mm_agreement_rounding_cuda.h"
 #include "incremental_mm_agreement_rounding.hxx"
@@ -21,7 +19,6 @@
 #include "run_solver_util.h"
 #include "mm_primal_decoder.h"
 #include <string>
-#include <regex>
 
 namespace LPMP {
 
@@ -59,53 +56,17 @@ namespace LPMP {
         
     }
 
-    ILP_input parse_ilp_file(const std::string& filename)
-    {
-        // determine whether file is in LP format or in opb one.
-        if(filename.substr(filename.find_last_of(".") + 1) == "opb")
-        {
-            bdd_log << "[bdd solver] Parse opb file\n";
-            return OPB_parser::parse_file(filename);
-        }
-        else if(filename.substr(filename.find_last_of(".") + 1) == "lp")
-        {
-            bdd_log << "[bdd solver] Parse lp file\n";
-            return ILP_parser::parse_file(filename);
-        }
-        else // peek into file
-        {
-            throw std::runtime_error("peeking into files not implemented yet");
-        }
-    }
-
-    ILP_input parse_ilp_string(const std::string& input)
-    {
-        // if file begins with * (i.e. opb comment) or with min: then it is an opb file
-        std::regex comment_regex("^\\w*\\*");
-        std::regex opb_min_regex("^\\w*min:");
-        if(std::regex_search(input, comment_regex) || std::regex_search(input, opb_min_regex)) 
-        {
-            bdd_log << "[bdd solver] Parse opb string\n";
-            return OPB_parser::parse_string(input); 
-        }
-        else
-        {
-            bdd_log << "[bdd solver] Parse lp string\n";
-            return ILP_parser::parse_string(input); 
-        }
-    }
-
     void read_ILP(bdd_solver_options& options)
     {
         options.ilp = [&]()
         {
             if(!options.input_file.empty())
             {
-                return parse_ilp_file(options.input_file);
+                return options.file_reading_func(options.input_file);
             }
             else if(!options.input_string.empty())
             {
-                return parse_ilp_string(options.input_string);
+                return options.string_reading_func(options.input_string);
             }
             else
                 return options.ilp;

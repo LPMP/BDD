@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ILP_input.h"
-#include "ILP_parser.h"
+#include "input_parser.h"
 #include "bdd_preprocessor.h"
 #include "bdd_mma.h"
 #include "bdd_mma_smooth.h"
@@ -37,6 +37,8 @@ namespace LPMP {
 
         std::string input_file;
         std::string input_string;
+        std::function<ILP_input(const std::string&)> file_reading_func = parse_ilp_file;
+        std::function<ILP_input(const std::string&)> string_reading_func = parse_ilp_string;
         bool take_cost_logarithms = false;
         enum class optimization_type { minimization, maximization } optimization = optimization_type::minimization;
         ILP_input ilp;
