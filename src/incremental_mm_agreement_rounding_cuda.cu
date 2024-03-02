@@ -31,9 +31,9 @@ namespace LPMP {
         {
             REAL mm_0 = thrust::get<0>(t);
             REAL mm_1 = thrust::get<1>(t);
-            if(mm_0 + 1e-6 <= mm_1)
+            if(mm_0 + 1e-3 <= mm_1)
                 return -1;
-            else if(mm_1 + 1e-6 <= mm_0)
+            else if(mm_1 + 1e-3 <= mm_0)
                 return 1;
             else 
                 return 0;

@@ -349,6 +349,7 @@ lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs(const BDD::bdd_collection &bdd_co
     {
         num_unsuccessful_lbfgs_updates_ = 0;
         history.clear();
+        lb_history.clear();
         prev_states_stored = false;
         initial_rho_inv = 0.0;
         initial_rho_inv_valid = false;

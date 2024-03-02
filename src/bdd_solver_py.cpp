@@ -69,5 +69,6 @@ PYBIND11_MODULE(bdd_solver_py, m) {
             return round(solver);
         })
         .def("min_marginals_with_var_names", &LPMP::bdd_solver::min_marginals_with_variable_names)
+        .def("variable_names", &LPMP::bdd_solver::variable_names)
         ;
 }

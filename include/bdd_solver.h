@@ -119,6 +119,7 @@ namespace LPMP {
             void fix_variable(const std::string& var, const bool value);
             two_dim_variable_array<std::array<double,2>> min_marginals();
             std::tuple<std::vector<std::string>, std::vector<double>, std::vector<double>> min_marginals_with_variable_names();
+            std::vector<std::string> variable_names();
             void export_difficult_core();
 
         private:
