@@ -245,18 +245,58 @@ namespace LPMP {
         return *thrust::max_element(mm_abs_diff.begin(), mm_abs_diff.end());
     }
 
-struct mm_type_to_sol {
-    __host__ __device__
-        char operator()(const mm_type t)
+    struct mm_type_to_sol {
+        __host__ __device__
+            char operator()(const mm_type t)
+            {
+                if(t == mm_type::one)
+                    return 1;
+                else if(t == mm_type::zero)
+                    return 0;
+                assert(false);
+                return -1; 
+            }
+    };
+
+    struct bdds_solution_to_vars {
+        __host__ __device__
+            char operator()(const thrust::tuple<int, int> t)
+            {
+                const int sol_sum = thrust::get<0>(t);
+                const int var_sum = thrust::get<1>(t);
+
+                if(sol_sum == var_sum)
+                    return 1;
+                else if(sol_sum == 0)
+                    return 0;
+                return 2; 
+            }
+    };
+
+    template<typename SOLVER>
+        thrust::device_vector<char> check_bdd_solution_feasibility(SOLVER& s)
         {
-            if(t == mm_type::one)
-                return 1;
-            else if(t == mm_type::zero)
-                return 0;
-            assert(false);
-            return -1; 
+            thrust::device_vector<int> bdds_solution = s.template bdds_solution_vec<int>(); 
+            thrust::device_vector<int> primal_variable_index(s.get_primal_variable_index());
+            thrust::sort_by_key(primal_variable_index.begin(), primal_variable_index.end(), bdds_solution.begin());
+
+            auto first_val = thrust::zip_iterator(thrust::make_tuple(bdds_solution.begin(), thrust::make_constant_iterator<int>(1)));
+            thrust::device_vector<int> per_var_solution_sum(s.nr_variables() + 1);
+            thrust::device_vector<int> var_counts(s.nr_variables() + 1);
+            auto first_out_val = thrust::zip_iterator(thrust::make_tuple(per_var_solution_sum.begin(), var_counts.begin()));
+
+            thrust::equal_to<int> binary_pred;
+            auto new_end = thrust::reduce_by_key(primal_variable_index.begin(), primal_variable_index.end(), 
+                            first_val, thrust::make_discard_iterator(), first_out_val, binary_pred, tuple_sum<int>());
+
+            per_var_solution_sum.resize(s.nr_variables());
+            var_counts.resize(s.nr_variables());
+            
+            auto last_out_val = thrust::zip_iterator(thrust::make_tuple(per_var_solution_sum.end(), var_counts.end()));
+            thrust::device_vector<char> sol(s.nr_variables());
+            thrust::transform(first_out_val, last_out_val, sol.begin(), bdds_solution_to_vars());
+            return sol;
         }
-};
 
     template<typename SOLVER>
         std::vector<char> perturb_primal_costs(SOLVER& s, const double cur_delta, const int round_index, const bool verbose)
@@ -292,13 +332,26 @@ struct mm_type_to_sol {
             // reconstruct solution from min-marginals
             if(nr_one_mms + nr_zero_mms == s.nr_variables())
             {
-                if (verbose) std::cout << "[incremental primal rounding cuda] reconstruct solution\n";
+                if (verbose) std::cout << "[incremental primal rounding cuda] reconstruct solution through min-marginals\n";
                 assert(mm_types.size() == s.nr_variables());
                 thrust::device_vector<char> device_sol(s.nr_variables());
                 thrust::transform(mm_types.begin(), mm_types.end(), device_sol.begin(), mm_type_to_sol{});
                 std::vector<char> sol(s.nr_variables());
                 thrust::copy(device_sol.begin(), device_sol.end(), sol.begin());
                 return sol;
+            }
+            else
+            {
+                const thrust::device_vector<char> device_sol = check_bdd_solution_feasibility(s);
+                const size_t nr_inconsistent = thrust::count(device_sol.begin(), device_sol.end(), 2);
+                std::cout<<"[incremental primal rounding cuda] nr_inconsistent in bdd solution: "<<nr_inconsistent<<"\n";
+                if (*thrust::max_element(device_sol.begin(), device_sol.end()) <= 1)
+                {
+                    if (verbose) std::cout << "[incremental primal rounding cuda] reconstruct solution through BDD solution\n";
+                    std::vector<char> sol(s.nr_variables());
+                    thrust::copy(device_sol.begin(), device_sol.end(), sol.begin());
+                    return sol;                    
+                }
             }
 
             thrust::device_vector<double> cost_delta_0(s.nr_variables());
