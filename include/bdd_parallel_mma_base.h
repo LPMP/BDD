@@ -23,6 +23,8 @@ namespace LPMP {
             using value_type = typename BDD_BRANCH_NODE::value_type;
             bdd_parallel_mma_base() {}
             bdd_parallel_mma_base(const BDD::bdd_collection& bdd_col) { add_bdds(bdd_col); }
+            template<typename COST_ITERATOR>
+            bdd_parallel_mma_base(const BDD::bdd_collection& bdd_col, COST_ITERATOR costs_begin, COST_ITERATOR costs_end) { add_bdds(bdd_col); update_costs(costs_begin, costs_begin, costs_begin, costs_end); }
 
             void add_bdds(const BDD::bdd_collection& bdd_col);
 
@@ -906,9 +908,9 @@ namespace LPMP {
         {
             const std::array<size_t,1> vars = {var};
             if(value == false)
-                fix_variables(vars.begin(), vars.begin(), vars.begin(), vars.end());
-            else
                 fix_variables(vars.begin(), vars.end(), vars.begin(), vars.begin());
+            else
+                fix_variables(vars.begin(), vars.begin(), vars.begin(), vars.end());
         }
 
     template<typename BDD_BRANCH_NODE>

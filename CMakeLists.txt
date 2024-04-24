@@ -5,6 +5,8 @@ project(LPMP-BDD
     LANGUAGES CXX
 )
 
+find_package(Python COMPONENTS Interpreter Development) # for pybind11, otherwise conda python is selected instead of system one
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(WITH_CUDA "Compile with CUDA support" OFF)
@@ -54,9 +56,6 @@ include(${CPM_DOWNLOAD_LOCATION})
 CPMAddPackage("gh:taocpp/PEGTL#main")
 target_include_directories(LPMP-BDD INTERFACE "${PEGTL_SOURCE_DIR}/include")
 
-CPMAddPackage("gh:CLIUtils/CLI11#main")
-target_include_directories(LPMP-BDD INTERFACE "${CLI11_SOURCE_DIR}/include")
-
 CPMAddPackage("gl:libeigen/eigen#master")
 target_include_directories(LPMP-BDD INTERFACE "${eigen_SOURCE_DIR}")
 
@@ -65,13 +64,12 @@ target_include_directories(LPMP-BDD INTERFACE "${robin-map_SOURCE_DIR}/include")
 
 CPMAddPackage(
     NAME pybind11
-    GIT_TAG master
+    GIT_TAG v2.11
     GITHUB_REPOSITORY pybind/pybind11
     OPTIONS
     "PYBIND11_CPP_STANDARD -std=c++17"
     "PYBIND11_INSTALL ON CACHE BOOL"
 )
-find_package(pybind11 REQUIRED)
 
 CPMAddPackage("gh:NVIDIA/thrust#main")
 find_package(Thrust REQUIRED CONFIG PATHS "${thrust_SOURCE_DIR}")
@@ -88,6 +86,15 @@ CPMAddPackage(
     "SKIP_PERFORMANCE_COMPARISON" ON
 )
 target_include_directories(LPMP-BDD INTERFACE "${cereal_SOURCE_DIR}/include")
+
+CPMAddPackage(
+  NAME nlohmann_json
+  VERSION 3.11.3
+  GITHUB_REPOSITORY nlohmann/json
+  OPTIONS
+    "JSON_BuildTests OFF"
+)
+target_link_libraries(LPMP-BDD INTERFACE nlohmann_json::nlohmann_json)
 
 #target_compile_options(LPMP-BDD INTERFACE -Wall -Wextra -Wpedantic -Werror)
 

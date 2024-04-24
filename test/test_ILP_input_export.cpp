@@ -73,29 +73,38 @@ const std::string export_opb(const std::string& problem)
 
 void test_export(const std::string& problem, const double lb)
 {
-    auto compute_lp = [&](const std::string& problem) {
-        std::vector<std::string> solver_input = {
-            "--input_string", problem,
-            "-s", "mma",
-            "--max_iter", "1000",
-            "--tolerance", "1e-10"
-        };
+    auto compute_lp = [&](const std::string &problem)
+    {
+        auto config_json = nlohmann::json::parse(R""""({"precision": "double",
+      "termination criteria": { 
+        "maximum iterations": 1000,
+         "improvement slope": 0.0,
+          "minimum improvement": 0.0,
+           "time limit": 1e10 
+           }
+})"""");
+        config_json["input"] = problem;
+        config_json["relaxation solver"] = "sequential mma";
 
-        bdd_solver solver((bdd_solver_options(solver_input))); 
+        bdd_solver solver(config_json); 
         solver.solve();
 
         return solver.lower_bound();
     };
 
     auto compute_opb = [&](const std::string& problem) {
-        std::vector<std::string> solver_input = {
-            "--input_string", problem,
-            "-s", "mma",
-            "--max_iter", "1000",
-            "--tolerance", "1e-10"
-        };
+        auto config_json = nlohmann::json::parse(R""""({"precision": "double",
+      "termination criteria": { 
+        "maximum iterations": 1000,
+         "improvement slope": 0.0,
+          "minimum improvement": 0.0,
+           "time limit": 1e10 
+           }
+})"""");
+        config_json["input"] = problem;
+        config_json["relaxation solver"] = "sequential mma";
 
-        bdd_solver solver((bdd_solver_options(solver_input))); 
+        bdd_solver solver(config_json); 
         solver.solve();
 
         return solver.lower_bound();

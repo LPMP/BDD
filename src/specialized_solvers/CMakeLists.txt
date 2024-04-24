@@ -4,17 +4,26 @@ target_link_libraries(mrf_input ILP_input LPMP-BDD)
 add_library(mrf_uai_parser mrf_uai_parser.cpp)
 target_link_libraries(mrf_uai_parser ILP_input LPMP-BDD)
 
-add_executable(mrf_solver mrf_solver.cpp)
+add_library(mrf_solver mrf_solver.cpp)
 target_link_libraries(mrf_solver mrf_input mrf_uai_parser LPMP-BDD)
+
+add_executable(mrf_solver_cl mrf_solver_cl.cpp)
+target_link_libraries(mrf_solver_cl mrf_solver)
 
 add_library(graph_matching_input graph_matching_input.cpp)
 target_link_libraries(graph_matching_input ILP_input LPMP-BDD)
 
+add_executable(graph_matching_solver_cl graph_matching_solver_cl.cpp)
+target_link_libraries(graph_matching_solver_cl graph_matching_solver LPMP-BDD)
+
 add_library(multi_graph_matching_input multi_graph_matching_input.cpp)
 target_link_libraries(multi_graph_matching_input graph_matching_input ILP_input LPMP-BDD)
 
-add_executable(graph_matching_solver graph_matching_solver.cpp)
+add_library(graph_matching_solver graph_matching_solver.cpp)
 target_link_libraries(graph_matching_solver graph_matching_input LPMP-BDD)
 
-add_executable(multi_graph_matching_solver multi_graph_matching_solver.cpp)
+add_library(multi_graph_matching_solver multi_graph_matching_solver.cpp)
 target_link_libraries(multi_graph_matching_solver multi_graph_matching_input LPMP-BDD)
+
+add_executable(multi_graph_matching_solver_cl multi_graph_matching_solver_cl.cpp)
+target_link_libraries(multi_graph_matching_solver_cl multi_graph_matching_solver LPMP-BDD)

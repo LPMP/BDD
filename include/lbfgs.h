@@ -26,13 +26,40 @@ using namespace thrust::placeholders;
 // size_t nr_layers()
 // void gradient_step(VECTOR)
 
+        constexpr static int lbfgs_default_history_size = 5;
+        constexpr static double lbfgs_default_init_step_size = 1e-6;
+        constexpr static double lbfgs_default_req_rel_lb_increase = 1e-6;
+        constexpr static double lbfgs_default_step_size_decrease_factor = 0.8;
+        constexpr static double lbfgs_default_step_size_increase_factor = 1.1;
+
 template<class SOLVER, typename VECTOR, typename REAL, typename INT_VECTOR>
 class lbfgs : public SOLVER
 {
     public:
-        lbfgs(const BDD::bdd_collection& bdd_col, const int _history_size, 
-        const double _init_step_size = 1e-6, const double _req_rel_lb_increase = 1e-6, 
-        const double _step_size_decrease_factor = 0.8, const double _step_size_increase_factor = 1.1);
+
+        lbfgs(const BDD::bdd_collection& bdd_col, 
+        const int _history_size,
+        const double _init_step_size,
+        const double _req_rel_lb_increase,
+        const double _step_size_decrease_factor,
+        const double _step_size_increase_factor);
+
+        lbfgs(const BDD::bdd_collection& bdd_col)
+        : lbfgs(bdd_col, lbfgs_default_history_size, lbfgs_default_init_step_size, lbfgs_default_req_rel_lb_increase, lbfgs_default_step_size_decrease_factor, lbfgs_default_step_size_increase_factor)
+        {}
+
+        template<typename COST_ITERATOR>
+        lbfgs(const BDD::bdd_collection& bdd_col, COST_ITERATOR cost_begin, COST_ITERATOR cost_end,
+        const int _history_size,
+        const double _init_step_size,
+        const double _req_rel_lb_increase,
+        const double _step_size_decrease_factor,
+        const double _step_size_increase_factor);
+
+        template<typename COST_ITERATOR>
+        lbfgs(const BDD::bdd_collection& bdd_col, COST_ITERATOR cost_begin, COST_ITERATOR cost_end)
+        : lbfgs(bdd_col, cost_begin, cost_end, lbfgs_default_history_size, lbfgs_default_init_step_size, lbfgs_default_req_rel_lb_increase, lbfgs_default_step_size_decrease_factor, lbfgs_default_step_size_increase_factor)
+        {}
 
         void iteration();
 
@@ -63,11 +90,11 @@ class lbfgs : public SOLVER
 
         VECTOR prev_x;
         INT_VECTOR prev_grad_f;
-        const int m;
+        int m;
         double step_size;
         //double init_lb_increase;
         //bool init_lb_valid = false;
-        const double required_relative_lb_increase, step_size_decrease_factor, step_size_increase_factor;
+        double required_relative_lb_increase, step_size_decrease_factor, step_size_increase_factor;
         int num_unsuccessful_lbfgs_updates_ = 0;
         double initial_rho_inv = 0.0;
 
@@ -86,9 +113,6 @@ class lbfgs : public SOLVER
 
         void mma_iteration();
         void lbfgs_iteration(const INT_VECTOR& grad_f);
-
-        // for executing on host vs. device
-        //constexpr static bool gpu = SOLVER::
 };
 
 template <class SOLVER, typename VECTOR, typename REAL, typename INT_VECTOR>
@@ -116,6 +140,16 @@ lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs(const BDD::bdd_collection &bdd_co
 
         prev_x = VECTOR(this->nr_layers());
         prev_grad_f = INT_VECTOR(this->nr_layers());
+    }
+
+    template <class SOLVER, typename VECTOR, typename REAL, typename INT_VECTOR>
+    template<typename COST_ITERATOR>
+    lbfgs<SOLVER, VECTOR, REAL, INT_VECTOR>::lbfgs(const BDD::bdd_collection &bdd_col, COST_ITERATOR cost_begin, COST_ITERATOR cost_end, const int _history_size,
+                                   const double _init_step_size, const double _req_rel_lb_increase,
+                                   const double _step_size_decrease_factor, const double _step_size_increase_factor)
+    : lbfgs(bdd_col, _history_size, _init_step_size, _req_rel_lb_increase, _step_size_decrease_factor, _step_size_increase_factor)
+    {
+        update_costs(cost_begin, cost_begin, cost_begin, cost_end);
     }
 
     template <class SOLVER, typename VECTOR, typename REAL, typename INT_VECTOR>

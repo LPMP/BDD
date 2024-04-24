@@ -1,7 +1,7 @@
 #include <string>
 #include "specialized_solvers/mrf_input.h"
 #include "../test.h"
-#include "bdd_solver.h"
+#include "specialized_solvers/mrf_solver.h"
 #include <iostream>
 
 using namespace LPMP;
@@ -78,23 +78,36 @@ int main(int argc, char** argv)
         test(mrf.pairwise(1,{0,0}) == 0.210);
 
         // LB = 0.644 + 0.69 + 0.42
-        bdd_solver_options opts;
-        opts.ilp = mrf.convert_to_ilp();
-        opts.bdd_solver_impl_ = bdd_solver_options::bdd_solver_impl::sequential_mma;
-        bdd_solver s(opts);
-        s.solve();
-        test(std::abs(s.lower_bound() - (0.644 + 0.69 + 0.42)) <= 1e-4);
+        auto config_json = nlohmann::json::parse(R""""({"precision": "double",
+     "relaxation solver": "sequential mma",
+      "termination criteria": { 
+        "maximum iterations": 20,
+         "improvement slope": 0.0,
+          "minimum improvement": 0.0,
+           "time limit": 1e10 
+           }
+})"""");
+        config_json["input"] = uai_test_input_1;
+        mrf_bdd_solver solver(config_json);
+        solver.solve();
+        test(std::abs(solver.lower_bound() - (0.644 + 0.69 + 0.42)) <= 1e-4);
     }
 
     // LB = 17
     {
-        mrf_input mrf = parse_mrf_uai_string(uai_test_input_2);
-        bdd_solver_options opts;
-        opts.ilp = mrf.convert_to_ilp();
-        opts.bdd_solver_impl_ = bdd_solver_options::bdd_solver_impl::sequential_mma;
-        bdd_solver s(opts);
-        s.solve();
-        test(std::abs(s.lower_bound() - 17) <= 1e-4);
+        auto config_json = nlohmann::json::parse(R""""({"precision": "double",
+     "relaxation solver": "sequential mma",
+      "termination criteria": { 
+        "maximum iterations": 20,
+         "improvement slope": 0.0,
+          "minimum improvement": 0.0,
+           "time limit": 1e10 
+           }
+})"""");
+        config_json["input"] = uai_test_input_2;
+        mrf_bdd_solver solver(config_json);
+        solver.solve();
+        test(std::abs(solver.lower_bound() - 17) <= 1e-4);
     }
 }
 

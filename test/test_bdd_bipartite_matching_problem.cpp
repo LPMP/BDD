@@ -1,20 +1,25 @@
 #include "bdd_solver.h"
-#include <vector>
 #include <string>
-#include <iostream>
+#include <nlohmann/json.hpp>
 #include "test.h"
 
 using namespace LPMP;
 
-void test_problem(const std::string input_string, const double expected_lb, std::vector<std::string> args)
+void test_problem(const std::string input_string, const double expected_lb)
 {
-    args.push_back("--input_string");
-    args.push_back(input_string);
-    bdd_solver solver((bdd_solver_options(args)));
-    const double initial_lb = solver.lower_bound();
+    auto config_json = nlohmann::json::parse(R""""({"precision": "double",
+     "relaxation solver": "sequential mma",
+      "termination criteria": { 
+        "maximum iterations": 20,
+         "improvement slope": 0.0,
+          "minimum improvement": 0.0,
+           "time limit": 1e10 
+           }
+})"""");
+    config_json["input"] = input_string;
+    bdd_solver solver(config_json);
     solver.solve();
     const double lb = solver.lower_bound();
-
     test(std::abs(lb - expected_lb) <= 1e-6);
 }
 
@@ -49,15 +54,6 @@ End)";
 
 int main(int argc, char** arv)
 {
-//    test_problem(matching_3x3_diag, -6.0, {"-s", "mma", "--max_iter", "20"});
-//    test_problem(matching_3x3_diag, -6.0, {"-s", "decomposition_mma", "--nr_threads", "2", "--max_iter", "1000"});
-//    test_problem(matching_3x3_diag, -6.0, {"-s", "anisotropic_mma", "--max_iter", "20"});
-//    test_problem(matching_3x3_diag, -6.0, {"-s", "mma_srmp", "--max_iter", "20"});
-    test_problem(matching_3x3_diag, -6.0, {"-s", "mma", "--max_iter", "20"});
-
-//    test_problem(matching_3x3_first_row, -4.0, {"-s", "mma", "--max_iter", "20"});
-//    test_problem(matching_3x3_first_row, -4.0, {"-s", "decomposition_mma", "--nr_threads", "2", "--max_iter", "1000"});
-//    test_problem(matching_3x3_first_row, -4.0, {"-s", "anisotropic_mma", "--max_iter", "20"});
-//    test_problem(matching_3x3_first_row, -4.0, {"-s", "mma_srmp", "--max_iter", "20"});
-    test_problem(matching_3x3_first_row, -4.0, {"-s", "mma", "--max_iter", "20"});
+    test_problem(matching_3x3_diag, -6.0);
+    test_problem(matching_3x3_first_row, -4.0);
 }

@@ -27,7 +27,6 @@ namespace LPMP {
         ILP_input convert_to_ilp() const;
     };
 
-
     mrf_input parse_mrf_uai_file(const std::string& filename);
     mrf_input parse_mrf_uai_string(const std::string& string);
 

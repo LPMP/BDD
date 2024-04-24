@@ -85,7 +85,7 @@ namespace LPMP {
 
         // TODO: fix whitespace issue with monomial
         struct inequality_variable : variable_name {};
-        struct inequality_monomial : tao::pegtl::seq<inequality_variable, tao::pegtl::star<opt_whitespace, tao::pegtl::sor<tao::pegtl::string<'*'> >, opt_whitespace, inequality_variable>> {};
+        struct inequality_monomial : tao::pegtl::seq<inequality_variable, tao::pegtl::star<opt_whitespace, tao::pegtl::opt<tao::pegtl::string<'*'> >, opt_whitespace, inequality_variable>> {};
 
         // TODO: replace real_number by integer for inequalities
         // TODO: first term has * only if coefficient is present, same for objective
@@ -445,7 +445,7 @@ namespace LPMP {
 
             const size_t nr_subproblems = ilp.nr_disconnected_subproblems();
             if(nr_subproblems != 1)
-                bdd_log << "[ILP parser] ILP can bedivided into " << nr_subproblems << " subproblems\n";
+                bdd_log << "[ILP parser] ILP can be divided into " << nr_subproblems << " subproblems\n";
 #endif
         }
 

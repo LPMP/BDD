@@ -96,7 +96,7 @@ endif()
 target_link_libraries(LPMP-BDD INTERFACE bdd_solver)
 
 add_executable(bdd_solver_cl bdd_solver_cl.cpp)
-target_link_libraries(bdd_solver_cl bdd_solver LPMP-BDD)
+target_link_libraries(bdd_solver_cl LPMP-BDD)
 
 add_executable(convert_lp_to_opb convert_lp_to_opb.cpp)
 target_link_libraries(convert_lp_to_opb LPMP-BDD)

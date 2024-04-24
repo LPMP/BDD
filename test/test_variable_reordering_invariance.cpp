@@ -21,14 +21,25 @@ End)";
 
 int main(int argc, char** argv)
 {
-    std::vector<std::string> args_input_order = {
-        "--input_string", short_mrf_chain,
-        "-s", "mma",
-        "-o", "input"
-    };
-    bdd_solver solver_input_order((bdd_solver_options(args_input_order)));
+    auto config_json = nlohmann::json::parse(R""""({"precision": "double",
+     "relaxation solver": "sequential mma",
+      "termination criteria": { 
+        "maximum iterations": 20,
+         "improvement slope": 0.0,
+          "minimum improvement": 0.0,
+           "time limit": 1e10 
+           }
+})"""");
+        config_json["input"] = short_mrf_chain;
+
+    config_json["variable order"] = "input";
+    bdd_solver solver_input_order(config_json);
     solver_input_order.solve();
 
+    config_json["variable order"] = "bfs";
+    bdd_solver solver_bfs_order(config_json);
+    solver_bfs_order.solve();
+    /*
     std::vector<std::string> args_bfs_order = {
         "--input_string", short_mrf_chain,
         "-s", "mma",
@@ -36,6 +47,7 @@ int main(int argc, char** argv)
     };
     bdd_solver solver_bfs_order((bdd_solver_options(args_bfs_order)));
     solver_bfs_order.solve();
+    */
 
     test(std::abs(solver_input_order.lower_bound() - solver_bfs_order.lower_bound()) <= 1e-6);
 

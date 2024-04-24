@@ -20,12 +20,19 @@ End)";
 
 void variable_fixation_test(const std::string& solver_name)
 {
-    std::vector<std::string> args {
-        "--input_string", short_mrf_chain,
-        "-s", solver_name
-    };
+    auto config_json = nlohmann::json::parse(R""""({"precision": "double",
+     "variable order": "bfs",
+      "termination criteria": { 
+        "maximum iterations": 20,
+         "improvement slope": 0.0,
+          "minimum improvement": 0.0,
+           "time limit": 1e10 
+           }
+})"""");
+    config_json["relaxation solver"] = solver_name;
+    config_json["input"] = short_mrf_chain;
 
-    bdd_solver solver((bdd_solver_options(args)));
+    bdd_solver solver(config_json);
     solver.solve();
     // optimal solution is (1,1);
     test(std::abs(solver.lower_bound() - (1.0 + 0.0 + 0.0)) <= 1e-6);
@@ -43,6 +50,6 @@ void variable_fixation_test(const std::string& solver_name)
 
 int main(int argc, char** argv)
 {
-    variable_fixation_test("sequential_mma");
-    variable_fixation_test("parallel_mma");
+    variable_fixation_test("sequential mma");
+    variable_fixation_test("parallel mma");
 }

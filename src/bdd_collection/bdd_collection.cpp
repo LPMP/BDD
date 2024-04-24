@@ -313,6 +313,10 @@ namespace BDD {
         return meld_idx;
     }
 
+    template<typename BDD_ITERATOR>
+    size_t bdd_collection::relaxed_bdd_and(BDD_ITERATOR bdd_begin, BDD_ITERATOR bdd_end)
+    {}
+
     size_t bdd_collection::add_bdd(node_ref root)
     {
         assert(bdd_delimiters.back() == bdd_instructions.size());
@@ -474,6 +478,19 @@ namespace BDD {
         assert(bdd_nr < nr_bdds());
         return std::reverse_iterator<bdd_instruction*>(&bdd_instructions[bdd_delimiters[bdd_nr]]);
     }
+
+    std::reverse_iterator<const bdd_instruction*> bdd_collection::crbegin(const size_t bdd_nr) const
+    {
+        assert(bdd_nr < nr_bdds());
+        return std::reverse_iterator<const bdd_instruction*>(&bdd_instructions[bdd_delimiters[bdd_nr+1]-2]); 
+    }
+
+    std::reverse_iterator<const bdd_instruction*> bdd_collection::crend(const size_t bdd_nr) const
+    {
+        assert(bdd_nr < nr_bdds());
+        return std::reverse_iterator<const bdd_instruction*>(&bdd_instructions[bdd_delimiters[bdd_nr]]);
+    }
+
 
     bool bdd_collection::is_bdd(const size_t bdd_nr) const
     {

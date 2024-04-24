@@ -1,7 +1,5 @@
 #pragma once
 
-// TODO: rename file and classes
-
 #include <tsl/robin_map.h>
 #include <tsl/robin_set.h>
 #include <vector>
@@ -30,7 +28,9 @@ namespace LPMP {
             public:
                 using value_type = typename BDD_BRANCH_NODE::value_type;
                 bdd_mma_base() {}
-                bdd_mma_base(BDD::bdd_collection& bdd_col) { add_bdds(bdd_col); } 
+                bdd_mma_base(const BDD::bdd_collection& bdd_col) { add_bdds(bdd_col); } 
+                template<typename COST_ITERATOR>
+                bdd_mma_base(const BDD::bdd_collection& bdd_col, COST_ITERATOR costs_begin, COST_ITERATOR costs_end) { add_bdds(bdd_col); update_costs(costs_begin, costs_begin, costs_begin, costs_end); } 
                 size_t nr_variables() const;
                 size_t nr_variable_groups() const;
                 size_t nr_bdd_vectors(const size_t var_group) const;
@@ -72,6 +72,8 @@ namespace LPMP {
                             VARIABLE_ITERATOR variable_begin, VARIABLE_ITERATOR variable_end);
                 //template<typename COST_ITERATOR>
                 //    void update_costs(COST_ITERATOR cost_begin, COST_ITERATOR cost_end);
+                template <typename COST_ITERATOR>
+                void update_costs(COST_ITERATOR lo_cost_begin, COST_ITERATOR lo_cost_end, COST_ITERATOR hi_cost_begin, COST_ITERATOR hi_cost_end);
                 template<typename REAL>
                     void update_costs(const two_dim_variable_array<std::array<REAL,2>>& delta);
 
@@ -135,9 +137,9 @@ namespace LPMP {
                 //two_dim_variable_array<std::array<float,2>> min_marginals();
                 // export BDDs that cover the given variables
                 // TODO: unify with init?
-                void add_bdds(BDD::bdd_collection& bdd_col);
+                void add_bdds(const BDD::bdd_collection& bdd_col);
                 template<typename BDD_NR_ITERATOR>
-                    std::vector<size_t> add_bdds(BDD::bdd_collection& bdd_col, BDD_NR_ITERATOR bdd_nrs_begin, BDD_NR_ITERATOR bdd_nrs_end);
+                    std::vector<size_t> add_bdds(const BDD::bdd_collection& bdd_col, BDD_NR_ITERATOR bdd_nrs_begin, BDD_NR_ITERATOR bdd_nrs_end);
 
                 std::vector<size_t> variables(const size_t bdd_idx);
                 std::vector<bdd_branch_instruction<float,uint32_t>> export_bdd(const size_t bdd_idx);
@@ -533,31 +535,49 @@ namespace LPMP {
                     });
         }
 
-    /*
     template<typename BDD_BRANCH_NODE>
-    template<typename COST_ITERATOR>
-        void bdd_mma_base<BDD_BRANCH_NODE>::update_costs(COST_ITERATOR cost_begin, COST_ITERATOR cost_end)
+        template <typename COST_ITERATOR>
+        void bdd_mma_base<BDD_BRANCH_NODE>::update_costs(COST_ITERATOR cost_lo_begin, COST_ITERATOR cost_lo_end, COST_ITERATOR cost_hi_begin, COST_ITERATOR cost_hi_end)
         {
-            assert(std::distance(cost_begin, cost_end) == nr_variables());
-            for(size_t var=0; var<nr_variables(); ++var)
-                for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
-                    bdd_branch_nodes_[i].high_cost += *(cost_begin+i) / value_type(nr_bdds(var));
+            size_t var = 0;
+            auto cost_lo_it = cost_lo_begin;
+            auto cost_hi_it = cost_hi_begin;
+
+            auto get_cost = [](const size_t var, auto cost_begin, auto cost_end) {
+                if(var < std::distance(cost_begin, cost_end))
+                    return *(cost_begin + var);
+                else
+                    return 0.0;
+            };
+
+            for (size_t var = 0; var < std::max(std::distance(cost_lo_begin, cost_lo_end), std::distance(cost_hi_begin, cost_hi_end)); ++var)
+                update_cost(get_cost(var, cost_lo_begin, cost_lo_end), get_cost(var, cost_hi_begin, cost_hi_end), var);
         }
-        */
 
+        /*
+        template<typename BDD_BRANCH_NODE>
+        template<typename COST_ITERATOR>
+            void bdd_mma_base<BDD_BRANCH_NODE>::update_costs(COST_ITERATOR cost_begin, COST_ITERATOR cost_end)
+            {
+                assert(std::distance(cost_begin, cost_end) == nr_variables());
+                for(size_t var=0; var<nr_variables(); ++var)
+                    for(size_t i=bdd_branch_node_offsets_[var]; i<bdd_branch_node_offsets_[var+1]; ++i)
+                        bdd_branch_nodes_[i].high_cost += *(cost_begin+i) / value_type(nr_bdds(var));
+            }
+            */
 
-    template<typename BDD_BRANCH_NODE>
-    void bdd_mma_base<BDD_BRANCH_NODE>::get_arc_marginals(const size_t first_node, const size_t last_node, std::vector<double>& arc_marginals)
-    {
-        arc_marginals.clear();
-        assert(first_node < bdd_branch_nodes_.size());
-        for(size_t l=first_node; l<last_node; ++l)
+        template <typename BDD_BRANCH_NODE>
+        void bdd_mma_base<BDD_BRANCH_NODE>::get_arc_marginals(const size_t first_node, const size_t last_node, std::vector<double> &arc_marginals)
         {
-            assert(bdd_branch_nodes_[first_node].bdd_index == bdd_branch_nodes_[l].bdd_index);
-            const auto m = bdd_branch_nodes_[l].min_marginals();
-            arc_marginals.push_back(m[0]);
-            arc_marginals.push_back(m[1]);
-        } 
+            arc_marginals.clear();
+            assert(first_node < bdd_branch_nodes_.size());
+            for (size_t l = first_node; l < last_node; ++l)
+            {
+                assert(bdd_branch_nodes_[first_node].bdd_index == bdd_branch_nodes_[l].bdd_index);
+                const auto m = bdd_branch_nodes_[l].min_marginals();
+                arc_marginals.push_back(m[0]);
+                arc_marginals.push_back(m[1]);
+            } 
     }
 
     template<typename BDD_BRANCH_NODE>
@@ -1228,7 +1248,7 @@ namespace LPMP {
     }
 
     template<typename BDD_BRANCH_NODE>
-    void bdd_mma_base<BDD_BRANCH_NODE>::add_bdds(BDD::bdd_collection& bdd_col)
+    void bdd_mma_base<BDD_BRANCH_NODE>::add_bdds(const BDD::bdd_collection& bdd_col)
     {
         std::vector<size_t> bdd_nrs(bdd_col.nr_bdds());
         std::iota(bdd_nrs.begin(), bdd_nrs.end(), 0);
@@ -1237,7 +1257,7 @@ namespace LPMP {
 
     template<typename BDD_BRANCH_NODE>
         template<typename BDD_NR_ITERATOR>
-        std::vector<size_t> bdd_mma_base<BDD_BRANCH_NODE>::add_bdds(BDD::bdd_collection& bdd_col, BDD_NR_ITERATOR bdd_nrs_begin, BDD_NR_ITERATOR bdd_nrs_end)
+        std::vector<size_t> bdd_mma_base<BDD_BRANCH_NODE>::add_bdds(const BDD::bdd_collection& bdd_col, BDD_NR_ITERATOR bdd_nrs_begin, BDD_NR_ITERATOR bdd_nrs_end)
         {
             for(auto bdd_it=bdd_nrs_begin; bdd_it!=bdd_nrs_end; ++bdd_it)
                 assert(bdd_col.variables_sorted(*bdd_it));
@@ -1263,7 +1283,7 @@ namespace LPMP {
             // count bdd branch nodes per variable
             std::vector<size_t> new_bdd_branch_nodes_per_var(new_nr_variables, 0);
             for(auto bdd_nr_it=bdd_nrs_begin; bdd_nr_it!=bdd_nrs_end; ++bdd_nr_it)
-                for(auto bdd_it=bdd_col.begin(*bdd_nr_it); bdd_it!=bdd_col.end(*bdd_nr_it); ++bdd_it)
+                for(auto bdd_it=bdd_col.cbegin(*bdd_nr_it); bdd_it!=bdd_col.cend(*bdd_nr_it); ++bdd_it)
                     if(!bdd_it->is_terminal())
                         ++new_bdd_branch_nodes_per_var[bdd_it->index];
             for(size_t v=0; v<nr_variables(); ++v)
@@ -1366,7 +1386,7 @@ namespace LPMP {
                 cur_last_bdd_node_indices.clear();
                 const auto [first_var, last_var] = bdd_col.min_max_variables(bdd_nr);
 
-                for(auto bdd_it=bdd_col.rbegin(*bdd_nr_it); bdd_it!=bdd_col.rend(*bdd_nr_it); ++bdd_it)
+                for(auto bdd_it=bdd_col.crbegin(*bdd_nr_it); bdd_it!=bdd_col.crend(*bdd_nr_it); ++bdd_it)
                 {
                     const auto stored_bdd = *bdd_it;
                     assert(!stored_bdd.is_terminal());

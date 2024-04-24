@@ -16,6 +16,13 @@ namespace LPMP
     public:
         subgradient(const BDD::bdd_collection &bdd_col) : SOLVER(bdd_col) {}
 
+        template<typename COST_ITERATOR>
+        subgradient(const BDD::bdd_collection& bdd_col, COST_ITERATOR cost_begin, COST_ITERATOR cost_end)
+        : subgradient(bdd_col)
+        {
+            this->update_costs(cost_begin, cost_begin, cost_begin, cost_end);
+        }
+
         void iteration();
 
     private:

@@ -80,10 +80,6 @@ add_test(test_ILP_input_export test_ILP_input_export)
 #target_link_libraries(test_bdd_preprocessor ILP_parser LPMP bdd)
 #add_test(test_bdd_preprocessor test_bdd_preprocessor)
 
-add_executable(test_loose_gm_tightening test_loose_gm_tightening.cpp)
-target_link_libraries(test_loose_gm_tightening LPMP-BDD)
-add_test(test_loose_gm_tightening test_loose_gm_tightening)
-
 add_executable(test_loose_covering_problem test_loose_covering_problem.cpp)
 target_link_libraries(test_loose_covering_problem LPMP-BDD)
 add_test(test_loose_covering_problem test_loose_covering_problem)

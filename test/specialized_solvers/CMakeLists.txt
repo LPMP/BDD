@@ -1,8 +1,8 @@
 add_executable(test_multi_graph_matching_input test_multi_graph_matching_input.cpp)
-target_link_libraries(test_multi_graph_matching_input LPMP-BDD multi_graph_matching_input)
+target_link_libraries(test_multi_graph_matching_input LPMP-BDD multi_graph_matching_solver multi_graph_matching_input)
 add_test(test_multi_graph_matching_input test_multi_graph_matching_input)
 
 add_executable(test_mrf_uai_input test_mrf_uai_input.cpp)
-target_link_libraries(test_mrf_uai_input LPMP-BDD mrf_input mrf_uai_parser)
+target_link_libraries(test_mrf_uai_input LPMP-BDD mrf_input mrf_uai_parser mrf_solver)
 add_test(test_mrf_uai_input test_mrf_uai_input)
 

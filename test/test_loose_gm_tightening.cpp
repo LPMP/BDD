@@ -261,36 +261,89 @@ mu_12_10
 mu_12_11
 End)";
 
+void test_problem(const std::string instance, const double expected_lb)
+{
+auto config_json = nlohmann::json::parse(R""""({"precision": "double",
+      "relaxation solver": "sequential mma",
+      "termination criteria": { 
+       "maximum iterations": 200,
+         "improvement slope": 0.0,
+          "minimum improvement": 0.0,
+           "time limit": 1e10 
+           }
+})"""");
+    config_json["input"] = test_instance;
+
+    bdd_solver solver(config_json); 
+        solver.solve();
+        test(std::abs(solver.lower_bound() - expected_lb) <= 1e-3);
+}
+
 int main(int argc, char** argv)
 {
     std::cout << "Solve original loose LP\n";
-    {
-        std::vector<std::string> solver_input = {
-            "--input_string", test_instance,
-            "-s", "mma",
-            "--max_iter", "35"
-        };
+    test_problem(test_instance, -3.0);
 
-        bdd_solver solver((bdd_solver_options(solver_input))); 
+    std::cout << "Solve tight LP with single BDD of intersection of all BDDs\n";
+    test_problem(test_instance_single_bdd, -2.0);
+
+        std::cout << "Solve tight LP with single BDD of intersection of all reduced BDDs\n";
+test_problem(test_instance_single_reduced_bdd, -2.0);
+
+       std::cout << "Solve tight LP original BDDs and intersected BDD\n"; 
+    test_problem(test_instance_tight_large, -2.0);
+    
+        std::cout << "Solve tight LP original BDDs and intersected reduced BDD\n";
+    test_problem(test_instance_tight_reduced_bdd, -2.0);
+
+    /*
+    {
+        auto config_json = nlohmann::json::parse(R""""({"precision": "double",
+      "relaxation solver": "sequential mma",
+      "termination criteria": { 
+       "maximum iterations": 200,
+         "improvement slope": 0.0,
+          "minimum improvement": 0.0,
+           "time limit": 1e10 
+           }
+})"""");
+    config_json["input"] = test_instance;
+
+        bdd_solver solver(config_json); 
         solver.solve();
         test(std::abs(solver.lower_bound() - (-3.0)) <= 1e-3);
     }
 
     std::cout << "Solve tight LP with single BDD of intersection of all BDDs\n";
     {
-        std::vector<std::string> solver_input = {
-            "--input_string", test_instance_single_bdd,
-            "-s", "mma",
-            "--max_iter", "35"
-        };
+        auto config_json = nlohmann::json::parse(R""""({"precision": "double",
+      "relaxation solver": "sequential mma",
+      "termination criteria": { 
+       "maximum iterations": 200,
+         "improvement slope": 0.0,
+          "minimum improvement": 0.0,
+           "time limit": 1e10 
+           }
+})"""");
+    config_json["input"] = test_instance_single_bdd;
 
-        bdd_solver solver((bdd_solver_options(solver_input))); 
+        bdd_solver solver(config_json); 
         solver.solve();
         test(std::abs(solver.lower_bound() - (-2.0)) <= 1e-3);
     }
 
     std::cout << "Solve tight LP with single BDD of intersection of all reduced BDDs\n";
     {
+        auto config_json = nlohmann::json::parse(R""""({"precision": "double",
+      "relaxation solver": "sequential mma",
+      "termination criteria": { 
+       "maximum iterations": 200,
+         "improvement slope": 0.0,
+          "minimum improvement": 0.0,
+           "time limit": 1e10 
+           }
+})"""");
+    config_json["input"] = 
         std::vector<std::string> solver_input = {
             "--input_string", test_instance_single_reduced_bdd,
             "-s", "mma",
@@ -327,4 +380,5 @@ int main(int argc, char** argv)
         solver.solve();
         test(std::abs(solver.lower_bound() - (-2.0)) <= 1e-4);
     }
+    */
 }

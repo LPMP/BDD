@@ -139,6 +139,10 @@ namespace BDD {
             template<typename VAR_MAP>
                 size_t bdd_or_var(const size_t i, const VAR_MAP& positive_variables, const VAR_MAP& negative_variables);
 
+            // compute relaxed bdd and with specified maximal width
+            template<typename BDD_ITERATOR>
+            size_t relaxed_bdd_and(BDD_ITERATOR bdd_begin, BDD_ITERATOR bdd_end);
+
             // compute how many solutions there are after forcing some variables to be true or false
             template<typename VAR_MAP>
                 size_t bdd_nr_solutions(const size_t bdd_nr, const VAR_MAP& positive_variables, const VAR_MAP& negative_variables);
@@ -156,6 +160,8 @@ namespace BDD {
             const bdd_instruction* cend(const size_t bdd_nr) const;
             std::reverse_iterator<bdd_instruction*> rbegin(const size_t bdd_nr);
             std::reverse_iterator<bdd_instruction*> rend(const size_t bdd_nr);
+            std::reverse_iterator<const bdd_instruction*> crbegin(const size_t bdd_nr) const;
+            std::reverse_iterator<const bdd_instruction*> crend(const size_t bdd_nr) const;
 
             size_t botsink_index(const size_t bdd_nr) const;
             size_t topsink_index(const size_t bdd_nr) const;

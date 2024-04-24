@@ -149,7 +149,7 @@ namespace LPMP {
         var_index_to_name_.push_back(var);
         if(objective_.size() <= var_index) // variables with 0 objective coefficient need not appear in objective line!
             objective_.resize(var_index+1,0.0);
-        var_permutation_.push_back(var_permutation_.size()-1);
+        var_permutation_.push_back(var_permutation_.size());
         return var_index;
     }
 
@@ -696,6 +696,13 @@ namespace LPMP {
     {
         assert(i < nr_constraint_groups());
         return std::make_tuple(coalesce_sets_[i].begin(), coalesce_sets_[i].end());
+    }
+
+    std::string ILP_input::write_lp() const
+    {
+        std::ostringstream str_stream;
+        write_lp(str_stream);
+        return str_stream.str();
     }
 
     std::tuple<Eigen::SparseMatrix<int>, Eigen::MatrixXi> ILP_input::export_constraints() const

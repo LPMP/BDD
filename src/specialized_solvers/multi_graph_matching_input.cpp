@@ -138,6 +138,7 @@ namespace LPMP {
             for(size_t c=0; c<gm_ilp.nr_constraints(); ++c)
             {
                 auto constr = gm_ilp.constraints()[c];
+                constr.identifier = "mgm_" + std::to_string(i[0]) + "_" + std::to_string(i[1]) + "_" + constr.identifier;
                 for(size_t c_idx=0; c_idx<constr.coefficients.size(); ++c_idx)
                     for(size_t m_idx=0; m_idx<constr.monomials.size(c_idx); ++m_idx)
                         constr.monomials(c_idx, m_idx) += var_offset;
@@ -158,6 +159,79 @@ namespace LPMP {
         std::cout << "[construct multi-graph matching ILP]: #graph matching constraints = " << ilp.constraints().size() << "\n";
 
         // add  cycle consistency constraints
+        // X_ij * X_jk <= X_ik
+        for(size_t i=0; i<nr_graphs; ++i)
+        {
+            for(size_t j=i+1; j<nr_graphs; ++j)
+            {
+                const auto &ij_linear_vars = linear_assignment_maps.find({i, j})->second;
+                for(auto [a_ij, ij_ILP_var] : ij_linear_vars)
+                {
+                    const size_t x_i = a_ij[0];
+                    const size_t x_j = a_ij[1];
+                    // TODO: handle no-assignment properly
+                    if (x_i == graph_matching_instance::no_assignment || x_j == graph_matching_instance::no_assignment)
+                    {
+                        continue;
+                    }
+                    for(size_t k=0; k<nr_graphs; ++k)
+                    {
+                        if(k != i && k != j)
+                        {
+                            // record variables going from graph j and label x_j to k and any label there
+                            const bool jk_transposed = j>k;
+                            const auto &jk_linear_vars = linear_assignment_maps.find({std::min(j, k), std::max(j, k)})->second;
+                            std::unordered_map<size_t, size_t> a_jk_vars; // label to ILP var
+                            for(auto [a_jk, jk_ILP_var] : jk_linear_vars)
+                            {
+                                const size_t x_k = jk_transposed ? a_jk[0] : a_jk[1];
+                                const size_t x_j2 = jk_transposed ? a_jk[1] : a_jk[0];
+                                if(x_j == x_j2 && x_j2 != graph_matching_instance::no_assignment)
+                                    a_jk_vars.insert({x_k, jk_ILP_var});
+                            }
+
+                            // record variables going from graph i and label x_i to k and any label there
+                            const bool ik_transposed = i>k;
+                            const auto &ik_linear_vars = linear_assignment_maps.find({std::min(i, k), std::max(i, k)})->second;
+                            std::unordered_map<size_t, size_t> a_ik_vars; // label to ILP var
+                            for(auto [a_ik, ik_ILP_var] : ik_linear_vars)
+                            {
+                                const size_t x_k = ik_transposed ? a_ik[0] : a_ik[1];
+                                const size_t x_i2 = ik_transposed ? a_ik[1] : a_ik[0];
+                                if(x_i == x_i2 && x_i2 != graph_matching_instance::no_assignment)
+                                    a_ik_vars.insert({x_k, ik_ILP_var});
+                            }
+
+                            // iterate over intersection of labels in k from both above 
+                            std::vector<std::array<size_t,2>> product_vars;
+                            for(const auto [x_k, ik_ILP_var] : a_ik_vars)
+                            {
+                                if(a_jk_vars.find(x_k) != a_jk_vars.end())
+                                {
+                                    const auto jk_ILP_var = a_jk_vars.find(x_k)->second;
+                                    product_vars.push_back({ik_ILP_var, jk_ILP_var});
+                                }
+                            }
+
+                            // add constraint
+                            if(!product_vars.empty())
+                            {
+                                ilp.begin_new_inequality();
+                                for(const auto monomial : product_vars)
+                                ilp.add_to_constraint(1, monomial.begin(), monomial.end());
+                                ilp.add_to_constraint(-1, ij_ILP_var);
+                                ilp.set_inequality_type(ILP_input::inequality_type::smaller_equal);
+                                ilp.set_right_hand_side(0);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return ilp;
+
+
         for(size_t i=0; i<nr_graphs; ++i)
         {
             for(size_t j=0; j<nr_graphs; ++j)

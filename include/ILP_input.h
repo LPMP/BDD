@@ -67,6 +67,7 @@ namespace LPMP {
         template<typename ITERATOR>
             double evaluate(ITERATOR begin, ITERATOR end) const; 
 
+        std::string write_lp() const;
         template<typename STREAM>
             void write_lp(STREAM& s, const constraint & constr) const;
         template<typename STREAM>
@@ -229,7 +230,8 @@ namespace LPMP {
         void ILP_input::write_lp(STREAM& s, const constraint & constr) const
         {
             assert(constr.coefficients.size() == constr.monomials.size());
-            s << constr.identifier << ": ";
+            if (constr.identifier != "") // TODO: compare to empty spaces string
+                s << constr.identifier << ":";
             for(size_t monomial_idx=0; monomial_idx<constr.coefficients.size(); ++monomial_idx)
             {
                 const double coeff = constr.coefficients[monomial_idx];

@@ -10,7 +10,7 @@ namespace LPMP {
     template<typename SOLVER>
         void run_solver(SOLVER& s, const size_t max_iter, const double tolerance, const double improvement_slope, const double time_limit, const bool verbose = true)
         {
-            assert(improvement_slope > 0.0 && improvement_slope < 1.0);
+            assert(improvement_slope >= 0.0 && improvement_slope < 1.0);
             assert(time_limit >= 0.0);
             assert(tolerance >= 0.0);
 

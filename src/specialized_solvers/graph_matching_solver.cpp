@@ -1,12 +1,26 @@
+#include "specialized_solvers/graph_matching_solver.h"
 #include "specialized_solvers/graph_matching_input.h"
-#include "bdd_solver.h"
 
-int main(int argc, char** argv)
+namespace LPMP {
+
+ILP_input graph_matching_bdd_solver::read_ILP(const nlohmann::json &config)
 {
-    LPMP::bdd_solver_options opts(argc, argv);
-    opts.file_reading_func = LPMP::parse_graph_matching_file;
-    opts.string_reading_func = LPMP::parse_graph_matching_string;
-    LPMP::bdd_solver solver(opts);
-    solver.solve();
-    solver.round();
+    if (!config.contains("input"))
+        throw std::runtime_error("no input specified");
+
+    // determine whether input file or input string is specified
+    const std::string input = config["input"].template get<std::string>();
+    std::ifstream f(input);
+    if (f)
+    {
+        bdd_log << "[graph matching solver] Read input file " << config["input"] << "\n";
+        return LPMP::parse_graph_matching_file(input);
+    }
+    else // input might be ILP in string
+    {
+        bdd_log << "[graph matching solver] Read input string " << config["input"] << "\n";
+        return LPMP::parse_graph_matching_string(input);
+    }
+}
+
 }

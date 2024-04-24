@@ -2,6 +2,10 @@
 #include "bdd_preprocessor.h"
 #include "bdd_parallel_mma.h"
 #include "bdd_mma.h"
+#include "bdd_parallel_mma_base.h"
+#include "subgradient.h"
+#include "bdd_mma_base.h"
+#include "bdd_branch_instruction.h"
 #include "test.h"
 
 using namespace LPMP;
@@ -51,22 +55,31 @@ End)";
 int main(int argc, char** argv)
 {
     {
-        const ILP_input ilp = ILP_parser::parse_string(infeasible_problem);
+        ILP_input ilp = ILP_parser::parse_string(infeasible_problem);
+        ilp.normalize();
         bdd_preprocessor pre(ilp, false, true);
-        bdd_mma<float> solver(pre.get_bdd_collection(), ilp.objective().begin(), ilp.objective().end());
-        for(size_t i=0; i<10; ++i)
+        //bdd_mma<float> solver(pre.get_bdd_collection(), ilp.objective().begin(), ilp.objective().end());
+        subgradient<bdd_parallel_mma_base<bdd_branch_instruction<float, uint16_t>>, float> solver(pre.get_bdd_collection(), ilp.objective().begin(), ilp.objective().end());
+        for(size_t i=0; i<5000; ++i)
+        {
             solver.iteration();
-        std::cout << solver.lower_bound() << "\n";
+            std::cout << "iteration " << i << " lower bound = " << solver.lower_bound() << "\n";
+        }
+        std::cout << "final lower bound = " << solver.lower_bound() << "\n";
         //test(solver.lower_bound() == std::numeric_limits<double>::infinity());
     }
 
     {
-        const ILP_input ilp = ILP_parser::parse_string(infeasible_problem_2);
+        ILP_input ilp = ILP_parser::parse_string(infeasible_problem_2);
+        ilp.normalize();
         bdd_preprocessor pre(ilp, false, true);
         bdd_mma<float> solver(pre.get_bdd_collection(), ilp.objective().begin(), ilp.objective().end());
-        for(size_t i=0; i<10; ++i)
+        for(size_t i=0; i<5; ++i)
+        {
             solver.iteration();
-        std::cout << solver.lower_bound() << "\n";
+            std::cout << "iteration " << i << " lower bound = " << solver.lower_bound() << "\n";
+        }
+        std::cout << "final lower bound = " << solver.lower_bound() << "\n";
         //test(solver.lower_bound() == std::numeric_limits<double>::infinity());
     }
 }

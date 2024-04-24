@@ -1,7 +1,7 @@
 #include <string>
+#include "specialized_solvers/multi_graph_matching_solver.h"
 #include "specialized_solvers/multi_graph_matching_input.h"
 #include "../test.h"
-#include "bdd_solver.h"
 #include <iostream>
 
 using namespace LPMP;
@@ -31,12 +31,25 @@ a 3 1 1 -1
 
 int main(int argc, char** argv)
 {
+    auto config_json = nlohmann::json::parse(R""""({"precision": "double",
+     "relaxation solver": "parallel mma",
+     "variable order": "bfs",
+      "termination criteria": { 
+        "maximum iterations": 200,
+         "improvement slope": 0.0,
+          "minimum improvement": 0.0,
+           "time limit": 1e10 
+           }
+})"""");
+    config_json["input"] = minimal_synchronization_example;
+    multi_graph_matching_bdd_solver mgm_solver(config_json);
+    mgm_solver.solve();
+    
     const auto mgm_instance = parse_multi_graph_matching_string(minimal_synchronization_example);
-    mgm_instance.write_lp(std::cout);
-    bdd_solver_options opts;
-    opts.ilp = mgm_instance;
-    opts.bdd_solver_impl_ = bdd_solver_options::bdd_solver_impl::parallel_mma;
-    bdd_solver s(opts);
-    s.solve();
-    test(std::abs(s.lower_bound() - (-42.0)) <= 1e-4);
+    config_json["input"] = mgm_instance.write_lp();
+    bdd_solver solver(config_json);
+    solver.solve();
+
+    test(std::abs(mgm_solver.lower_bound() - (-42.0)) <= 1e-4);
+    test(std::abs(solver.lower_bound() - (-42.0)) <= 1e-4);
 }

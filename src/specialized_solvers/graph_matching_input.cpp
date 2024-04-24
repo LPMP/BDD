@@ -66,6 +66,7 @@ namespace LPMP {
                 ++var_offset;
             }
             ilp.add_constraint(coeffs, vars, ILP_input::inequality_type::equal, 1);
+            ilp.set_inequality_identifier("simplex_l_" + std::to_string(l_idx));
         }
 
         for(size_t r_idx=0; r_idx<right_assignments.size(); ++r_idx)
@@ -88,6 +89,7 @@ namespace LPMP {
                 vars.push_back( assignment_map.find({l,r_idx})->second );
             }
             ilp.add_constraint(coeffs, vars, ILP_input::inequality_type::equal, 1);
+            ilp.set_inequality_identifier("simplex_r_" + std::to_string(r_idx));
         }
 
         // construct simplex factors for quadratic potentials
@@ -231,6 +233,7 @@ namespace LPMP {
                         }
                     }
                     ilp.add_constraint(coeffs, vars, ILP_input::inequality_type::equal, 0);
+                    ilp.set_inequality_identifier("quadratic_l_" + std::to_string(i0) + "_" + std::to_string(i1) + "_" + std::to_string(j0));
                 }
 
                 for(const size_t j1 : left_assignments[i1])
@@ -248,6 +251,7 @@ namespace LPMP {
                         }
                     }
                     ilp.add_constraint(coeffs, vars, ILP_input::inequality_type::equal, 0);
+                    ilp.set_inequality_identifier("quadratic_l_" + std::to_string(i0) + "_" + std::to_string(i1) + "_" + std::to_string(j1));
                 }
                 //}
                 //else // sparse quadratic potential
@@ -286,6 +290,7 @@ namespace LPMP {
                         }
                     }
                     ilp.add_constraint(coeffs, vars, ILP_input::inequality_type::equal, 0);
+                    ilp.set_inequality_identifier("quadratic_r_" + std::to_string(j0) + "_" + std::to_string(j1) + "_" + std::to_string(i0));
                 }
 
                 for(const size_t i1 : right_assignments[j1])
@@ -304,6 +309,7 @@ namespace LPMP {
                         }
                     }
                     ilp.add_constraint(coeffs, vars, ILP_input::inequality_type::equal, 0);
+                    ilp.set_inequality_identifier("quadratic_r_" + std::to_string(j0) + "_" + std::to_string(j1) + "_" + std::to_string(i1));
                 }
                 //}
                 /*
