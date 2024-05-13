@@ -1,9 +1,9 @@
-#include "bdd_parallel_mma_base.h"
-#include "bdd_cuda_parallel_mma.h"
-#include "bdd_branch_instruction.h"
-#include "ILP_input.h"
-#include "ILP_parser.h"
-#include "bdd_preprocessor.h"
+#include "bdd_solver/bdd_parallel_mma_base.h"
+#include "bdd_solver/bdd_cuda_parallel_mma.h"
+#include "bdd_solver/bdd_branch_instruction.h"
+#include "ILP/ILP_input.h"
+#include "ILP/ILP_parser.h"
+#include "bdd_conversion/bdd_preprocessor.h"
 #include "test_problems.h"
 #include "test.h"
 #include <random>
@@ -36,7 +36,7 @@ void test_problem(const std::string& problem_input, const bool with_additional_g
     for(size_t i=0; i<ilp.nr_variables(); ++i)
         mapped_obj[var_map[i]] = ilp.objective()[i];
 
-    bdd_parallel_mma_base<bdd_branch_instruction<double,uint32_t>> parallel_mma(bdd_col);
+    bdd_parallel_mma_base<bdd_branch_instruction<double,uint16_t>> parallel_mma(bdd_col);
     bdd_cuda_parallel_mma<double> cuda_mma(bdd_col);
 
     test(parallel_mma.nr_variables() == var_map.back()+1);
@@ -54,8 +54,8 @@ void test_problem(const std::string& problem_input, const bool with_additional_g
         test(std::abs(parallel_mma_lb - cuda_mma_lb) < 1e-6);
     }
 
-    parallel_mma.update_costs(mapped_obj.begin(), mapped_obj.begin(), mapped_obj.begin(), mapped_obj.end());
-    cuda_mma.update_costs(mapped_obj.begin(), mapped_obj.begin(), mapped_obj.begin(), mapped_obj.end());
+    parallel_mma.update_costs({}, mapped_obj);
+    cuda_mma.update_costs({}, mapped_obj);
 
     // initial lb after setting costs
     {

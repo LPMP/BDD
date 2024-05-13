@@ -1,8 +1,8 @@
 #include "bdd_collection/bdd_collection.h"
 #include "test.h"
-#include "bdd_branch_instruction_smooth.h"
-#include "bdd_mma_base_smooth.h"
-#include "bdd_parallel_mma_base_smooth.h"
+#include "bdd_solver/bdd_branch_instruction_smooth.h"
+#include "bdd_solver/bdd_mma_base_smooth.h"
+#include "bdd_solver/bdd_parallel_mma_base_smooth.h"
 
 using namespace LPMP;
 
@@ -19,7 +19,7 @@ int main(int argc, char** argv)
             const size_t bdd_nr = bdd_col.simplex_constraint(i);
 
             bdd_mma_base_smooth<bdd_branch_instruction_smooth_bdd_index<double,uint32_t>> solver(bdd_col);
-            bdd_parallel_mma_base_smooth<bdd_branch_instruction_smooth<double,uint32_t>> parallel_solver(bdd_col);
+            bdd_parallel_mma_base_smooth<bdd_branch_instruction_smooth<double,uint16_t>> parallel_solver(bdd_col);
 
             std::vector<double> costs;
             for(size_t j=0; j<i; ++j)

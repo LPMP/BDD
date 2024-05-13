@@ -1,4 +1,4 @@
-#include "bdd_solver.h"
+#include "bdd_solver/bdd_solver.h"
 #include <string>
 #include <nlohmann/json.hpp>
 #include "test.h"

@@ -1,5 +1,5 @@
-#include "bdd_parallel_mma_base_smooth.h"
-#include "bdd_branch_instruction_smooth.h"
+#include "bdd_solver/bdd_parallel_mma_base_smooth.h"
+#include "bdd_solver/bdd_branch_instruction_smooth.h"
 #include "test.h"
 
 using namespace LPMP;
@@ -19,8 +19,7 @@ int main(int argc, char** argv)
 
             // test if forward_sm and backward_sm improve lower bound (and omega=1.0 does not change lower bound)
             {
-                bdd_parallel_mma_base_smooth<bdd_branch_instruction_smooth<double,uint32_t>> solver(bdd_col);
-                solver.update_costs(costs.begin(), costs.begin(), costs.begin(), costs.end());
+                bdd_parallel_mma_base_smooth<bdd_branch_instruction_smooth<double,uint16_t>> solver(bdd_col, costs);
                 solver.smooth_backward_run();
                 solver.compute_smooth_lower_bound_after_backward_pass();
                 const double lb_before = solver.smooth_lower_bound();
@@ -36,8 +35,7 @@ int main(int argc, char** argv)
             }
 
             {
-                bdd_parallel_mma_base_smooth<bdd_branch_instruction_smooth<double,uint32_t>> solver(bdd_col);
-                solver.update_costs(costs.begin(), costs.begin(), costs.begin(), costs.end());
+                bdd_parallel_mma_base_smooth<bdd_branch_instruction_smooth<double,uint16_t>> solver(bdd_col, costs);
                 solver.smooth_forward_run();
                 solver.compute_smooth_lower_bound_after_forward_pass();
                 const double lb_before = solver.smooth_lower_bound();

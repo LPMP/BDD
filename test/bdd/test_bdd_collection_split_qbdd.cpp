@@ -1,11 +1,12 @@
 #include "bdd_collection/bdd_collection.h"
-#include "bdd_parallel_mma.h"
+#include "bdd_solver/bdd_parallel_mma_base.h"
+#include "bdd_solver/bdd_branch_instruction.h"
 #include <random>
 #include "../test.h"
 #include "../test_problems.h"
-#include "ILP_input.h"
-#include "ILP_parser.h"
-#include "bdd_preprocessor.h"
+#include "ILP/ILP_input.h"
+#include "ILP/ILP_parser.h"
+#include "bdd_conversion/bdd_preprocessor.h"
 
 using namespace LPMP;
 using namespace BDD;
@@ -23,7 +24,7 @@ void run_split_bdd_test(const bool add_implication_bdd)
             {
                 bdd_collection bdd_col;
                 const size_t card_nr = bdd_col.cardinality_constraint(i, k);
-                bdd_parallel_mma<double> parallel_mma_card(bdd_col);
+                bdd_parallel_mma_base<bdd_branch_instruction<double,uint16_t>> parallel_mma_card(bdd_col);
 
                 const auto [new_bdd_nrs, new_aux_var] = bdd_col.split_qbdd(card_nr, chunk_size, i, add_implication_bdd);
 
@@ -40,13 +41,13 @@ void run_split_bdd_test(const bool add_implication_bdd)
                 }
 
                 bdd_col.remove(card_nr);
-                bdd_parallel_mma<double> parallel_mma_split_card(bdd_col);
+                bdd_parallel_mma_base<bdd_branch_instruction<double,uint16_t>> parallel_mma_split_card(bdd_col);
 
                 std::vector<double> costs(i);
                 for (size_t v = 0; v < i; ++v)
                     costs[v] = d(gen);
-                parallel_mma_card.update_costs(costs.begin(), costs.begin(), costs.begin(), costs.end());
-                parallel_mma_split_card.update_costs(costs.begin(), costs.begin(), costs.begin(), costs.end());
+                parallel_mma_card.update_costs({}, costs);
+                parallel_mma_split_card.update_costs({}, costs);
                 for (size_t iter = 0; iter < 200; ++iter)
                     parallel_mma_split_card.iteration();
 
@@ -64,7 +65,7 @@ void run_split_bdd_test(const bool add_implication_bdd)
         ILP_input ilp = ILP_parser::parse_string(test_problem);
         bdd_preprocessor preprocessor_long_bdds(ilp);
         auto bdd_col = preprocessor_long_bdds.get_bdd_collection();
-        bdd_parallel_mma<double> parallel_mma_long_bdds(bdd_col);
+        bdd_parallel_mma_base<bdd_branch_instruction<double,uint16_t>> parallel_mma_long_bdds(bdd_col, ilp.objective());
         const size_t nr_orig_bdds = bdd_col.nr_bdds();
         std::vector<size_t> bdds_to_remove;
         size_t aux_var = ilp.nr_variables();
@@ -76,9 +77,7 @@ void run_split_bdd_test(const bool add_implication_bdd)
             aux_var = new_aux_var;
         }
         bdd_col.remove(bdds_to_remove.begin(), bdds_to_remove.end());
-        bdd_parallel_mma<double> parallel_mma_split_bdds(bdd_col);
-        parallel_mma_long_bdds.update_costs(ilp.objective().begin(), ilp.objective().begin(), ilp.objective().begin(), ilp.objective().end());
-        parallel_mma_split_bdds.update_costs(ilp.objective().begin(), ilp.objective().begin(), ilp.objective().begin(), ilp.objective().end());
+        bdd_parallel_mma_base<bdd_branch_instruction<double,uint16_t>> parallel_mma_split_bdds(bdd_col, ilp.objective());
         for (size_t iter = 0; iter < 300; ++iter)
             parallel_mma_long_bdds.iteration();
         for (size_t iter = 0; iter < 300; ++iter)

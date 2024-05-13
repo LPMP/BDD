@@ -2,7 +2,7 @@
 #include "specialized_solvers/mrf_input.h"
 #include <tao/pegtl.hpp>
 #include <variant>
-#include "pegtl_parse_rules.h"
+#include "ILP/pegtl_parse_rules.h"
 #include "time_measure_util.h"
 
 namespace LPMP {

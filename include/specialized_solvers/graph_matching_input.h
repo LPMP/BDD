@@ -6,7 +6,7 @@
 #include <limits>
 #include <unordered_map>
 #include "hash_helper.hxx"
-#include "ILP_input.h"
+#include "ILP/ILP_input.h"
 
 namespace LPMP {
 

@@ -1,7 +1,6 @@
 #include <iostream>
 #include <unordered_set>
 #include "specialized_solvers/graph_matching_input.h"
-#include "ILP_input.h"
 #include "specialized_solvers/graph_matching_torresani_et_al_grammar.h"
 #include "time_measure_util.h"
 #include <limits>

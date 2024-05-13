@@ -1,11 +1,9 @@
 project(LPMP-BDD
-#    VERSION 0.1
+#    VERSION 0.2
     DESCRIPTION "Lagrange decomposition with BDDs for ILPs"
     HOMEPAGE_URL "https://github.com/LPMP/BDD"
     LANGUAGES CXX
 )
-
-find_package(Python COMPONENTS Interpreter Development) # for pybind11, otherwise conda python is selected instead of system one
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -23,7 +21,9 @@ endif()
 
 cmake_minimum_required(VERSION 3.20) # does not work with 3.13
 
-set(CMAKE_CUDA_ARCHITECTURES native)
+#set(CMAKE_CUDA_ARCHITECTURES native)
+set(CMAKE_CUDA_ARCHITECTURES OFF)
+
 
 add_library(LPMP-BDD INTERFACE)
 target_include_directories(LPMP-BDD INTERFACE include/)
@@ -33,7 +33,7 @@ target_compile_options(LPMP-BDD INTERFACE -fvisibility=hidden)
 target_compile_options(LPMP-BDD INTERFACE -fvisibility-inlines-hidden)
 
 # external dependencies
-set(CPM_DOWNLOAD_VERSION 0.34.0)
+set(CPM_DOWNLOAD_VERSION 0.39.0)
 
 if(CPM_SOURCE_CACHE)
   set(CPM_DOWNLOAD_LOCATION "${CPM_SOURCE_CACHE}/cpm/CPM_${CPM_DOWNLOAD_VERSION}.cmake")
@@ -62,6 +62,7 @@ target_include_directories(LPMP-BDD INTERFACE "${eigen_SOURCE_DIR}")
 CPMAddPackage("gh:Tessil/robin-map#master")
 target_include_directories(LPMP-BDD INTERFACE "${robin-map_SOURCE_DIR}/include")
 
+set(PYBIND11_FINDPYTHON ON) # fix for empty list problem
 CPMAddPackage(
     NAME pybind11
     GIT_TAG v2.11

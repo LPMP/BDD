@@ -1,27 +1,27 @@
 add_subdirectory(bdd)
 
 add_executable(test_avl_tree test_avl_tree.cpp)
-target_link_libraries(test_avl_tree lineq_bdd LPMP-BDD)
+target_link_libraries(test_avl_tree LPMP-BDD ILP)
 add_test(test_avl_tree test_avl_tree)
 
 add_executable(test_exp_sum test_exp_sum.cpp)
-target_link_libraries(test_exp_sum lineq_bdd LPMP-BDD)
+target_link_libraries(test_exp_sum LPMP-BDD)
 add_test(test_exp_sum test_exp_sum)
 
 add_executable(test_ILP_parser test_ILP_parser.cpp)
-target_link_libraries(test_ILP_parser ILP_parser LPMP-BDD)
+target_link_libraries(test_ILP_parser ILP LPMP-BDD)
 add_test(test_ILP_parser test_ILP_parser)
 
 add_executable(test_ILP_input_to_bdd test_ILP_input_to_bdd.cpp)
-target_link_libraries(test_ILP_input_to_bdd ILP_parser LPMP-BDD)
+target_link_libraries(test_ILP_input_to_bdd bdd_mgr bdd_collection ILP bdd_conversion LPMP-BDD)
 add_test(test_ILP_input_to_bdd test_ILP_input_to_bdd)
 
 add_executable(test_ILP_input test_ILP_input.cpp)
-target_link_libraries(test_ILP_input LPMP-BDD)
+target_link_libraries(test_ILP_input ILP LPMP-BDD)
 add_test(test_ILP_input test_ILP_input)
 
 add_executable(test_ILP_input_variable_fixation test_ILP_input_variable_fixation.cpp)
-target_link_libraries(test_ILP_input_variable_fixation LPMP-BDD)
+target_link_libraries(test_ILP_input_variable_fixation ILP LPMP-BDD)
 add_test(test_ILP_input_variable_fixation test_ILP_input_variable_fixation)
 
 #add_executable(test_single_bdd_inference test_single_bdd_inference.cpp)
@@ -33,27 +33,27 @@ add_test(test_ILP_input_variable_fixation test_ILP_input_variable_fixation)
 #add_test(test_two_bdd_inference test_two_bdd_inference)
 
 add_executable(test_bdd_min_marginals test_bdd_min_marginals.cpp)
-target_link_libraries(test_bdd_min_marginals LPMP-BDD)
+target_link_libraries(test_bdd_min_marginals LPMP-BDD bdd_solver)
 add_test(test_bdd_min_marginals test_bdd_min_marginals)
 
 add_executable(test_bdd_simplex_sum_marginals test_bdd_simplex_sum_marginals.cpp)
-target_link_libraries(test_bdd_simplex_sum_marginals LPMP-BDD)
+target_link_libraries(test_bdd_simplex_sum_marginals LPMP-BDD bdd_solver)
 add_test(test_bdd_simplex_sum_marginals test_bdd_simplex_sum_marginals)
 
 add_executable(test_bdd_cardinality_sum_marginals test_bdd_cardinality_sum_marginals.cpp)
-target_link_libraries(test_bdd_cardinality_sum_marginals LPMP-BDD)
+target_link_libraries(test_bdd_cardinality_sum_marginals LPMP-BDD bdd_solver)
 add_test(test_bdd_cardinality_sum_marginals test_bdd_cardinality_sum_marginals)
 
 add_executable(test_bdd_smooth_mma test_bdd_smooth_mma.cpp)
-target_link_libraries(test_bdd_smooth_mma LPMP-BDD)
+target_link_libraries(test_bdd_smooth_mma LPMP-BDD bdd_solver)
 add_test(test_bdd_smooth_mma test_bdd_smooth_mma)
 
 add_executable(test_bdd_bipartite_matching_problem test_bdd_bipartite_matching_problem.cpp)
-target_link_libraries(test_bdd_bipartite_matching_problem LPMP-BDD)
+target_link_libraries(test_bdd_bipartite_matching_problem LPMP-BDD bdd_solver)
 add_test(test_bdd_bipartite_matching_problem test_bdd_bipartite_matching_problem)
 
 add_executable(test_bdd_small_binary_mrfs test_bdd_small_binary_mrfs.cpp)
-target_link_libraries(test_bdd_small_binary_mrfs LPMP-BDD)
+target_link_libraries(test_bdd_small_binary_mrfs LPMP-BDD bdd_solver)
 add_test(test_bdd_small_binary_mrfs test_bdd_small_binary_mrfs)
 
 #add_executable(test_bdd_grid_graph test_bdd_grid_graph.cpp)
@@ -61,7 +61,7 @@ add_test(test_bdd_small_binary_mrfs test_bdd_small_binary_mrfs)
 #add_test(test_bdd_grid_graph test_bdd_grid_graph)
 
 add_executable(test_ILP_input_export test_ILP_input_export.cpp)
-target_link_libraries(test_ILP_input_export LPMP-BDD ILP_input ILP_parser OPB_parser)
+target_link_libraries(test_ILP_input_export LPMP-BDD bdd_solver)
 add_test(test_ILP_input_export test_ILP_input_export)
 
 #add_executable(test_random_inequality_to_bdd test_random_inequality_to_bdd.cpp)
@@ -81,44 +81,44 @@ add_test(test_ILP_input_export test_ILP_input_export)
 #add_test(test_bdd_preprocessor test_bdd_preprocessor)
 
 add_executable(test_loose_covering_problem test_loose_covering_problem.cpp)
-target_link_libraries(test_loose_covering_problem LPMP-BDD)
+target_link_libraries(test_loose_covering_problem LPMP-BDD bdd_solver)
 add_test(test_loose_covering_problem test_loose_covering_problem)
 
 add_executable(test_bdd_parallel_mma_base test_bdd_parallel_mma_base.cpp)
-target_link_libraries(test_bdd_parallel_mma_base LPMP-BDD)
+target_link_libraries(test_bdd_parallel_mma_base LPMP-BDD bdd_solver)
 add_test(test_bdd_parallel_mma_base test_bdd_parallel_mma_base)
 
 add_executable(test_bdd_parallel_mma test_bdd_parallel_mma.cpp)
-target_link_libraries(test_bdd_parallel_mma LPMP-BDD)
+target_link_libraries(test_bdd_parallel_mma LPMP-BDD bdd_solver)
 add_test(test_bdd_parallel_mma test_bdd_parallel_mma)
 
 add_executable(test_bdd_smooth_parallel_mma test_bdd_smooth_parallel_mma.cpp)
-target_link_libraries(test_bdd_smooth_parallel_mma LPMP-BDD)
+target_link_libraries(test_bdd_smooth_parallel_mma LPMP-BDD bdd_solver)
 add_test(test_bdd_smooth_parallel_mma test_bdd_smooth_parallel_mma)
 
 if(WITH_CUDA)
     add_executable(test_bdd_cuda_base test_bdd_cuda_base.cpp)
-    target_link_libraries(test_bdd_cuda_base LPMP-BDD bdd_cuda_base)
+    target_link_libraries(test_bdd_cuda_base LPMP-BDD cuda_bdd_solver)
     add_test(test_bdd_cuda_base test_bdd_cuda_base)
 
     add_executable(test_bdd_cuda_base_serialization test_bdd_cuda_base_serialization.cpp)
-    target_link_libraries(test_bdd_cuda_base_serialization LPMP-BDD bdd_cuda_base)
+    target_link_libraries(test_bdd_cuda_base_serialization LPMP-BDD cuda_bdd_solver)
     add_test(test_bdd_cuda_base_serialization test_bdd_cuda_base_serialization)
 
     add_executable(test_bdd_cuda_parallel_mma test_bdd_cuda_parallel_mma.cu)
-    target_link_libraries(test_bdd_cuda_parallel_mma LPMP-BDD bdd_cuda_parallel_mma)
+    target_link_libraries(test_bdd_cuda_parallel_mma LPMP-BDD cuda_bdd_solver)
     add_test(test_bdd_cuda_parallel_mma test_bdd_cuda_parallel_mma)
 
     add_executable(test_bdd_cuda_min_marginals test_bdd_cuda_min_marginals.cpp)
-    target_link_libraries(test_bdd_cuda_min_marginals LPMP-BDD bdd_cuda_base)
+    target_link_libraries(test_bdd_cuda_min_marginals LPMP-BDD cuda_bdd_solver)
     add_test(test_bdd_cuda_min_marginals test_bdd_cuda_min_marginals)
 
     add_executable(test_bdd_cuda_sum_marginals test_bdd_cuda_sum_marginals.cpp)
-    target_link_libraries(test_bdd_cuda_sum_marginals LPMP-BDD bdd_cuda_base)
+    target_link_libraries(test_bdd_cuda_sum_marginals LPMP-BDD cuda_bdd_solver)
     add_test(test_bdd_cuda_sum_marginals test_bdd_cuda_sum_marginals)
 
     add_executable(test_bdd_cuda_base_sol test_bdd_cuda_base_sol.cpp)
-    target_link_libraries(test_bdd_cuda_base_sol LPMP-BDD bdd_cuda_base)
+    target_link_libraries(test_bdd_cuda_base_sol LPMP-BDD cuda_bdd_solver)
     add_test(test_bdd_cuda_base_sol test_bdd_cuda_base_sol)
 
     add_executable(test_bdd_cuda_learned_mma test_bdd_cuda_learned_mma.cu)
@@ -138,40 +138,40 @@ if(WITH_CUDA)
     add_test(test_bdd_cuda_learned_omega test_bdd_cuda_learned_omega)
 
     add_executable(test_cuda_parallel_mma test_cuda_parallel_mma.cu)
-    target_link_libraries(test_cuda_parallel_mma LPMP-BDD)
+    target_link_libraries(test_cuda_parallel_mma LPMP-BDD cuda_bdd_solver)
     add_test(test_cuda_parallel_mma test_cuda_parallel_mma)
 
     add_executable(test_hybrid_parallel_mma_base test_hybrid_parallel_mma_base.cu)
-    target_link_libraries(test_hybrid_parallel_mma_base LPMP-BDD bdd_multi_parallel_mma_base)
+    target_link_libraries(test_hybrid_parallel_mma_base LPMP-BDD cuda_bdd_solver bdd_solver)
     add_test(test_hybrid_parallel_mma_base test_hybrid_parallel_mma_base)
 endif()
 
 add_executable(test_bdd_solver_fix_variable test_bdd_solver_fix_variable.cpp)
-target_link_libraries(test_bdd_solver_fix_variable LPMP-BDD)
+target_link_libraries(test_bdd_solver_fix_variable LPMP-BDD bdd_solver)
 add_test(test_bdd_solver_fix_variable test_bdd_solver_fix_variable)
 
 add_executable(test_variable_reordering_invariance test_variable_reordering_invariance.cpp)
-target_link_libraries(test_variable_reordering_invariance LPMP-BDD)
+target_link_libraries(test_variable_reordering_invariance LPMP-BDD bdd_solver)
 add_test(test_variable_reordering_invariance test_variable_reordering_invariance)
 
 add_executable(test_bdd_infeasible_problem test_bdd_infeasible_problem.cpp)
-target_link_libraries(test_bdd_infeasible_problem LPMP-BDD)
+target_link_libraries(test_bdd_infeasible_problem LPMP-BDD bdd_solver)
 add_test(test_bdd_infeasible_problem test_bdd_infeasible_problem)
 
 add_executable(test_bdd_preprocessor test_bdd_preprocessor.cpp)
-target_link_libraries(test_bdd_preprocessor LPMP-BDD)
+target_link_libraries(test_bdd_preprocessor LPMP-BDD bdd_solver)
 add_test(test_bdd_preprocessor test_bdd_preprocessor)
 
 add_executable(test_bdd_solvers_update_costs test_bdd_solvers_update_costs.cpp)
-target_link_libraries(test_bdd_solvers_update_costs LPMP-BDD)
+target_link_libraries(test_bdd_solvers_update_costs LPMP-BDD bdd_solver)
 add_test(test_bdd_solvers_update_costs test_bdd_solvers_update_costs)
 
 add_executable(test_bdd_solver_feasibility test_bdd_solver_feasibility.cpp)
-target_link_libraries(test_bdd_solver_feasibility LPMP-BDD)
+target_link_libraries(test_bdd_solver_feasibility LPMP-BDD bdd_solver)
 add_test(test_bdd_solver_feasibility test_bdd_solver_feasibility)
 
 add_executable(test_transitive_closure_dag test_transitive_closure_dag.cpp)
-target_link_libraries(test_transitive_closure_dag transitive_closure_dag LPMP-BDD)
+target_link_libraries(test_transitive_closure_dag LPMP-BDD ILP bdd_collection)
 add_test(test_transitive_closure_dag test_transitive_closure_dag)
 
 add_subdirectory(specialized_solvers)

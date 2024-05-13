@@ -1,9 +1,8 @@
-#include "bdd_mma.h"
-#include "bdd_parallel_mma.h"
-#include "bdd_cuda.h"
-#include "ILP_input.h"
-#include "ILP_parser.h"
-#include "bdd_preprocessor.h"
+#include "bdd_solver/bdd_mma_base.h"
+#include "bdd_solver/bdd_parallel_mma_base.h"
+#include "ILP/ILP_input.h"
+#include "ILP/ILP_parser.h"
+#include "bdd_conversion/bdd_preprocessor.h"
 #include "test.h"
 #include "test_problems.h"
 
@@ -21,7 +20,7 @@ void test_bdd_feasibility_on_short_mrf_chain()
     sol[0] = 1; // mu_1_0 = 1
     sol[2] = 1; // mu_2_0 = 1
     {
-        const auto bdd_feas = s.bdd_feasibility(sol.begin(), sol.end());
+        const auto bdd_feas = s.bdd_feasibility(sol);
         test(bdd_feas(0,0) == true && bdd_feas(1,0) == true);
         test(bdd_feas(2,0) == true && bdd_feas(3,0) == true);
         test(bdd_feas(4,0) == false && bdd_feas(5,0) == false && bdd_feas(6,0) == false && bdd_feas(7,0) == false);
@@ -34,7 +33,7 @@ void test_bdd_feasibility_on_short_mrf_chain()
 
     sol[4] = true;
     {
-        const auto bdd_feas = s.bdd_feasibility(sol.begin(), sol.end());
+        const auto bdd_feas = s.bdd_feasibility(sol);
         for(size_t i=0; i<bdd_feas.size(); ++i)
             for(size_t j=0; j<bdd_feas.size(i); ++j)
                 test(bdd_feas(i,j) == true);
@@ -43,8 +42,8 @@ void test_bdd_feasibility_on_short_mrf_chain()
 
 int main(int argc, char** argv)
 {
-    test_bdd_feasibility_on_short_mrf_chain<bdd_mma<double>>();
-    test_bdd_feasibility_on_short_mrf_chain<bdd_mma<float>>();
+    test_bdd_feasibility_on_short_mrf_chain<bdd_mma_base<bdd_branch_instruction_bdd_index<double,uint32_t>>>();
+    test_bdd_feasibility_on_short_mrf_chain<bdd_mma_base<bdd_branch_instruction_bdd_index<float,uint32_t>>>();
     //test_bdd_feasibility_on_short_mrf_chain<bdd_parallel_mma<double>>();
     //test_bdd_feasibility_on_short_mrf_chain<bdd_parallel_mma<float>>();
     //test_bdd_feasibility_on_short_mrf_chain<bdd_cuda_parallel_mma<double>>();

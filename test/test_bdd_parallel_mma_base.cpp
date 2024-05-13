@@ -1,7 +1,7 @@
-#include "bdd_parallel_mma_base.h"
-#include "bdd_branch_instruction.h"
-#include "ILP_parser.h"
-#include "bdd_preprocessor.h"
+#include "bdd_solver/bdd_parallel_mma_base.h"
+#include "bdd_solver/bdd_branch_instruction.h"
+#include "ILP/ILP_parser.h"
+#include "bdd_conversion/bdd_preprocessor.h"
 #include "test.h"
 
 using namespace LPMP;
@@ -20,8 +20,7 @@ int main(int argc, char** argv)
     using bdd_base_type = bdd_parallel_mma_base<bdd_branch_instruction<float,uint16_t>>;
     const ILP_input ilp = ILP_parser::parse_string(two_simplex_problem);
     bdd_preprocessor pre(ilp);
-    bdd_base_type solver(pre.get_bdd_collection());
-    solver.update_costs(ilp.objective().begin(), ilp.objective().begin(), ilp.objective().begin(), ilp.objective().end());
+    bdd_base_type solver(pre.get_bdd_collection(), ilp.objective());
     solver.backward_run();
     const double lb = solver.lower_bound();
     test(lb == 1 + 0); 

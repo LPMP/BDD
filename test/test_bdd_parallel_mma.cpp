@@ -1,7 +1,7 @@
-#include "bdd_parallel_mma_base.h"
-#include "bdd_branch_instruction.h"
-#include "ILP_parser.h"
-#include "bdd_preprocessor.h"
+#include "bdd_solver/bdd_parallel_mma_base.h"
+#include "bdd_solver/bdd_branch_instruction.h"
+#include "ILP/ILP_parser.h"
+#include "bdd_conversion/bdd_preprocessor.h"
 #include "test_problem_generator.h"
 #include "test.h"
 
@@ -21,8 +21,7 @@ std::vector<std::array<float,2>> test_mm(const ILP_input& ilp, const std::string
     using bdd_base_type = bdd_parallel_mma_base<bdd_branch_instruction<float,uint16_t>>;
 
     bdd_preprocessor pre(ilp);
-    bdd_base_type solver(pre.get_bdd_collection());
-    solver.update_costs(ilp.objective().begin(), ilp.objective().begin(), ilp.objective().begin(), ilp.objective().end());
+    bdd_base_type solver(pre.get_bdd_collection(), ilp.objective());
 
     if(direction == "forward")
         solver.backward_run();

@@ -1,6 +1,6 @@
-#include "bdd_cuda_base.h"
-#include "ILP_parser.h"
-#include "bdd_preprocessor.h"
+#include "bdd_solver/bdd_cuda_base.h"
+#include "ILP/ILP_parser.h"
+#include "bdd_conversion/bdd_preprocessor.h"
 #include "test.h"
 
 using namespace LPMP;
@@ -42,8 +42,7 @@ int main(int argc, char** argv)
         const ILP_input ilp = ILP_parser::parse_string(one_simplex_problem);
         bdd_preprocessor pre(ilp);
 
-        bdd_cuda_base<float> solver(pre.get_bdd_collection());
-        solver.update_costs(ilp.objective().begin(), ilp.objective().begin(), ilp.objective().begin(), ilp.objective().end());
+        bdd_cuda_base<float> solver(pre.get_bdd_collection(), ilp.objective());
 
         const auto mms = solver.sum_marginals(true);
     }
@@ -52,8 +51,7 @@ int main(int argc, char** argv)
         const ILP_input ilp = ILP_parser::parse_string(two_simplex_problem);
         bdd_preprocessor pre(ilp);
 
-        bdd_cuda_base<float> solver(pre.get_bdd_collection());
-        solver.update_costs(ilp.objective().begin(), ilp.objective().begin(), ilp.objective().begin(), ilp.objective().end());
+        bdd_cuda_base<float> solver(pre.get_bdd_collection(), ilp.objective());
 
         {
             const auto mms = solver.sum_marginals(false); // unnormalized probabilities
@@ -90,8 +88,7 @@ int main(int argc, char** argv)
         const ILP_input ilp = ILP_parser::parse_string(short_chain_shuffled);
         bdd_preprocessor pre(ilp);
 
-        bdd_cuda_base<float> solver(pre.get_bdd_collection());
-        solver.update_costs(ilp.objective().begin(), ilp.objective().begin(), ilp.objective().begin(), ilp.objective().end());
+        bdd_cuda_base<float> solver(pre.get_bdd_collection(), ilp.objective());
 
         const auto mms = solver.sum_marginals(false); // unnormalized probabilities
     }

@@ -1,8 +1,8 @@
 #include "bdd_collection/bdd_collection.h"
 #include "bdd_manager/bdd.h"
 #include "test.h"
-#include "bdd_branch_instruction_smooth.h"
-#include "bdd_mma_base_smooth.h"
+#include "bdd_solver/bdd_branch_instruction_smooth.h"
+#include "bdd_solver/bdd_mma_base_smooth.h"
 
 using namespace LPMP;
 

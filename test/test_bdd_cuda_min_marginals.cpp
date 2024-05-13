@@ -1,6 +1,6 @@
-#include "bdd_cuda_base.h"
-#include "ILP_parser.h"
-#include "bdd_preprocessor.h"
+#include "bdd_solver/bdd_cuda_base.h"
+#include "ILP/ILP_parser.h"
+#include "bdd_conversion/bdd_preprocessor.h"
 #include "test.h"
 
 using namespace LPMP;
@@ -20,7 +20,7 @@ int main(int argc, char** argv)
     bdd_preprocessor pre(ilp);
 
     bdd_cuda_base<float> solver(pre.get_bdd_collection());
-    solver.update_costs(ilp.objective().begin(), ilp.objective().begin(), ilp.objective().begin(), ilp.objective().end());
+    solver.update_costs({}, ilp.objective());
 
     const auto mms = solver.min_marginals();
     test(mms.size() == 6);

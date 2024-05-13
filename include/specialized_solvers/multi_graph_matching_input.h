@@ -3,7 +3,7 @@
 #include <unordered_map>
 #include "hash_helper.hxx"
 #include "specialized_solvers/graph_matching_input.h"
-#include "ILP_input.h"
+#include "ILP/ILP_input.h"
 
 namespace LPMP {
 

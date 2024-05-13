@@ -1,9 +1,9 @@
-#include "ILP_parser.h"
-#include "bdd_preprocessor.h"
+#include "ILP/ILP_parser.h"
+#include "bdd_conversion/bdd_preprocessor.h"
 #include "test.h"
-#include "bdd_branch_instruction_smooth.h"
-#include "bdd_mma_base_smooth.h"
-#include "bdd_parallel_mma_base_smooth.h"
+#include "bdd_solver/bdd_branch_instruction_smooth.h"
+#include "bdd_solver/bdd_mma_base_smooth.h"
+#include "bdd_solver/bdd_parallel_mma_base_smooth.h"
 
 using namespace LPMP;
 
@@ -41,7 +41,7 @@ void run_smooth_instance(const std::string& input)
     bdd_preprocessor bdd_pre(ilp);
 
     bdd_mma_base_smooth<bdd_branch_instruction_smooth_bdd_index<double,uint32_t>> solver(bdd_pre.get_bdd_collection());
-    bdd_parallel_mma_base_smooth<bdd_branch_instruction_smooth<double,uint32_t>> parallel_solver(bdd_pre.get_bdd_collection());
+    bdd_parallel_mma_base_smooth<bdd_branch_instruction_smooth<double,uint16_t>> parallel_solver(bdd_pre.get_bdd_collection());
 
     for(size_t i=0; i<ilp.nr_variables(); ++i)
         solver.update_cost(0, ilp.objective(i), i);

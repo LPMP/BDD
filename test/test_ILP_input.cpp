@@ -1,4 +1,4 @@
-#include "ILP_input.h"
+#include "ILP/ILP_input.h"
 #include "test.h"
 
 using namespace LPMP;

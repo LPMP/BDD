@@ -1,11 +1,9 @@
-#include "ILP_parser.h"
-#include "bdd_preprocessor.h"
-#include "bdd_parallel_mma.h"
-#include "bdd_mma.h"
-#include "bdd_parallel_mma_base.h"
-#include "subgradient.h"
-#include "bdd_mma_base.h"
-#include "bdd_branch_instruction.h"
+#include "ILP/ILP_parser.h"
+#include "bdd_conversion/bdd_preprocessor.h"
+#include "bdd_solver/bdd_parallel_mma_base.h"
+#include "bdd_solver/subgradient.h"
+#include "bdd_solver/bdd_mma_base.h"
+#include "bdd_solver/bdd_branch_instruction.h"
 #include "test.h"
 
 using namespace LPMP;
@@ -59,7 +57,7 @@ int main(int argc, char** argv)
         ilp.normalize();
         bdd_preprocessor pre(ilp, false, true);
         //bdd_mma<float> solver(pre.get_bdd_collection(), ilp.objective().begin(), ilp.objective().end());
-        subgradient<bdd_parallel_mma_base<bdd_branch_instruction<float, uint16_t>>, float> solver(pre.get_bdd_collection(), ilp.objective().begin(), ilp.objective().end());
+        subgradient<bdd_parallel_mma_base<bdd_branch_instruction<float, uint16_t>>, float> solver(pre.get_bdd_collection(), ilp.objective());
         for(size_t i=0; i<5000; ++i)
         {
             solver.iteration();
@@ -73,7 +71,7 @@ int main(int argc, char** argv)
         ILP_input ilp = ILP_parser::parse_string(infeasible_problem_2);
         ilp.normalize();
         bdd_preprocessor pre(ilp, false, true);
-        bdd_mma<float> solver(pre.get_bdd_collection(), ilp.objective().begin(), ilp.objective().end());
+        bdd_mma_base<bdd_branch_instruction_bdd_index<float,uint32_t>> solver(pre.get_bdd_collection(), ilp.objective());
         for(size_t i=0; i<5; ++i)
         {
             solver.iteration();

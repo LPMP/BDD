@@ -1,6 +1,6 @@
 #include <vector>
 #include <string>
-#include "bdd_solver.h"
+#include "bdd_solver/bdd_solver.h"
 #include "test.h"
 
 using namespace LPMP;

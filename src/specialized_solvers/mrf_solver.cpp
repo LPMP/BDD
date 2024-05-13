@@ -1,4 +1,4 @@
-#include "bdd_solver.h"
+#include "bdd_solver/bdd_solver.h"
 #include "specialized_solvers/mrf_solver.h"
 #include "specialized_solvers/mrf_input.h"
 

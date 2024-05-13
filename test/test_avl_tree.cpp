@@ -1,4 +1,4 @@
-#include "avl_tree.hxx"
+#include "bdd_conversion/avl_tree.hxx"
 #include <string>
 #include "test.h"
 

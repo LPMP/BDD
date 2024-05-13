@@ -1,6 +1,6 @@
 #include "test.h"
-#include "convert_pb_to_bdd.h"
-#include "lineq_bdd.h"
+#include "bdd_conversion/convert_pb_to_bdd.h"
+#include "bdd_conversion/lineq_bdd.h"
 #include "hard_ineqs.h"
 #include <vector>
 

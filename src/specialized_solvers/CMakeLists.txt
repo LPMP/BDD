@@ -1,29 +1,20 @@
-add_library(mrf_input mrf_input.cpp)
-target_link_libraries(mrf_input ILP_input LPMP-BDD)
-
-add_library(mrf_uai_parser mrf_uai_parser.cpp)
-target_link_libraries(mrf_uai_parser ILP_input LPMP-BDD)
-
-add_library(mrf_solver mrf_solver.cpp)
-target_link_libraries(mrf_solver mrf_input mrf_uai_parser LPMP-BDD)
+set(MRF_SOURCE_FILES mrf_solver.cpp mrf_uai_parser.cpp mrf_input.cpp)
+add_library(mrf_solver ${MRF_SOURCE_FILES})
+target_link_libraries(mrf_solver LPMP-BDD bdd_solver)
 
 add_executable(mrf_solver_cl mrf_solver_cl.cpp)
-target_link_libraries(mrf_solver_cl mrf_solver)
+target_link_libraries(mrf_solver_cl LPMP-BDD bdd_solver mrf_solver)
 
-add_library(graph_matching_input graph_matching_input.cpp)
-target_link_libraries(graph_matching_input ILP_input LPMP-BDD)
+set(GRAPH_MATCHING_SOURCE_FILES graph_matching_solver.cpp graph_matching_input.cpp)
+add_library(graph_matching_solver ${GRAPH_MATCHING_SOURCE_FILES})
+target_link_libraries(graph_matching_solver LPMP-BDD bdd_solver)
 
 add_executable(graph_matching_solver_cl graph_matching_solver_cl.cpp)
-target_link_libraries(graph_matching_solver_cl graph_matching_solver LPMP-BDD)
+target_link_libraries(graph_matching_solver_cl LPMP-BDD bdd_solver graph_matching_solver)
 
-add_library(multi_graph_matching_input multi_graph_matching_input.cpp)
-target_link_libraries(multi_graph_matching_input graph_matching_input ILP_input LPMP-BDD)
-
-add_library(graph_matching_solver graph_matching_solver.cpp)
-target_link_libraries(graph_matching_solver graph_matching_input LPMP-BDD)
-
-add_library(multi_graph_matching_solver multi_graph_matching_solver.cpp)
-target_link_libraries(multi_graph_matching_solver multi_graph_matching_input LPMP-BDD)
+set(multi_graph_MATCHING_SOURCE_FILES multi_graph_matching_solver.cpp multi_graph_matching_input.cpp)
+add_library(multi_graph_matching_solver ${multi_graph_MATCHING_SOURCE_FILES})
+target_link_libraries(multi_graph_matching_solver LPMP-BDD graph_matching_solver bdd_solver)
 
 add_executable(multi_graph_matching_solver_cl multi_graph_matching_solver_cl.cpp)
-target_link_libraries(multi_graph_matching_solver_cl multi_graph_matching_solver LPMP-BDD)
+target_link_libraries(multi_graph_matching_solver_cl LPMP-BDD bdd_solver multi_graph_matching_solver)

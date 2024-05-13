@@ -1,7 +1,7 @@
-#include "bdd_mma.h"
-#include "bdd_parallel_mma.h"
-#include "ILP_parser.h"
-#include "bdd_preprocessor.h"
+#include "bdd_solver/bdd_mma_base.h"
+#include "bdd_solver/bdd_parallel_mma_base.h"
+#include "ILP/ILP_parser.h"
+#include "bdd_conversion/bdd_preprocessor.h"
 #include "test.h"
 
 using namespace LPMP;
@@ -21,8 +21,7 @@ void test_min_marginals()
     const ILP_input ilp = ILP_parser::parse_string(two_simplex_problem);
     bdd_preprocessor pre(ilp);
 
-    SOLVER_TYPE solver(pre.get_bdd_collection());
-    solver.update_costs(ilp.objective().begin(), ilp.objective().begin(), ilp.objective().begin(), ilp.objective().end());
+    SOLVER_TYPE solver(pre.get_bdd_collection(), ilp.objective());
 
     const auto mms = solver.min_marginals();
     test(mms.size() == 6);
@@ -40,6 +39,8 @@ void test_min_marginals()
 
 int main(int argc, char** argv)
 {
-    test_min_marginals<bdd_mma<float>>();
-    test_min_marginals<bdd_parallel_mma<float>>();
+    test_min_marginals<bdd_mma_base<bdd_branch_instruction_bdd_index<float, uint32_t>>>();
+    test_min_marginals<bdd_mma_base<bdd_branch_instruction_bdd_index<double, uint32_t>>>();
+    test_min_marginals<bdd_parallel_mma_base<bdd_branch_instruction<float, uint16_t>>>();
+    test_min_marginals<bdd_parallel_mma_base<bdd_branch_instruction<double, uint16_t>>>();
 }

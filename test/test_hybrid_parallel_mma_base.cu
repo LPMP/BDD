@@ -1,11 +1,12 @@
-#include "bdd_multi_parallel_mma_base.h"
-#include "bdd_parallel_mma_base.h"
-#include "bdd_branch_instruction.h"
-#include "ILP_input.h"
-#include "ILP_parser.h"
-#include "bdd_preprocessor.h"
+#include "bdd_solver/bdd_multi_parallel_mma_base.h"
+#include "bdd_solver/bdd_parallel_mma_base.h"
+#include "bdd_solver/bdd_branch_instruction.h"
+#include "ILP/ILP_input.h"
+#include "ILP/ILP_parser.h"
+#include "bdd_conversion/bdd_preprocessor.h"
 #include "test_problems.h"
 #include "test.h"
+#include <iostream>
 
 using namespace LPMP;
 
@@ -15,8 +16,8 @@ void test_problem(const std::string& problem_input)
     ILP_input ilp = ILP_parser::parse_string(problem_input);
     bdd_preprocessor bdd_pre(ilp);
 
-    bdd_parallel_mma_base<bdd_branch_instruction<double,uint32_t>> parallel_mma(bdd_pre.get_bdd_collection());
-    bdd_cuda_parallel_mma<double> cuda_mma(bdd_pre.get_bdd_collection()); 
+    bdd_parallel_mma_base<bdd_branch_instruction<double,uint16_t>> parallel_mma(bdd_pre.get_bdd_collection(), ilp.objective());
+    bdd_cuda_parallel_mma<double> cuda_mma(bdd_pre.get_bdd_collection(), ilp.objective()); 
     const auto [size_shortest_ineq, size_longest_ineq] = [&]() -> std::tuple<size_t, size_t> {
         size_t size_shortest_ineq = std::numeric_limits<size_t>::max();
         size_t size_longest_ineq = 0;
@@ -80,8 +81,8 @@ void test_problem(const std::string& problem_input)
         test(std::abs(parallel_mma_lb - hybrid_parallel_mma_lb) < 1e-6);
     }
 
-    parallel_mma.update_costs(ilp.objective().begin(), ilp.objective().begin(), ilp.objective().begin(), ilp.objective().end());
-    cuda_mma.update_costs(ilp.objective().begin(), ilp.objective().begin(), ilp.objective().begin(), ilp.objective().end());
+    //parallel_mma.update_costs(ilp.objective().begin(), ilp.objective().begin(), ilp.objective().begin(), ilp.objective().end());
+    //cuda_mma.update_costs(ilp.objective().begin(), ilp.objective().begin(), ilp.objective().begin(), ilp.objective().end());
     hybrid_parallel_mma.update_costs(ilp.objective().begin(), ilp.objective().begin(), ilp.objective().begin(), ilp.objective().end());
 
     // initial lb after setting costs
@@ -153,7 +154,7 @@ void test_problem(const std::string& problem_input)
     //  lb after iterations
     for(size_t iter=0; iter<10; ++iter)
     {
-        parallel_mma.parallel_mma();
+        parallel_mma.iteration();
         cuda_mma.iteration();
         hybrid_parallel_mma.parallel_mma();
 

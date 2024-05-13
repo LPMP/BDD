@@ -1,7 +1,7 @@
-#include "bdd_cuda_learned_mma.h"
-#include "ILP_parser.h"
+#include "bdd_solver/bdd_cuda_learned_mma.h"
+#include "ILP/ILP_parser.h"
 #include "bdd_collection/bdd_collection.h"
-#include "bdd_preprocessor.h"
+#include "bdd_conversion/bdd_preprocessor.h"
 #include "test.h"
 #include "cuda_utils.h"
 

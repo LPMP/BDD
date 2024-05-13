@@ -1,6 +1,6 @@
-#include "ILP_parser.h"
-#include "OPB_parser.h"
-#include "bdd_solver.h"
+#include "ILP/ILP_parser.h"
+#include "ILP/OPB_parser.h"
+#include "bdd_solver/bdd_solver.h"
 #include <string>
 #include <sstream>
 #include "test.h"

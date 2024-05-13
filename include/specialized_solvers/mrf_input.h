@@ -3,7 +3,7 @@
 #include <vector>
 #include <array>
 #include "two_dimensional_variable_array.hxx"
-#include "ILP_input.h"
+#include "ILP/ILP_input.h"
 
 namespace LPMP {
 

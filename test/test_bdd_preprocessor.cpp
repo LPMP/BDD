@@ -1,6 +1,6 @@
-#include "ILP_input.h"
-#include "ILP_parser.h"
-#include "bdd_preprocessor.h"
+#include "ILP/ILP_input.h"
+#include "ILP/ILP_parser.h"
+#include "bdd_conversion/bdd_preprocessor.h"
 #include "two_dimensional_variable_array.hxx"
 #include "test.h"
 

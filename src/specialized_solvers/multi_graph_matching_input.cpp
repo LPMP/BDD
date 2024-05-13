@@ -2,7 +2,7 @@
 #include "specialized_solvers/graph_matching_input.h"
 #include "specialized_solvers/graph_matching_torresani_et_al_grammar.h"
 #include <tao/pegtl.hpp>
-#include "pegtl_parse_rules.h"
+#include "ILP/pegtl_parse_rules.h"
 #include <unordered_set>
 #include "time_measure_util.h"
 

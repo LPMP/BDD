@@ -10,12 +10,14 @@ namespace LPMP {
     class bdd_parallel_mma {
         public:
             bdd_parallel_mma(BDD::bdd_collection& bdd_col);
+            bdd_parallel_mma(BDD::bdd_collection& bdd_col, const std::vector<double>& costs_hi);
             template<typename ITERATOR>
             bdd_parallel_mma(BDD::bdd_collection& bdd_col, ITERATOR cost_begin, ITERATOR cost_end);
             bdd_parallel_mma(bdd_parallel_mma&&);
             bdd_parallel_mma& operator=(bdd_parallel_mma&&);
             ~bdd_parallel_mma();
 
+            void update_costs(const std::vector<REAL>& cost_lo, const std::vector<REAL>& cost_hi);x
             template<typename ITERATOR>
                 void update_costs(ITERATOR cost_lo_begin, ITERATOR cost_lo_end, ITERATOR cost_hi_begin, ITERATOR cost_hi_end);
             void add_to_constant(const double c);
